@@ -1,0 +1,120 @@
+{
+  "human": {
+    "name": "Human",
+    "phone": [],
+    "language": "en",
+    "timezone": "Europe/Berlin",
+    "vault": [
+      "~/Documents/Vault"
+    ]
+  },
+  "signal": {
+    "enabled": false,
+    "bot_phone": null,
+    "bot_name": "Ou",
+    "allowed": []
+  },
+  "llm": {
+    "providers": {
+      "anthropic": {
+        "api_key": "sk-ant-..."
+      },
+      "ollama": {
+        "base_url": "http://localhost:11434"
+      },
+      "openai": {
+        "api_key": "sk-...",
+        "base_url": "https://api.openai.com/v1"
+      }
+    },
+    "models": {
+      "fast": {
+        "provider": "anthropic",
+        "name": "claude-haiku-4-5",
+        "run_mode": "on-demand"
+      },
+      "capable": {
+        "provider": "anthropic",
+        "name": "claude-sonnet-4-20250514",
+        "run_mode": "on-demand"
+      },
+      "reasoning": {
+        "provider": "anthropic",
+        "name": "claude-opus-4-5",
+        "run_mode": "on-demand"
+      }
+    }
+  },
+  "agents": {
+    "relay": {
+      "name": "ou",
+      "model": "fast",
+      "enabled": true
+    },
+    "data": {
+      "name": "zeno",
+      "model": "capable",
+      "enabled": true
+    },
+    "agenda": {
+      "name": "cato",
+      "model": "capable",
+      "enabled": true
+    },
+    "action": {
+      "name": "hiro",
+      "model": "capable",
+      "enabled": false
+    },
+    "pattern": {
+      "name": "rumi",
+      "model": "capable",
+      "enabled": true
+    },
+    "code": {
+      "name": "alan",
+      "model": "capable",
+      "enabled": false
+    }
+  },
+  "schedule": {
+    "pattern_infer": {
+      "enabled": true,
+      "time": ["04:00"]
+    },
+    "index_rebuild": {
+      "enabled": true,
+      "time": ["04:30"]
+    },
+    "archive_rotation": {
+      "enabled": true,
+      "time": ["05:00"]
+    },
+    "shadow_scan": {
+      "enabled": true,
+      "time": ["03:30"]
+    },
+    "memory_migrate": {
+      "enabled": false,
+      "time": ["04:00"]
+    },
+    "agenda_review": {
+      "enabled": true,
+      "time": ["04:55", "05:55", "06:55", "07:55", "08:55", "09:55", "10:55",
+               "11:55", "12:55", "13:55", "14:55", "15:55", "16:55", "17:55",
+               "18:55", "19:55", "20:55", "21:55", "22:55", "23:55"]
+    },
+    "action_tasks": {
+      "enabled": true
+    }
+  },
+  "webui": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 8080
+  },
+  "updates": {
+    "auto_migrate": true,
+    "schedule": "04:00"
+  }
+}

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>outheis</title>
+  <link rel="icon" type="image/png" href="/assets/favicon-96x96.png" sizes="96x96">
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="shortcut icon" href="/assets/favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon.png">
+  <link rel="manifest" href="/assets/site.webmanifest">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <header class="sidebar-header">
+        <div class="logo">οὐθείς</div>
+        <span class="status-dot" id="status"></span>
+      </header>
+      <nav class="nav" id="nav">
+        <div class="nav-group">System</div>
+        <a class="nav-item active" data-view="overview">Overview</a>
+        <a class="nav-item" data-view="config">Configuration</a>
+        <a class="nav-item" data-view="messages">Messages <span class="badge" id="msg-count">0</span></a>
+        <a class="nav-item" data-view="scheduler">Scheduler</a>
+        <div class="nav-group">Knowledge</div>
+        <a class="nav-item" data-view="memory">Memory <span class="badge" id="memory-count">0</span></a>
+        <a class="nav-item" data-view="skills">Skills <span class="badge" id="skills-count">0</span></a>
+        <a class="nav-item" data-view="rules">Rules <span class="badge" id="rules-count">0</span></a>
+        <a class="nav-item" data-view="patterns">Patterns <span class="badge" id="patterns-count">0</span></a>
+        <div class="nav-group">Vault</div>
+        <a class="nav-item" data-view="files">Files</a>
+        <a class="nav-item" data-view="tags">Tags <span class="badge" id="tags-count">0</span></a>
+        <a class="nav-item" data-view="agenda">Agenda <span class="badge" id="agenda-count">0</span></a>
+        <a class="nav-item" data-view="codebase">Codebase</a>
+        <a class="nav-item" data-view="migration">Migration</a>
+      </nav>
+    </aside>
+    
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="topbar-title" id="view-title">Overview</h1>
+          <span class="topbar-path" id="view-path"></span>
+        </div>
+        <div class="topbar-actions" id="view-actions"></div>
+      </header>
+      <div class="tabs" id="view-tabs"></div>
+      <div class="content" id="view-content"></div>
+      <footer class="statusbar">
+        <span id="connection-status">Disconnected</span>
+        <span id="dispatcher-info"></span>
+      </footer>
+    </main>
+  </div>
+  
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script type="module" src="/editor.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

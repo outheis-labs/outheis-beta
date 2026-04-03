@@ -102,19 +102,44 @@ def get_stats_7days() -> dict:
     return {"days": days, "total_7d": total}
 
 
-def get_usage_summary(days: int = 7) -> str:
+def get_usage_summary(days: int = 7, date: str | None = None) -> str:
     """
     Return a human-readable token usage and estimated cost summary.
 
     Args:
-        days: look-back window (1 = today, 7 = last week, 30 = last month)
+        days: rolling look-back window in days (ignored when date is set)
+        date: specific calendar day as YYYY-MM-DD (e.g. "2026-04-04")
+              "today" and "yesterday" are also accepted
     """
-    path = get_token_usage_path()
-    if not path.exists():
-        return f"Keine Token-Daten für die letzten {days} {'Tag' if days == 1 else 'Tage'} vorhanden."
+    from datetime import date as date_type
 
+    path = get_token_usage_path()
     now = datetime.now()
-    cutoff = now - timedelta(days=days)
+
+    # Resolve date → calendar-day boundaries
+    if date:
+        d = date.strip().lower()
+        if d == "today":
+            target = now.date()
+        elif d == "yesterday":
+            target = (now - timedelta(days=1)).date()
+        else:
+            try:
+                target = date_type.fromisoformat(d)
+            except ValueError:
+                return f"Ungültiges Datumsformat: '{date}'. Bitte YYYY-MM-DD verwenden."
+        cutoff_low  = datetime(target.year, target.month, target.day, 0, 0, 0)
+        cutoff_high = datetime(target.year, target.month, target.day, 23, 59, 59)
+        label = target.strftime("%d.%m.%Y")
+        no_data_label = f"am {label}"
+    else:
+        cutoff_low  = now - timedelta(days=days)
+        cutoff_high = now
+        label = "heute" if days == 1 else f"letzte {days} Tage"
+        no_data_label = "heute" if days == 1 else f"in den letzten {days} Tagen"
+
+    if not path.exists():
+        return f"Keine Token-Daten {no_data_label} vorhanden."
 
     total_input = 0
     total_output = 0
@@ -129,7 +154,7 @@ def get_usage_summary(days: int = 7) -> str:
             try:
                 entry = json.loads(line)
                 ts = datetime.fromisoformat(entry["ts"])
-                if ts < cutoff:
+                if ts < cutoff_low or ts > cutoff_high:
                     continue
                 inp = entry.get("input", 0)
                 out = entry.get("output", 0)
@@ -152,10 +177,8 @@ def get_usage_summary(days: int = 7) -> str:
 
     total_tokens = total_input + total_output
     if total_tokens == 0:
-        label = "heute" if days == 1 else f"in den letzten {days} Tagen"
-        return f"Keine Token-Nutzung {label} aufgezeichnet."
+        return f"Keine Token-Nutzung {no_data_label} aufgezeichnet."
 
-    label = "heute" if days == 1 else f"letzte {days} Tage"
     lines = [
         f"Token-Nutzung ({label})",
         f"Gesamt: {total_tokens:,} Tokens  (Input: {total_input:,} / Output: {total_output:,})",

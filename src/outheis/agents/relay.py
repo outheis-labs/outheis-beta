@@ -333,16 +333,20 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "check_token_usage",
-                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'wie viele tokens', 'was kostet das', 'token-verbrauch', 'kosten diese woche', 'wie viel habe ich verbraucht', etc.",
+                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'wie viele tokens', 'was kostet das', 'token-verbrauch', 'kosten diese woche', 'wie viel habe ich verbraucht', etc. For 'heute' use date='today', for 'gestern' use date='yesterday', for a specific day use date='YYYY-MM-DD'. For multi-day windows (last 7 days etc.) use the days parameter instead.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
                         "days": {
                             "type": "integer",
-                            "description": "Look-back window in days: 1 = today, 7 = last 7 days, 30 = last 30 days"
+                            "description": "Rolling look-back window in days (e.g. 7 = last 7 days). Ignored when date is set."
+                        },
+                        "date": {
+                            "type": "string",
+                            "description": "Specific calendar day: 'today', 'yesterday', or 'YYYY-MM-DD'. Use this for single-day queries."
                         }
                     },
-                    "required": ["days"]
+                    "required": []
                 }
             },
             {
@@ -496,7 +500,9 @@ class RelayAgent(BaseAgent):
                             result = "Keine Frage angegeben"
                     elif block.name == "check_token_usage":
                         from outheis.core.tokens import get_usage_summary
-                        result = get_usage_summary(block.input.get("days", 7))
+                        date_param = block.input.get("date")
+                        days_param = block.input.get("days", 7)
+                        result = get_usage_summary(days=days_param, date=date_param)
                     elif block.name == "delegate_to_agent":
                         # Generic delegation - LLM decides which agent and what to ask
                         agent = block.input.get("agent", "")

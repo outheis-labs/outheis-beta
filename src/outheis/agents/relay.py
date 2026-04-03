@@ -333,7 +333,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "check_token_usage",
-                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'wie viele tokens', 'was kostet das', 'token-verbrauch', 'kosten diese woche', 'wie viel habe ich verbraucht', etc. For single-day queries set date: 'heute'/'today' for today, 'gestern'/'yesterday' for yesterday, or 'YYYY-MM-DD' for a specific date. For multi-day windows (last 7 days etc.) use the days parameter instead.",
+                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'wie viele tokens', 'was kostet das', 'token-verbrauch', 'kosten diese woche', 'wie viel habe ich verbraucht', etc. For single-day queries set date: 'heute'/'today' for today, 'gestern'/'yesterday' for yesterday, or 'YYYY-MM-DD' for a specific date. For multi-day windows (last 7 days etc.) use the days parameter instead. IMPORTANT: Always forward the complete tool output verbatim, including the per-agent breakdown — never summarize or omit the agent list.",
                 "input_schema": {
                     "type": "object",
                     "properties": {

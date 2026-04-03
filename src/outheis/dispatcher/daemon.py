@@ -632,7 +632,16 @@ class Dispatcher:
         
         # Initialize LLM with config (once, at startup)
         init_llm(self.config.llm)
-        
+
+        # Health-check non-Anthropic providers used by enabled agents
+        from outheis.core.llm import check_providers
+        provider_errors = check_providers(self.config.agents)
+        if provider_errors:
+            for err in provider_errors:
+                print(f"[startup] {err}", file=__import__("sys").stderr)
+            print("[startup] aborting — fix provider config or disable affected agents", file=__import__("sys").stderr)
+            return
+
         # Set up scheduled tasks
         self._setup_scheduled_tasks()
 

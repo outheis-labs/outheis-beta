@@ -186,7 +186,7 @@ class ScheduledTaskConfig:
 @dataclass
 class ScheduleConfig:
     """Scheduled tasks configuration."""
-    pattern_nightly: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
+    pattern_infer: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=["04:00"]
     ))
     index_rebuild: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
@@ -197,9 +197,6 @@ class ScheduleConfig:
     ))
     shadow_scan: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=["03:30"]
-    ))
-    session_summary: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
-        interval_minutes=360
     ))
     agenda_review: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=[f"{h:02d}:55" for h in range(4, 24)]
@@ -293,8 +290,8 @@ def _parse_schedule(data: dict) -> ScheduleConfig:
     defaults = ScheduleConfig()
     
     return ScheduleConfig(
-        pattern_nightly=_parse_scheduled_task(
-            data.get("pattern_nightly", {}), defaults.pattern_nightly
+        pattern_infer=_parse_scheduled_task(
+            data.get("pattern_infer", data.get("pattern_nightly", {})), defaults.pattern_infer
         ),
         index_rebuild=_parse_scheduled_task(
             data.get("index_rebuild", {}), defaults.index_rebuild
@@ -304,9 +301,6 @@ def _parse_schedule(data: dict) -> ScheduleConfig:
         ),
         shadow_scan=_parse_scheduled_task(
             data.get("shadow_scan", {}), defaults.shadow_scan
-        ),
-        session_summary=_parse_scheduled_task(
-            data.get("session_summary", {}), defaults.session_summary
         ),
         agenda_review=_parse_scheduled_task(
             data.get("agenda_review", {}), defaults.agenda_review
@@ -426,11 +420,10 @@ def _serialize_scheduled_task(task: ScheduledTaskConfig) -> dict:
 def _serialize_schedule(schedule: ScheduleConfig) -> dict:
     """Serialize schedule configuration."""
     return {
-        "pattern_nightly": _serialize_scheduled_task(schedule.pattern_nightly),
+        "pattern_infer": _serialize_scheduled_task(schedule.pattern_infer),
         "index_rebuild": _serialize_scheduled_task(schedule.index_rebuild),
         "archive_rotation": _serialize_scheduled_task(schedule.archive_rotation),
         "shadow_scan": _serialize_scheduled_task(schedule.shadow_scan),
-        "session_summary": _serialize_scheduled_task(schedule.session_summary),
         "agenda_review": _serialize_scheduled_task(schedule.agenda_review),
         "action_tasks": _serialize_scheduled_task(schedule.action_tasks),
     }

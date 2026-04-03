@@ -265,8 +265,8 @@ class Dispatcher:
         """Configure scheduled tasks from config."""
         sched = self.config.schedule
         
-        if sched.pattern_nightly.enabled:
-            self.scheduler.add("pattern", self._run_pattern_agent, time=sched.pattern_nightly.time)
+        if sched.pattern_infer.enabled:
+            self.scheduler.add("pattern_infer", self._run_pattern_agent, time=sched.pattern_infer.time)
         if sched.index_rebuild.enabled:
             self.scheduler.add("index_rebuild", self._run_index_rebuild, time=sched.index_rebuild.time)
         if sched.archive_rotation.enabled:
@@ -275,9 +275,6 @@ class Dispatcher:
             self.scheduler.add("shadow_scan", self._run_shadow_scan, time=sched.shadow_scan.time)
         if sched.action_tasks.enabled:
             self.scheduler.add("action_tasks", self._run_action_tasks, interval_minutes=15)
-        if sched.session_summary.enabled:
-            interval = sched.session_summary.interval_minutes or 360
-            self.scheduler.add("session_summary", self._run_session_summary, interval_minutes=interval)
         if sched.agenda_review.enabled:
             self.scheduler.add("agenda_review", self._run_agenda_review, time=sched.agenda_review.time)
 
@@ -344,18 +341,6 @@ class Dispatcher:
         if agent and hasattr(agent, 'rebuild_indices'):
             results = agent.rebuild_indices()
             print(f"Index rebuild: {results}")
-
-    def _run_session_summary(self) -> None:
-        """Create session summary for memory persistence."""
-        # Run pattern agent to extract insights
-        agent = self.get_agent("pattern")
-        if agent:
-            try:
-                count = agent.run_scheduled()
-                if count:
-                    print(f"Session summary: extracted {count} memory entries")
-            except Exception as e:
-                print(f"Session summary failed: {e}")
 
     def _run_archive_rotation(self) -> None:
         """Rotate old messages to archive."""
@@ -558,7 +543,8 @@ class Dispatcher:
             if text.startswith("run_task:"):
                 task_name = text[len("run_task:"):]
                 task_map = {
-                    "pattern_nightly": self._run_pattern_agent,
+                    "pattern_infer": self._run_pattern_agent,
+                    "pattern_nightly": self._run_pattern_agent,  # migration alias
                     "index_rebuild": self._run_index_rebuild,
                     "shadow_scan": self._run_shadow_scan,
                     "archive_rotation": self._run_archive_rotation,

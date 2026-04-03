@@ -605,8 +605,7 @@ function renderSchedulerTasks() {
         <div class="card-body" style="padding: 12px 20px;" id="schedule-container">
           ${renderScheduleRow('agenda_review', schedule.agenda_review)}
           ${renderScheduleRow('shadow_scan', schedule.shadow_scan)}
-          ${renderScheduleRow('pattern_nightly', schedule.pattern_nightly)}
-          ${renderScheduleRow('session_summary', schedule.session_summary)}
+          ${renderScheduleRow('pattern_infer', schedule.pattern_infer)}
           ${renderScheduleRow('index_rebuild', schedule.index_rebuild)}
         </div>
       </div>
@@ -630,19 +629,17 @@ async function renderSchedulerHistory() {
 const SCHED_DEFAULTS = {
   agenda_review:    { time: Array.from({length: 20}, (_, i) => `${String(i + 4).padStart(2, '0')}:55`) },
   shadow_scan:      { time: ['03:30'] },
-  pattern_nightly:  { time: ['04:00'] },
+  pattern_infer:    { time: ['04:00'] },
   index_rebuild:    { time: ['04:30'] },
   archive_rotation: { time: ['05:00'] },
-  session_summary:  { interval_minutes: 360 },
 };
 
 const SCHED_DESCRIPTIONS = {
   agenda_review:    'cato — personal secretary service',
   shadow_scan:      'zeno scans vault for new and changed files, updates context',
-  pattern_nightly:  'rumi analyzes message history to extract patterns and promote them to skills and rules',
+  pattern_infer:    'rumi analyzes message history to extract patterns and promote them to skills and rules',
   index_rebuild:    'zeno rebuilds the vault full-text search index from scratch',
   archive_rotation: 'moves old message log entries to the archive',
-  session_summary:  'rumi reads the recent message history at regular intervals and extracts insights, patterns, and notable events into long-term memory — runs on sonnet',
 };
 
 function renderScheduleRow(type, schedConfig) {
@@ -654,7 +651,7 @@ function renderScheduleRow(type, schedConfig) {
   const dur = taskDurations[type];
   const durText = dur ? `${dur.ok ? '✓' : '✗'} ${dur.seconds}s` : '';
 
-  const allOptions = ['agenda_review', 'shadow_scan', 'pattern_nightly', 'index_rebuild', 'session_summary'];
+  const allOptions = ['agenda_review', 'shadow_scan', 'pattern_infer', 'index_rebuild'];
   const selectOptions = allOptions.map((v) => `<option value="${v}" ${type === v ? 'selected' : ''}>${v}</option>`).join('');
 
   let timesHtml;
@@ -750,8 +747,7 @@ function addScheduleTask() {
       <select class="sched-type-select" onchange="this.nextElementSibling.textContent = SCHED_DESCRIPTIONS[this.value] || ''">
         <option value="agenda_review">agenda_review</option>
         <option value="shadow_scan">shadow_scan</option>
-        <option value="pattern_nightly">pattern_nightly</option>
-        <option value="session_summary">session_summary</option>
+        <option value="pattern_infer">pattern_infer</option>
         <option value="index_rebuild">index_rebuild</option>
       </select>
       <div class="sched-desc">${SCHED_DESCRIPTIONS['agenda_review']}</div>

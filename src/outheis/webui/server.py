@@ -51,12 +51,21 @@ async def script():
     return FileResponse(WEBUI_DIR / "app.js", media_type="application/javascript")
 
 
-@app.get("/assets/{filename}")
-async def assets(filename: str):
-    path = ASSETS_DIR / filename
-    if path.exists() and path.suffix in {".svg", ".png", ".ico"}:
-        media_types = {".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon"}
-        return FileResponse(path, media_type=media_types.get(path.suffix, "application/octet-stream"))
+@app.get("/assets/{filepath:path}")
+async def assets(filepath: str):
+    path = (ASSETS_DIR / filepath).resolve()
+    if not str(path).startswith(str(ASSETS_DIR.resolve())):
+        return {"error": "Access denied"}
+    media_types = {
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".ico": "image/x-icon",
+        ".woff2": "font/woff2",
+        ".ttf": "font/ttf",
+        ".webmanifest": "application/manifest+json",
+    }
+    if path.exists() and path.suffix in media_types:
+        return FileResponse(path, media_type=media_types[path.suffix])
     return {"error": "Asset not found"}
 
 

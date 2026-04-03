@@ -51,7 +51,7 @@ class CodeAgent(BaseAgent):
         skills = load_skills("code")
         rules = load_rules("code")
 
-        code_index = self._get_code_index()
+        src_root = str(Path(__file__).parent.parent)
         exchange = self._get_exchange()
 
         parts = [
@@ -64,9 +64,10 @@ class CodeAgent(BaseAgent):
             "Exchange.md kann viele Issues gleichzeitig listen — ausführliche Analyse gehört in die Issue-Datei.",
             "Du änderst NIEMALS direkt Quellcode — write_codebase schreibt ausschliesslich in vault/Codebase/.",
             "",
-            "## Code-Index",
+            f"## Source root: `{src_root}`",
             "",
-            code_index,
+            "Lies erst die Verzeichnisstruktur mit list_files, dann gezielt einzelne Dateien mit read_file.",
+            "Mach keine Annahmen über Dateiinhalte — lies den Code bevor du antwortest.",
         ]
 
         if exchange:

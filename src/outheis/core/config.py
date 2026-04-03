@@ -199,7 +199,7 @@ class ScheduleConfig:
         time=["03:30"]
     ))
     data_migrate: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
-        time=["04:00"]
+        enabled=False, time=["04:00"]
     ))
     agenda_review: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=[f"{h:02d}:55" for h in range(4, 24)]

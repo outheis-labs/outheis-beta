@@ -219,6 +219,7 @@ class Config:
         "agenda": AgentConfig(name="cato", model="capable"),
         "action": AgentConfig(name="hiro", model="capable", enabled=False),
         "pattern": AgentConfig(name="rumi", model="capable"),
+        "code": AgentConfig(name="alan", model="capable", enabled=False),
     })
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     updates: UpdatesConfig = field(default_factory=UpdatesConfig)
@@ -386,6 +387,7 @@ def load_config() -> Config:
             "agenda": AgentConfig(name="cato", model="capable"),
             "action": AgentConfig(name="hiro", model="capable", enabled=False),
             "pattern": AgentConfig(name="rumi", model="capable"),
+            "code": AgentConfig(name="alan", model="capable", enabled=False),
         }
 
     # Updates

@@ -133,7 +133,7 @@ async function renderOverview() {
 
 function renderMessage(msg) {
   const time = msg.timestamp ? new Date(msg.timestamp * 1000).toLocaleString() : '';
-  const from = msg.from_agent || msg.from || 'system';
+  const from = msg.from?.agent || msg.from?.user?.name || msg.from?.user?.identity || 'system';
   const to = msg.to || '';
   const text = msg.payload?.text || msg.payload?.error || JSON.stringify(msg.payload || {});
 

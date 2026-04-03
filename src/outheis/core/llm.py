@@ -70,7 +70,10 @@ def get_client(provider_name: str) -> Any:
             raise ImportError("openai package not installed — run: pip install openai")
         kwargs = {}
         if provider_name == "ollama":
-            kwargs["base_url"] = provider.base_url or "http://localhost:11434/v1"
+            base_url = (provider.base_url or "http://localhost:11434").rstrip("/")
+            if not base_url.endswith("/v1"):
+                base_url += "/v1"
+            kwargs["base_url"] = base_url
             kwargs["api_key"] = "ollama"
         else:
             if provider.api_key:

@@ -364,9 +364,9 @@ function renderConfigAgents() {
                 <div class="agent-role">${agent.role}</div>
                 <div class="agent-model">
                   <select class="agent-model-select">
-                    <option value="fast" ${model === 'fast' ? 'selected' : ''}>fast</option>
-                    <option value="capable" ${model === 'capable' ? 'selected' : ''}>capable</option>
-                    <option value="reasoning" ${model === 'reasoning' ? 'selected' : ''}>reasoning</option>
+                    ${Object.keys(config.llm?.models || {fast:{},capable:{},reasoning:{}}).map(alias =>
+                      `<option value="${alias}" ${model === alias ? 'selected' : ''}>${alias}</option>`
+                    ).join('')}
                   </select>
                 </div>
                 <div class="agent-toggle">

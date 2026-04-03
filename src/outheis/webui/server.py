@@ -607,12 +607,18 @@ async def get_status():
 
     messages_today = 0
     if MESSAGES_PATH.exists():
-        from datetime import datetime
+        from datetime import datetime, timezone
 
-        today = datetime.now().strftime("%Y-%m-%d")
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
         for line in MESSAGES_PATH.read_text().strip().split("\n"):
-            if line and today in line:
-                messages_today += 1
+            if not line:
+                continue
+            try:
+                ts = json.loads(line).get("timestamp", 0)
+                if ts and ts >= today_start:
+                    messages_today += 1
+            except (json.JSONDecodeError, AttributeError):
+                pass
 
     return {
         "running": running,

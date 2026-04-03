@@ -41,6 +41,7 @@ class CodeAgent(BaseAgent):
     """
 
     name: str = "code"
+    _code_index_cache: str = field(default="", init=False, repr=False)
 
     def get_system_prompt(self) -> str:
         from outheis.core.memory import get_memory_context
@@ -51,7 +52,9 @@ class CodeAgent(BaseAgent):
         skills = load_skills("code")
         rules = load_rules("code")
 
-        code_index = self._get_code_index()
+        if not self._code_index_cache:
+            self._code_index_cache = self._get_code_index()
+        code_index = self._code_index_cache
         exchange = self._get_exchange()
 
         parts = [

@@ -578,6 +578,21 @@ async function saveConfig() {
 }
 
 // Messages
+async function sendPrompt() {
+  const textarea = document.getElementById('prompt-input');
+  const text = textarea.value.trim();
+  if (!text) return;
+  textarea.value = '';
+  textarea.disabled = true;
+  try {
+    await fetchAPI('/api/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    await renderMessages();
+  } finally {
+    textarea.disabled = false;
+    textarea.focus();
+  }
+}
+
 async function renderMessages() {
   viewTitle.textContent = 'Messages';
   viewPath.textContent = '~/.outheis/human/messages.jsonl';
@@ -585,8 +600,14 @@ async function renderMessages() {
 
   const messages = await fetchAPI('/api/messages?limit=50');
   viewContent.innerHTML = `
-    <div style="overflow-y: auto; flex: 1; background: var(--bg-primary);">
-      ${messages.length ? messages.map((msg) => renderMessage(msg)).join('') : '<div class="msg-item"><div class="msg-text" style="color: var(--text-tertiary);">No messages yet</div></div>'}
+    <div style="display: flex; flex-direction: column; height: 100%; background: var(--bg-primary);">
+      <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-primary); display: flex; gap: 8px;">
+        <textarea id="prompt-input" placeholder="Send a message to ou…" rows="2" style="flex: 1; resize: none; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPrompt();}"></textarea>
+        <button class="btn btn-primary" onclick="sendPrompt()" style="align-self: flex-end;">Send</button>
+      </div>
+      <div style="overflow-y: auto; flex: 1;">
+        ${messages.length ? messages.map((msg) => renderMessage(msg)).join('') : '<div class="msg-item"><div class="msg-text" style="color: var(--text-tertiary);">No messages yet</div></div>'}
+      </div>
     </div>
   `;
 }

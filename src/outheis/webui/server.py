@@ -516,6 +516,30 @@ async def delete_tag(data: dict):
 
 
 # Messages API
+@app.post("/api/send")
+async def send_message(data: dict):
+    from outheis.core.queue import append
+    from outheis.core.message import create_user_message
+    text = data.get("text", "").strip()
+    if not text:
+        return {"error": "Empty message"}
+    human_name = None
+    human_identity = "webui"
+    if CONFIG_PATH.exists():
+        cfg = json.loads(CONFIG_PATH.read_text())
+        human = cfg.get("human", {})
+        human_name = human.get("name")
+        human_identity = human.get("phone", "webui")
+    msg = create_user_message(
+        text=text,
+        channel="api",
+        identity=human_identity,
+        name=human_name,
+    )
+    append(MESSAGES_PATH, msg)
+    return {"status": "queued", "conversation_id": msg.conversation_id}
+
+
 @app.get("/api/messages")
 async def get_messages(limit: int = 50):
     if not MESSAGES_PATH.exists():

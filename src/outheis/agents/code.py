@@ -475,6 +475,7 @@ class CodeAgent(BaseAgent):
         for _ in range(max_iterations):
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=messages,
                 tools=tools,

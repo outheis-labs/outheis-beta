@@ -212,6 +212,7 @@ Respond in JSON:
             
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": user_prompt}],
                 max_tokens=1000,
@@ -277,6 +278,7 @@ If nothing is ready for promotion:
             
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1000,
@@ -442,6 +444,7 @@ If nothing is ready to distill: {{"skill_updates": [], "no_distillation_reason":
             
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1500,
@@ -580,6 +583,7 @@ If nothing new:
             
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
@@ -723,6 +727,7 @@ Be conservative - only remove entries when clearly redundant or wrong."""
             
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=1000,

@@ -524,6 +524,7 @@ class DataAgent(BaseAgent):
 
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=system,
                 messages=messages,
                 tools=tools,
@@ -735,6 +736,7 @@ class DataAgent(BaseAgent):
         try:
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=4096,

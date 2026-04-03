@@ -365,6 +365,7 @@ class ActionAgent(BaseAgent):
         for iteration in range(max_iterations):
             response = call_llm(
                 model=self.model_alias,
+                agent=self.name,
                 system=system,
                 messages=messages,
                 tools=tools,

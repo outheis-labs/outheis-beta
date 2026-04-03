@@ -702,14 +702,19 @@ class Dispatcher:
                 import uvicorn
                 from outheis.webui.server import app as webui_app
 
+                # uvicorn.run() in a non-main thread tries to install signal handlers
+                # and raises ValueError. Use Config+Server instead, which skips that.
+                webui_config = uvicorn.Config(
+                    webui_app,
+                    host=self.config.webui.host,
+                    port=self.config.webui.port,
+                    log_level="error",
+                )
+                webui_server = uvicorn.Server(webui_config)
+                webui_server.install_signal_handlers = lambda: None  # disable — main thread owns signals
+
                 webui_thread = threading.Thread(
-                    target=uvicorn.run,
-                    args=(webui_app,),
-                    kwargs={
-                        "host": self.config.webui.host,
-                        "port": self.config.webui.port,
-                        "log_level": "error",
-                    },
+                    target=webui_server.run,
                     daemon=True,
                     name="webui",
                 )

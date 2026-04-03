@@ -357,9 +357,9 @@ class Dispatcher:
                         max_tokens=1,
                         agent="warmup",
                     )
-                    print(f"  ✓ {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
+                    print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
                 except Exception as e:
-                    print(f"  ✗ {alias} warmup failed: {e}", file=sys.stderr)
+                    print(f"  \033[31m✗\033[0m {alias} warmup failed: {e}", file=sys.stderr)
 
     def _run_archive_rotation(self) -> None:
         """Rotate old messages to archive."""

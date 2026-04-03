@@ -119,9 +119,9 @@ def get_usage_summary(days: int = 7, date: str | None = None) -> str:
     # Resolve date → calendar-day boundaries
     if date:
         d = date.strip().lower()
-        if d == "today":
+        if d in ("today", "heute"):
             target = now.date()
-        elif d == "yesterday":
+        elif d in ("yesterday", "gestern"):
             target = (now - timedelta(days=1)).date()
         else:
             try:

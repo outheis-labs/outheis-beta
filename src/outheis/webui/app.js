@@ -606,6 +606,7 @@ function renderSchedulerTasks() {
           ${renderScheduleRow('agenda_review', schedule.agenda_review)}
           ${renderScheduleRow('shadow_scan', schedule.shadow_scan)}
           ${renderScheduleRow('pattern_nightly', schedule.pattern_nightly)}
+          ${renderScheduleRow('session_summary', schedule.session_summary)}
           ${renderScheduleRow('index_rebuild', schedule.index_rebuild)}
         </div>
       </div>
@@ -632,6 +633,7 @@ const SCHED_DEFAULTS = {
   pattern_nightly:  { time: ['04:00'] },
   index_rebuild:    { time: ['04:30'] },
   archive_rotation: { time: ['05:00'] },
+  session_summary:  { interval_minutes: 360 },
 };
 
 const SCHED_DESCRIPTIONS = {
@@ -640,32 +642,42 @@ const SCHED_DESCRIPTIONS = {
   pattern_nightly:  'rumi analyzes message history to extract patterns and promote them to skills and rules',
   index_rebuild:    'zeno rebuilds the vault full-text search index from scratch',
   archive_rotation: 'moves old message log entries to the archive',
+  session_summary:  'rumi reads the recent message history at regular intervals and extracts insights, patterns, and notable events into long-term memory — runs on sonnet',
 };
 
 function renderScheduleRow(type, schedConfig) {
   const defaults = SCHED_DEFAULTS[type] || { time: ['04:00'] };
-  const hasTime = schedConfig?.time?.length > 0;
-  const cfg = Object.assign({ enabled: true }, hasTime ? schedConfig : { ...defaults, ...schedConfig });
+  const isInterval = 'interval_minutes' in (defaults);
+  const cfg = Object.assign({ enabled: true }, defaults, schedConfig || {});
   const enabled = cfg.enabled ?? true;
-  const times = cfg.time?.length > 0 ? cfg.time : ['04:00'];
 
   const dur = taskDurations[type];
   const durText = dur ? `${dur.ok ? '✓' : '✗'} ${dur.seconds}s` : '';
+
+  const allOptions = ['agenda_review', 'shadow_scan', 'pattern_nightly', 'index_rebuild', 'session_summary'];
+  const selectOptions = allOptions.map((v) => `<option value="${v}" ${type === v ? 'selected' : ''}>${v}</option>`).join('');
+
+  let timesHtml;
+  if (isInterval) {
+    const minutes = cfg.interval_minutes ?? 360;
+    timesHtml = `<div class="sched-interval">every <input type="number" class="sched-interval-input" value="${minutes}" min="1" style="width:60px"> min</div>`;
+  } else {
+    const times = cfg.time?.length > 0 ? cfg.time : ['04:00'];
+    timesHtml = `
+      ${times.map((t) => `<div class="sched-time"><input type="text" class="sched-time-input" value="${t}"><span class="remove" onclick="removeTime(this)">×</span></div>`).join('')}
+      <div class="sched-add" onclick="addTime(this, '${times[times.length - 1]}')">+</div>
+    `;
+  }
+
   return `
     <div class="sched-row" data-type="${type}">
       <div class="sched-type">
         <select class="sched-type-select" onchange="this.nextElementSibling.textContent = SCHED_DESCRIPTIONS[this.value] || ''">
-          <option value="agenda_review" ${type === 'agenda_review' ? 'selected' : ''}>agenda_review</option>
-          <option value="shadow_scan" ${type === 'shadow_scan' ? 'selected' : ''}>shadow_scan</option>
-          <option value="pattern_nightly" ${type === 'pattern_nightly' ? 'selected' : ''}>pattern_nightly</option>
-          <option value="index_rebuild" ${type === 'index_rebuild' ? 'selected' : ''}>index_rebuild</option>
+          ${selectOptions}
         </select>
         <div class="sched-desc">${SCHED_DESCRIPTIONS[type] || ''}</div>
       </div>
-      <div class="sched-times">
-        ${times.map((t) => `<div class="sched-time"><input type="text" class="sched-time-input" value="${t}"><span class="remove" onclick="removeTime(this)">×</span></div>`).join('')}
-        <div class="sched-add" onclick="addTime(this, '${times[times.length - 1]}')">+</div>
-      </div>
+      <div class="sched-times">${timesHtml}</div>
       <div class="sched-controls">
         <label class="sched-enabled-label">
           <input type="checkbox" class="sched-enabled" ${enabled ? 'checked' : ''}>
@@ -739,6 +751,7 @@ function addScheduleTask() {
         <option value="agenda_review">agenda_review</option>
         <option value="shadow_scan">shadow_scan</option>
         <option value="pattern_nightly">pattern_nightly</option>
+        <option value="session_summary">session_summary</option>
         <option value="index_rebuild">index_rebuild</option>
       </select>
       <div class="sched-desc">${SCHED_DESCRIPTIONS['agenda_review']}</div>
@@ -783,10 +796,15 @@ async function saveSchedule() {
   document.querySelectorAll('.sched-row').forEach((row) => {
     const type = row.querySelector('.sched-type-select')?.value;
     const enabled = row.querySelector('.sched-enabled')?.checked;
-    const time = Array.from(row.querySelectorAll('.sched-time-input')).map((el) => el.value)
-      .filter((v) => v && v.match(/^\d{2}:\d{2}$/));
     if (!type) return;
-    updatedConfig.schedule[type] = { enabled, time };
+    const intervalEl = row.querySelector('.sched-interval-input');
+    if (intervalEl) {
+      updatedConfig.schedule[type] = { enabled, time: [], interval_minutes: parseInt(intervalEl.value, 10) || 360 };
+    } else {
+      const time = Array.from(row.querySelectorAll('.sched-time-input')).map((el) => el.value)
+        .filter((v) => v && v.match(/^\d{2}:\d{2}$/));
+      updatedConfig.schedule[type] = { enabled, time };
+    }
   });
 
   await fetchAPI('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedConfig) });

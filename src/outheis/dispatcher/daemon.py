@@ -276,7 +276,8 @@ class Dispatcher:
         if sched.action_tasks.enabled:
             self.scheduler.add("action_tasks", self._run_action_tasks, interval_minutes=15)
         if sched.session_summary.enabled:
-            self.scheduler.add("session_summary", self._run_session_summary, interval_minutes=360)
+            interval = sched.session_summary.interval_minutes or 360
+            self.scheduler.add("session_summary", self._run_session_summary, interval_minutes=interval)
         if sched.agenda_review.enabled:
             self.scheduler.add("agenda_review", self._run_agenda_review, time=sched.agenda_review.time)
 

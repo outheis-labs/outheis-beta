@@ -179,7 +179,8 @@ class UpdatesConfig:
 class ScheduledTaskConfig:
     """Configuration for a single scheduled task."""
     enabled: bool = True
-    time: list[str] = field(default_factory=list)  # ["HH:MM", ...] — empty = interval-based
+    time: list[str] = field(default_factory=list)        # ["HH:MM", ...] — for time-based tasks
+    interval_minutes: int | None = None                  # for interval-based tasks
 
 
 @dataclass
@@ -197,7 +198,9 @@ class ScheduleConfig:
     shadow_scan: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=["03:30"]
     ))
-    session_summary: ScheduledTaskConfig = field(default_factory=ScheduledTaskConfig)  # interval-based
+    session_summary: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
+        interval_minutes=360
+    ))
     agenda_review: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=[f"{h:02d}:55" for h in range(4, 24)]
     ))
@@ -269,6 +272,7 @@ def _parse_agents(data: dict) -> dict[str, AgentConfig]:
 def _parse_scheduled_task(data: dict, defaults: ScheduledTaskConfig) -> ScheduledTaskConfig:
     """Parse a single scheduled task config. Migrates old hour/minute/hourly_at_minute format."""
     enabled = data.get("enabled", defaults.enabled)
+    interval_minutes = data.get("interval_minutes", defaults.interval_minutes)
     times = data.get("time")
     if times is None:
         # Migrate from old format
@@ -281,7 +285,7 @@ def _parse_scheduled_task(data: dict, defaults: ScheduledTaskConfig) -> Schedule
             times = [f"{data['hour']:02d}:{data.get('minute', 0):02d}"]
         else:
             times = list(defaults.time)
-    return ScheduledTaskConfig(enabled=enabled, time=times)
+    return ScheduledTaskConfig(enabled=enabled, time=times, interval_minutes=interval_minutes)
 
 
 def _parse_schedule(data: dict) -> ScheduleConfig:
@@ -413,7 +417,10 @@ def load_config() -> Config:
 
 def _serialize_scheduled_task(task: ScheduledTaskConfig) -> dict:
     """Serialize a scheduled task config."""
-    return {"enabled": task.enabled, "time": task.time}
+    d: dict = {"enabled": task.enabled, "time": task.time}
+    if task.interval_minutes is not None:
+        d["interval_minutes"] = task.interval_minutes
+    return d
 
 
 def _serialize_schedule(schedule: ScheduleConfig) -> dict:

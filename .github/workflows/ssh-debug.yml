@@ -1,0 +1,47 @@
+name: SSH Debug
+
+on:
+  workflow_dispatch:  # Manuell triggern
+
+jobs:
+  ssh:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install outheis
+        run: |
+          pip install -e ".[dev,watch]"
+          outheis init
+
+      - name: Configure vault
+        run: |
+          # Point to test fixtures
+          cat > ~/.outheis/human/config.json << 'EOF'
+          {
+            "user": {
+              "name": "debug",
+              "language": "en",
+              "timezone": "UTC",
+              "vault": ["${{ github.workspace }}/tests/fixtures/vault"]
+            },
+            "routing": {
+              "threshold": 0.3,
+              "data": ["vault", "search", "find", "note"],
+              "agenda": ["calendar", "schedule", "tomorrow"],
+              "action": ["send", "email", "execute"]
+            }
+          }
+          EOF
+
+      - name: Start SSH session
+        uses: mxschmitt/action-tmate@v3
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

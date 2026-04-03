@@ -26,7 +26,8 @@ MENTION_PATTERNS = {
     "agenda": re.compile(r"@cato\b", re.IGNORECASE),
     "action": re.compile(r"@hiro\b", re.IGNORECASE),
     "pattern": re.compile(r"@rumi\b", re.IGNORECASE),
-    "code": re.compile(r"@alan\b", re.IGNORECASE),
+    # @alan routes through relay — relay calls code agent via dispatch_sync
+    # so the response always goes relay → transport, never code → transport
 }
 
 

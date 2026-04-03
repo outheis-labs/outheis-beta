@@ -345,8 +345,17 @@ class Dispatcher:
             print(f"Index rebuild: {results}")
 
     def _warmup_persistent_models(self) -> None:
-        """Send a minimal call to each persistent local model to load it into memory."""
+        """Send a minimal call to each persistent local model to load it into memory.
+
+        Raises SystemExit if a model used by an enabled agent fails to load.
+        """
         import sys
+
+        # Build set of model aliases used by enabled agents
+        active_models = {
+            cfg.model for cfg in self.config.agents.values() if cfg.enabled
+        }
+
         for alias, model_cfg in self.config.llm.models.items():
             if model_cfg.provider == "ollama" and model_cfg.run_mode == "persistent":
                 try:
@@ -359,7 +368,11 @@ class Dispatcher:
                     )
                     print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
                 except Exception as e:
-                    print(f"  \033[31m✗\033[0m {alias} warmup failed: {e}", file=sys.stderr)
+                    print(f"  \033[31m✗\033[0m {alias} ({model_cfg.name}) not available: {e}", file=sys.stderr)
+                    if alias in active_models:
+                        print(f"\n\033[31mStartup aborted:\033[0m model '{alias}' is required by an active agent but could not be loaded.", file=sys.stderr)
+                        print(f"Fix: run 'ollama pull {model_cfg.name}' or disable the agent using this model.", file=sys.stderr)
+                        sys.exit(1)
 
     def _run_archive_rotation(self) -> None:
         """Rotate old messages to archive."""

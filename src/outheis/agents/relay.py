@@ -319,7 +319,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "explain_code",
-                "description": "ONLY use when user EXPLICITLY asks to look at outheis source code. Trigger phrases: 'schau im code nach', 'look at the code', 'zeig mir den code'. Do NOT use for general problems or errors — use delegate_to_agent instead.",
+                "description": "Use for ANY question about the outheis source code or implementation: how many lines, what does agent X do, where is Y implemented, how does Z work, show me the code for. Examples: 'wie viele zeilen', 'was macht der data agent', 'zeig mir den code', 'wie ist X implementiert'. Do NOT use for general problems unrelated to code internals.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -370,13 +370,17 @@ class RelayAgent(BaseAgent):
             }
         ]
         
-        # Build messages
+        # Build messages — exclude relay responses that signal tool failures
+        # (they poison the LLM context and cause repeated refusals)
+        _failure_markers = ("antwortet nicht", "agent error", "not available", "kann das nicht")
         messages = []
         for msg in context[-5:]:
             if msg.from_user:
                 messages.append({"role": "user", "content": msg.payload.get("text", "")})
             elif msg.from_agent == "relay":
-                messages.append({"role": "assistant", "content": msg.payload.get("text", "")})
+                content = msg.payload.get("text", "")
+                if not any(m in content.lower() for m in _failure_markers):
+                    messages.append({"role": "assistant", "content": content})
         messages.append({"role": "user", "content": text})
         
         # First call - tool decision

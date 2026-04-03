@@ -93,52 +93,6 @@ def get_client(provider_name: str) -> Any:
     return _clients[provider_name]
 
 
-def check_providers(agent_configs: dict) -> list[str]:
-    """
-    Health-check all providers used by enabled agents.
-
-    Makes a minimal 1-token call to each non-Anthropic provider.
-    Returns a list of error messages (empty = all OK).
-    Anthropic is assumed reachable if the API key is set.
-    """
-    config = get_llm_config()
-    errors: list[str] = []
-
-    # Collect providers used by enabled agents
-    providers_needed: set[str] = set()
-    for role, agent_cfg in agent_configs.items():
-        if not agent_cfg.enabled:
-            continue
-        try:
-            model = config.get_model(agent_cfg.model)
-            providers_needed.add(model.provider)
-        except Exception:
-            pass
-
-    for provider_name in providers_needed:
-        if provider_name == "anthropic":
-            continue  # trust the API key; a failed call would show up on first use
-        try:
-            client = get_client(provider_name)
-            provider_cfg = config.get_provider(provider_name)
-            # Use first model for this provider as test target
-            test_model = next(
-                (m.name for m in config.models.values() if m.provider == provider_name),
-                None,
-            )
-            if test_model is None:
-                continue
-            client.messages.create(
-                model=test_model,
-                max_tokens=1,
-                messages=[{"role": "user", "content": "ping"}],
-            )
-        except Exception as e:
-            errors.append(f"Provider '{provider_name}' not reachable: {e}")
-
-    return errors
-
-
 def resolve_model(alias: str) -> ModelConfig:
     """
     Resolve model alias to ModelConfig.

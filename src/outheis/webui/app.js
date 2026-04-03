@@ -94,6 +94,8 @@ async function renderOverview() {
   viewPath.textContent = '';
 
   const status = await fetchAPI('/api/status');
+  const msgCountEl = document.getElementById('msg-count');
+  if (msgCountEl) msgCountEl.textContent = status.messages_today || 0;
   const allMessages = await fetchAPI('/api/messages?limit=100');
   const conversations = allMessages.filter((msg) => msg.from?.user || msg.to === 'transport').slice(0, 10);
 

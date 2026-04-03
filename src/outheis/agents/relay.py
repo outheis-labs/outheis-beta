@@ -93,13 +93,6 @@ class RelayAgent(BaseAgent):
         # Check for explicit agent mentions (@zeno, @cato) and bare agenda read commands
         text_lower = text.lower().strip()
         _AGENDA_READ_COMMANDS = {"agenda", "daily", "tagesagenda", "was steht heute", "was ist heute"}
-        _CODE_KEYWORDS = {".py", "source code", "quellcode", "implementierung", "implementiert",
-                          "zeilen code", "lines of code", "funktion in", "methode in",
-                          "wie funktioniert", "schau im code", "look at the code"}
-        _is_code_question = (
-            "@alan" in text_lower
-            or any(kw in text_lower for kw in _CODE_KEYWORDS)
-        )
         if "@zeno" in text_lower:
             if verbose:
                 print("[explicit @zeno → data]", file=sys.stderr)
@@ -108,9 +101,9 @@ class RelayAgent(BaseAgent):
             if verbose:
                 print("[explicit @cato → agenda]", file=sys.stderr)
             response_text = self._handle_with_agenda_agent(text, msg)
-        elif _is_code_question:
+        elif "@alan" in text_lower:
             if verbose:
-                print("[code question → alan]", file=sys.stderr)
+                print("[explicit @alan → code]", file=sys.stderr)
             response_text = self._handle_with_code_agent(text, msg)
         else:
             # Let Relay handle with tools - it decides when to delegate

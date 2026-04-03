@@ -273,6 +273,8 @@ class Dispatcher:
             self.scheduler.add("archive_rotation", self._run_archive_rotation, time=sched.archive_rotation.time)
         if sched.shadow_scan.enabled:
             self.scheduler.add("shadow_scan", self._run_shadow_scan, time=sched.shadow_scan.time)
+        if sched.data_migrate.enabled:
+            self.scheduler.add("data_migrate", self._run_data_migrate, time=sched.data_migrate.time)
         if sched.action_tasks.enabled:
             self.scheduler.add("action_tasks", self._run_action_tasks, interval_minutes=15)
         if sched.agenda_review.enabled:
@@ -346,6 +348,26 @@ class Dispatcher:
         """Rotate old messages to archive."""
         # TODO: Implement archive rotation
         pass
+
+    def _run_data_migrate(self) -> None:
+        """Scan and apply schema migrations for messages and insights."""
+        from outheis.core.config import get_insights_path, get_messages_path
+        from outheis.core.schema import INSIGHTS_VERSION, MESSAGES_VERSION, scan_file
+        import sys
+        files = [
+            (get_messages_path(), "Message", MESSAGES_VERSION),
+            (get_insights_path(), "Insight", INSIGHTS_VERSION),
+        ]
+        total = 0
+        for path, record_type, version in files:
+            if not path.exists():
+                continue
+            report = scan_file(str(path), record_type, version)
+            total += report.outdated
+        if total:
+            print(f"[data_migrate] {total} outdated records found — migrated on next read", file=sys.stderr)
+        else:
+            print("[data_migrate] all records up to date", file=sys.stderr)
 
     def _run_shadow_scan(self) -> None:
         """
@@ -550,6 +572,7 @@ class Dispatcher:
                     "archive_rotation": self._run_archive_rotation,
                     "agenda_review": self._run_agenda_review,
                     "tag_scan": self._run_tag_scan,
+                    "data_migrate": self._run_data_migrate,
                 }
                 runner = task_map.get(task_name)
                 if runner:

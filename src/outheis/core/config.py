@@ -198,6 +198,9 @@ class ScheduleConfig:
     shadow_scan: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=["03:30"]
     ))
+    data_migrate: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
+        time=["04:00"]
+    ))
     agenda_review: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=[f"{h:02d}:55" for h in range(4, 24)]
     ))
@@ -301,6 +304,12 @@ def _parse_schedule(data: dict) -> ScheduleConfig:
         ),
         shadow_scan=_parse_scheduled_task(
             data.get("shadow_scan", {}), defaults.shadow_scan
+        ),
+        data_migrate=_parse_scheduled_task(
+            data.get("data_migrate",
+                {"time": [data.get("updates", {}).get("schedule", "04:00")]}
+                if "updates" in data and "data_migrate" not in data else {}),
+            defaults.data_migrate
         ),
         agenda_review=_parse_scheduled_task(
             data.get("agenda_review", {}), defaults.agenda_review
@@ -424,6 +433,7 @@ def _serialize_schedule(schedule: ScheduleConfig) -> dict:
         "index_rebuild": _serialize_scheduled_task(schedule.index_rebuild),
         "archive_rotation": _serialize_scheduled_task(schedule.archive_rotation),
         "shadow_scan": _serialize_scheduled_task(schedule.shadow_scan),
+        "data_migrate": _serialize_scheduled_task(schedule.data_migrate),
         "agenda_review": _serialize_scheduled_task(schedule.agenda_review),
         "action_tasks": _serialize_scheduled_task(schedule.action_tasks),
     }

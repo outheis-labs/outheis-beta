@@ -166,7 +166,7 @@ class RelayAgent(BaseAgent):
         
         # Sort by timestamp and limit
         merged.sort(key=lambda m: m.timestamp or 0)
-        return merged[-20:]  # Keep last 20 for context
+        return merged[-10:]  # Keep last 10 for context
 
     def _generate_response(
         self,

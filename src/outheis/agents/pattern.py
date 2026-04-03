@@ -176,7 +176,7 @@ class PatternAgent(BaseAgent):
     def _build_conversation_context(self, messages: list[Message]) -> str:
         """Build a text context from messages for analysis."""
         lines = []
-        for msg in messages[-20:]:
+        for msg in messages[-10:]:
             text = msg.payload.get("text", "")
             if text:
                 lines.append(f"User: {text}")

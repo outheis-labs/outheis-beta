@@ -332,6 +332,20 @@ class RelayAgent(BaseAgent):
                 }
             },
             {
+                "name": "check_token_usage",
+                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'wie viele tokens', 'was kostet das', 'token-verbrauch', 'kosten diese woche', 'wie viel habe ich verbraucht', etc.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "days": {
+                            "type": "integer",
+                            "description": "Look-back window in days: 1 = today, 7 = last 7 days, 30 = last 30 days"
+                        }
+                    },
+                    "required": ["days"]
+                }
+            },
+            {
                 "name": "delegate_to_agent",
                 "description": "PRIMARY TOOL for getting things done. Delegate a task to a specialist agent. Use this for ANY user request that requires action: regenerate files, search vault, update daily, write content, etc. You can call this multiple times to orchestrate complex tasks. Agents: 'data' (vault read/write/search), 'agenda' (daily/inbox/exchange, schedule, regenerate daily), 'action' (task execution), 'pattern' (memory, learning).",
                 "input_schema": {
@@ -480,6 +494,9 @@ class RelayAgent(BaseAgent):
                                 )
                         else:
                             result = "Keine Frage angegeben"
+                    elif block.name == "check_token_usage":
+                        from outheis.core.tokens import get_usage_summary
+                        result = get_usage_summary(block.input.get("days", 7))
                     elif block.name == "delegate_to_agent":
                         # Generic delegation - LLM decides which agent and what to ask
                         agent = block.input.get("agent", "")

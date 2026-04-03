@@ -2,7 +2,8 @@
 Token usage tracking.
 
 Records per-call usage to ~/.outheis/human/token_usage.jsonl.
-Provides 7-day stats grouped into 4×6h periods per day.
+Provides 7-day stats grouped into 4×6h periods per day,
+and a human-readable usage/cost summary for any time window.
 """
 
 from __future__ import annotations
@@ -10,6 +11,22 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
+
+# Approximate cost per 1M tokens (input, output) in USD — Anthropic list prices
+_MODEL_COSTS: dict[str, tuple[float, float]] = {
+    "haiku":  (0.80,  4.00),   # claude-haiku-4-5*
+    "sonnet": (3.00,  15.00),  # claude-sonnet-4-5*, claude-sonnet-4-6*
+    "opus":   (15.00, 75.00),  # claude-opus-4*
+}
+
+
+def _model_cost(model: str) -> tuple[float, float]:
+    """Return (input_$/MTok, output_$/MTok) for a given model name."""
+    m = model.lower()
+    for key, costs in _MODEL_COSTS.items():
+        if key in m:
+            return costs
+    return (3.00, 15.00)  # fallback: sonnet pricing
 
 
 def get_token_usage_path() -> Path:
@@ -83,3 +100,71 @@ def get_stats_7days() -> dict:
                 continue
 
     return {"days": days, "total_7d": total}
+
+
+def get_usage_summary(days: int = 7) -> str:
+    """
+    Return a human-readable token usage and estimated cost summary.
+
+    Args:
+        days: look-back window (1 = today, 7 = last week, 30 = last month)
+    """
+    path = get_token_usage_path()
+    if not path.exists():
+        return f"Keine Token-Daten für die letzten {days} {'Tag' if days == 1 else 'Tage'} vorhanden."
+
+    now = datetime.now()
+    cutoff = now - timedelta(days=days)
+
+    total_input = 0
+    total_output = 0
+    total_cost = 0.0
+    by_agent: dict[str, dict] = {}
+
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+                ts = datetime.fromisoformat(entry["ts"])
+                if ts < cutoff:
+                    continue
+                inp = entry.get("input", 0)
+                out = entry.get("output", 0)
+                model = entry.get("model", "unknown")
+                agent = entry.get("agent", "unknown")
+                input_rate, output_rate = _model_cost(model)
+                cost = (inp * input_rate + out * output_rate) / 1_000_000
+
+                total_input += inp
+                total_output += out
+                total_cost += cost
+
+                if agent not in by_agent:
+                    by_agent[agent] = {"input": 0, "output": 0, "cost": 0.0}
+                by_agent[agent]["input"] += inp
+                by_agent[agent]["output"] += out
+                by_agent[agent]["cost"] += cost
+            except (json.JSONDecodeError, KeyError, ValueError):
+                continue
+
+    total_tokens = total_input + total_output
+    if total_tokens == 0:
+        label = "heute" if days == 1 else f"in den letzten {days} Tagen"
+        return f"Keine Token-Nutzung {label} aufgezeichnet."
+
+    label = "heute" if days == 1 else f"letzte {days} Tage"
+    lines = [
+        f"Token-Nutzung ({label})",
+        f"Gesamt: {total_tokens:,} Tokens  (Input: {total_input:,} / Output: {total_output:,})",
+        f"Geschätzte Kosten: ${total_cost:.4f}  (Näherungswert, Listenpreise Anthropic)",
+        "",
+        "Nach Agent:",
+    ]
+    for agent, s in sorted(by_agent.items(), key=lambda x: -(x[1]["input"] + x[1]["output"])):
+        t = s["input"] + s["output"]
+        lines.append(f"  {agent:10s}  {t:>8,} Tokens  ${s['cost']:.4f}")
+
+    return "\n".join(lines)

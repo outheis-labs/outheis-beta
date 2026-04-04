@@ -586,15 +586,16 @@ async def get_status():
     import subprocess
 
     try:
-        result = subprocess.run(
-            ["pgrep", "-f", "outheis.*(start|daemon)"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        running = result.returncode == 0
-        pid = result.stdout.strip().split("\n")[0] if running else None
-    except Exception:
+        from outheis.dispatcher.daemon import read_pid, get_pid_path
+        _pid = read_pid()
+        if _pid:
+            os.kill(_pid, 0)  # raises if process is gone
+            running = True
+            pid = str(_pid)
+        else:
+            running = False
+            pid = None
+    except (ProcessLookupError, PermissionError, OSError):
         running = False
         pid = None
 

@@ -284,7 +284,7 @@ class AgendaAgent(BaseAgent):
     def _read_file(self, path: Path) -> str:
         """Read file, return content or message if not exists."""
         if not path.exists():
-            
+            return f"{path.name} does not exist yet."
         return path.read_text(encoding="utf-8")
     
     def _write_file(self, path: Path, content: str) -> str:

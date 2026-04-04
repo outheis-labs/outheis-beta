@@ -402,44 +402,57 @@ class AgendaAgent(BaseAgent):
         return path.read_text(encoding="utf-8") if path.exists() else None
 
     # =========================================================================
-    # PASS-THROUGH STATE  (per-conversation, short-lived)
+    # PASS-THROUGH STATE  (per user identity, no TTL)
     # =========================================================================
+    #
+    # Signal creates a new conversation_id for every message, so we key by
+    # the sender's identity (phone number) instead.  The context stays valid
+    # as long as the verbatim agenda was the last thing cato sent to that
+    # identity — i.e. until cato produces an LLM response for that user,
+    # which clears the entry.
 
     def _passthrough_path(self) -> Path:
         return get_human_dir() / "cache" / "agenda" / "passthrough.json"
 
-    def _save_passthrough(self, conversation_id: str, query: str, content: str) -> None:
-        """Record that a pass-through response was sent for this conversation."""
-        import time
+    def _save_passthrough(self, identity: str, content: str) -> None:
+        """Record the verbatim agenda that was just sent to this identity."""
         path = self._passthrough_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps({"conversation_id": conversation_id, "query": query,
-                        "content": content, "ts": time.time()}),
-            encoding="utf-8",
-        )
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+        except Exception:
+            data = {}
+        data[identity] = content
+        path.write_text(json.dumps(data), encoding="utf-8")
 
-    def _load_passthrough(self, conversation_id: str) -> str | None:
-        """Return last pass-through content if it belongs to this conversation and is recent."""
-        import time
+    def _load_passthrough(self, identity: str) -> str | None:
+        """Return stored pass-through content for this identity, if any."""
         path = self._passthrough_path()
         if not path.exists():
             return None
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if data.get("conversation_id") != conversation_id:
-                return None
-            if time.time() - data.get("ts", 0) > 3600:  # 1-hour TTL
-                return None
-            return data.get("content")
+            return json.loads(path.read_text(encoding="utf-8")).get(identity)
         except Exception:
             return None
+
+    def _clear_passthrough(self, identity: str) -> None:
+        """Remove stored pass-through for this identity after an LLM response is sent."""
+        path = self._passthrough_path()
+        if not path.exists():
+            return
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            data.pop(identity, None)
+            path.write_text(json.dumps(data), encoding="utf-8")
+        except Exception:
+            pass
 
     def handle(self, msg: Message) -> Message | None:
         """Handle incoming message with tools."""
         verbose = os.environ.get("OUTHEIS_VERBOSE")
         query = msg.payload.get("text", "")
         response_to = "transport" if msg.from_user else (msg.from_agent or "relay")
+        identity = msg.from_user.identity if msg.from_user else None
 
         if not query:
             return self.respond(
@@ -450,11 +463,13 @@ class AgendaAgent(BaseAgent):
             )
 
         # Read-only: return Daily.md verbatim — no LLM, no risk of modification.
-        # Save what was sent so follow-up LLM calls can reference it.
+        # Save what was sent keyed by sender identity so follow-up LLM calls
+        # in a later (different conversation_id) message can reference it.
         if self._is_read_query(query):
             content = self._get_daily_content()
             if content:
-                self._save_passthrough(msg.conversation_id, query, content)
+                if identity:
+                    self._save_passthrough(identity, content)
                 return self.respond(
                     to=response_to,
                     payload={"text": content},
@@ -462,11 +477,15 @@ class AgendaAgent(BaseAgent):
                     reply_to=msg.id,
                 )
 
-        # LLM path: if a pass-through just happened in this conversation,
-        # inject it as prior context so the LLM knows what it "just showed".
-        prior = self._load_passthrough(msg.conversation_id)
+        # LLM path: inject prior pass-through as synthetic context if the
+        # verbatim agenda was the last thing sent to this identity.
+        prior = self._load_passthrough(identity) if identity else None
         try:
             answer = self._process_with_tools(query, verbose, prior_content=prior)
+
+            # LLM has now responded — the agenda is no longer "last sent"
+            if identity:
+                self._clear_passthrough(identity)
 
             return self.respond(
                 to=response_to,

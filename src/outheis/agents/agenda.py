@@ -527,14 +527,18 @@ class AgendaAgent(BaseAgent):
             for tool in tool_uses:
                 if verbose:
                     print(f"[agenda tool: {tool.name}({tool.input})]", file=sys.stderr)
-                
+
                 result = self._execute_tool(tool.name, tool.input)
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tool.id,
                     "content": result,
                 })
-            
+
+            # get_daily sets _passthrough_content — return verbatim, skip second LLM call
+            if self._passthrough_content is not None:
+                return self._passthrough_content
+
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         

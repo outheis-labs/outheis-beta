@@ -587,7 +587,7 @@ async def get_status():
 
     try:
         result = subprocess.run(
-            ["pgrep", "-f", "outheis.*daemon"],
+            ["pgrep", "-f", "outheis.*(start|daemon)"],
             capture_output=True,
             text=True,
             timeout=2,

@@ -6,9 +6,9 @@ Second brain multi-agent AI assistant, based on privacy and human-centricity. En
 
 It is conceptionally conceived for both personal assistant (1:1) and domain expert (many:1) usage.
 
-![outheis-leaves (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/ba35428e-b320-4be3-ae9a-6d4ec61a5962)
+![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/ba35428e-b320-4be3-ae9a-6d4ec61a5962)
 
-The name comes from Homer. When Polyphemus asks who blinded him, Odysseus answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody is hurting me!" No help comes.
+The name comes from Homer. When Polyphemus asks who blinded him, Ulysses answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody is hurting me!" No help comes. Ulysses slips away, clinging to the belly of the ram.
 
 It's a trick, but also a stance: by refusing to be named, captured, pinned down, Odysseus remains free to act.
 

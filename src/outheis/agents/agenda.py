@@ -569,12 +569,19 @@ class AgendaAgent(BaseAgent):
         
         comment_trigger = False
         if not force:
+            # Force if Daily.md is from a previous day
+            daily_path = agenda_dir / "Daily.md"
+            daily_text = daily_path.read_text(encoding="utf-8") if daily_path.exists() else ""
+            today_iso = date.today().isoformat()
+            if daily_path.exists() and today_iso not in daily_text:
+                force = True  # stale date — always regenerate
+
+        if not force:
             stored_hashes = self._load_hashes()
             if current_hashes == stored_hashes:
                 # Still run if Daily.md has unprocessed user comments
-                daily_path = agenda_dir / "Daily.md"
-                has_comments = daily_path.exists() and any(
-                    line.startswith(">") for line in daily_path.read_text(encoding="utf-8").splitlines()
+                has_comments = any(
+                    line.startswith(">") for line in daily_text.splitlines()
                 )
                 if not has_comments:
                     print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
@@ -607,8 +614,9 @@ class AgendaAgent(BaseAgent):
         
         try:
             result = self._process_with_tools(query)
-            # Save hashes after successful run (so failed runs get retried)
-            self._save_hashes(current_hashes)
+            # Save post-LLM hashes so next run correctly detects further changes
+            post_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
+            self._save_hashes(post_hashes)
             print(f"[{timestamp}] Agenda: {result[:120]}", file=sys.stderr)
         except Exception as e:
             print(f"[{timestamp}] Agenda error: {e}", file=sys.stderr)

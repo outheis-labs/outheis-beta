@@ -401,10 +401,42 @@ class AgendaAgent(BaseAgent):
         path = agenda_dir / "Daily.md"
         return path.read_text(encoding="utf-8") if path.exists() else None
 
+    # =========================================================================
+    # PASS-THROUGH STATE  (per-conversation, short-lived)
+    # =========================================================================
+
+    def _passthrough_path(self) -> Path:
+        return get_human_dir() / "cache" / "agenda" / "passthrough.json"
+
+    def _save_passthrough(self, conversation_id: str, query: str, content: str) -> None:
+        """Record that a pass-through response was sent for this conversation."""
+        import time
+        path = self._passthrough_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({"conversation_id": conversation_id, "query": query,
+                        "content": content, "ts": time.time()}),
+            encoding="utf-8",
+        )
+
+    def _load_passthrough(self, conversation_id: str) -> str | None:
+        """Return last pass-through content if it belongs to this conversation and is recent."""
+        import time
+        path = self._passthrough_path()
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("conversation_id") != conversation_id:
+                return None
+            if time.time() - data.get("ts", 0) > 3600:  # 1-hour TTL
+                return None
+            return data.get("content")
+        except Exception:
+            return None
+
     def handle(self, msg: Message) -> Message | None:
         """Handle incoming message with tools."""
-        import sys
-
         verbose = os.environ.get("OUTHEIS_VERBOSE")
         query = msg.payload.get("text", "")
         response_to = "transport" if msg.from_user else (msg.from_agent or "relay")
@@ -417,9 +449,25 @@ class AgendaAgent(BaseAgent):
                 reply_to=msg.id,
             )
 
+        # Read-only: return Daily.md verbatim — no LLM, no risk of modification.
+        # Save what was sent so follow-up LLM calls can reference it.
+        if self._is_read_query(query):
+            content = self._get_daily_content()
+            if content:
+                self._save_passthrough(msg.conversation_id, query, content)
+                return self.respond(
+                    to=response_to,
+                    payload={"text": content},
+                    conversation_id=msg.conversation_id,
+                    reply_to=msg.id,
+                )
+
+        # LLM path: if a pass-through just happened in this conversation,
+        # inject it as prior context so the LLM knows what it "just showed".
+        prior = self._load_passthrough(msg.conversation_id)
         try:
-            answer = self._process_with_tools(query, verbose)
-            
+            answer = self._process_with_tools(query, verbose, prior_content=prior)
+
             return self.respond(
                 to=response_to,
                 payload={"text": answer},
@@ -433,7 +481,7 @@ class AgendaAgent(BaseAgent):
                 conversation_id=msg.conversation_id,
                 reply_to=msg.id,
             )
-    
+
     def handle_direct(self, query: str) -> str:
         """Direct query interface for Relay delegation."""
         if self._is_read_query(query):
@@ -441,13 +489,23 @@ class AgendaAgent(BaseAgent):
             if content:
                 return content
         return self._process_with_tools(query)
-    
-    def _process_with_tools(self, query: str, verbose: bool = False) -> str:
+
+    def _process_with_tools(self, query: str, verbose: bool = False,
+                             prior_content: str | None = None) -> str:
         """Process query using tools autonomously."""
         import sys
         from outheis.core.llm import call_llm
-        
-        messages = [{"role": "user", "content": query}]
+
+        if prior_content:
+            # Inject the prior pass-through as a synthetic exchange so the LLM
+            # knows what it last sent verbatim.
+            messages = [
+                {"role": "user", "content": "Zeig mir die aktuelle Agenda."},
+                {"role": "assistant", "content": prior_content},
+                {"role": "user", "content": query},
+            ]
+        else:
+            messages = [{"role": "user", "content": query}]
         tools = self._get_tools()
         system = self.get_system_prompt()
 

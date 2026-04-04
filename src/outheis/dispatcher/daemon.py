@@ -806,15 +806,10 @@ class Dispatcher:
         if recovered:
             print(f"Recovered {recovered} pending message(s)")
 
-        # Process any unanswered requests (crashed before response)
-        unanswered = get_unanswered_requests(self.queue_path)
-        if unanswered:
-            print(f"Processing {len(unanswered)} unanswered request(s)...")
-            for msg in unanswered:
-                self.process_message(msg)
-
-        # Start from last message for new ones
+        # Snapshot last processed ID now so the watcher doesn't re-process old messages.
+        # Unanswered backlog is handled in a background thread after transports are up.
         self.last_processed_id = get_last_id(self.queue_path)
+        unanswered = get_unanswered_requests(self.queue_path)
 
         # Start lock manager
         lock_manager = LockManager()
@@ -864,6 +859,19 @@ class Dispatcher:
                 print(f"Web UI started at http://{self.config.webui.host}:{self.config.webui.port}")
             except Exception as e:
                 print(f"Web UI failed to start: {e}")
+
+        # Process unanswered backlog in background — transports are now up
+        if unanswered:
+            print(f"Processing {len(unanswered)} unanswered request(s) in background...")
+            def _process_backlog(msgs):
+                for msg in msgs:
+                    self.process_message(msg)
+            threading.Thread(
+                target=_process_backlog,
+                args=(unanswered,),
+                daemon=True,
+                name="backlog",
+            ).start()
 
         # Set up file watcher
         watcher = QueueWatcher(

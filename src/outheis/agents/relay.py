@@ -140,14 +140,10 @@ class RelayAgent(BaseAgent):
         if not self._is_ollama_agent(agent_name):
             return
         try:
-            from outheis.core.config import load_config, get_messages_path
+            from outheis.core.config import get_messages_path
             from outheis.core.message import create_agent_message
             from outheis.core.queue import append
-            config = load_config()
-            if config.human.language and "deutsch" in config.human.language.lower():
-                text = "Einen Moment — lokales Modell, das dauert etwas länger..."
-            else:
-                text = "One moment — local model, this may take a little longer..."
+            text = "One moment — local model, this may take a little longer..."
             interim = create_agent_message(
                 from_agent="relay",
                 to="transport",

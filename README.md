@@ -8,6 +8,12 @@ It is conceptionally conceived for both personal assistant (1:1) and domain expe
 
 ![outheis-leaves (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/ba35428e-b320-4be3-ae9a-6d4ec61a5962)
 
+The name comes from Homer. When Polyphemus asks who blinded him, Odysseus answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody is hurting me!" No help comes.
+
+It's a trick, but also a stance: by refusing to be named, captured, pinned down, Odysseus remains free to act.
+
+outheis carries this into AI interaction. The system knows you — but only locally, only under your control, only in service of your work.
+
 ## The Problem
 
 Every interaction with an AI system leaves traces. Queries reveal interests. Conversations expose thinking patterns. Over time, these traces form a profile — not for your benefit, but for extraction.
@@ -24,15 +30,6 @@ This means:
 - **Transparent operation** — append-only logs, no hidden state
 - **Explicit capabilities** — agents declare what they can access
 - **Portable formats** — Markdown and JSON, no lock-in
-
-
-## οὐθείς
-
-The name comes from Homer. When Polyphemus asks who blinded him, Odysseus answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody is hurting me!" No help comes.
-
-It's a trick, but also a stance: by refusing to be named, captured, pinned down, Odysseus remains free to act.
-
-outheis carries this into AI interaction. The system knows you — but only locally, only under your control, only in service of your work.
 
 
 ## Not Anti-AI

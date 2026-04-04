@@ -302,6 +302,21 @@ function renderProviderCard(name, providerConfig) {
         <label>Base URL</label>
         <input type="text" id="cfg-${name}-url" value="${providerConfig?.base_url || getDefaultUrl(name)}">
       </div>
+      ${name === 'ollama' ? `
+        <div class="provider-field">
+          <label>Environment variables <span style="font-weight:400;opacity:.6">(set on Ollama server)</span></label>
+          <div id="cfg-ollama-envvars">
+            ${Object.entries(providerConfig?.env_vars || {}).map(([k, v]) =>
+              `<div class="form-row">
+                <input type="text" class="ollama-env-key" value="${k}" placeholder="VARIABLE">
+                <input type="text" class="ollama-env-val" value="${v}" placeholder="value">
+                <button class="btn btn-sm" onclick="this.closest('.form-row').remove()">×</button>
+              </div>`
+            ).join('')}
+          </div>
+          <button class="btn btn-sm" style="margin-top:4px" onclick="addOllamaEnvVar()">+ Add variable</button>
+        </div>
+      ` : ''}
     </div>
   `;
 }
@@ -444,6 +459,15 @@ function getDefaultUrl(provider) {
   return { anthropic: 'https://api.anthropic.com', openai: 'https://api.openai.com/v1', ollama: 'http://localhost:11434' }[provider] || '';
 }
 
+function addOllamaEnvVar() {
+  const container = document.getElementById('cfg-ollama-envvars');
+  if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'form-row';
+  row.innerHTML = '<input type="text" class="ollama-env-key" placeholder="VARIABLE"> <input type="text" class="ollama-env-val" placeholder="value"> <button class="btn btn-sm" onclick="this.closest(\'.form-row\').remove()">×</button>';
+  container.appendChild(row);
+}
+
 function addVault() {
   const container = document.getElementById('vaults-container');
   const count = container.querySelectorAll('.form-row').length;
@@ -527,7 +551,19 @@ async function saveConfig() {
     updatedConfig.llm.providers = {
       anthropic: { api_key: anthropicKey.value, base_url: document.getElementById('cfg-anthropic-url')?.value },
       openai: { api_key: document.getElementById('cfg-openai-key')?.value, base_url: document.getElementById('cfg-openai-url')?.value },
-      ollama: { base_url: document.getElementById('cfg-ollama-url')?.value },
+      ollama: {
+        base_url: document.getElementById('cfg-ollama-url')?.value,
+        env_vars: (() => {
+          const rows = document.querySelectorAll('#cfg-ollama-envvars .form-row');
+          const vars = {};
+          rows.forEach(row => {
+            const k = row.querySelector('.ollama-env-key')?.value?.trim();
+            const v = row.querySelector('.ollama-env-val')?.value?.trim();
+            if (k) vars[k] = v || '';
+          });
+          return vars;
+        })(),
+      },
     };
   }
 

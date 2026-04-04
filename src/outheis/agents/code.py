@@ -43,11 +43,9 @@ class CodeAgent(BaseAgent):
     name: str = "code"
 
     def get_system_prompt(self) -> str:
-        from outheis.core.memory import get_memory_context
         from outheis.agents.loader import load_skills, load_rules
 
         config = load_config()
-        memory = get_memory_context()
         skills = load_skills("code")
         rules = load_rules("code")
 
@@ -57,52 +55,33 @@ class CodeAgent(BaseAgent):
         parts = [
             "# Code Agent (alan)",
             "",
-            "Du analysierst lokalen Quellcode und beantwortest Fragen zur Implementierung.",
-            "Proposals legst du als eigene Dateien in vault/Codebase/ ab (z.B. fix-login-bug.md, refactor-llm.py).",
-            "Exchange.md ist die Entscheidungsgrundlage für den User: eine Übersicht aller offenen Issues,",
-            "je Issue 1–2 Absätze mit Problemstellung, Lösungsvorschlag und Verweis auf die Detaildatei.",
-            "Exchange.md kann viele Issues gleichzeitig listen — ausführliche Analyse gehört in die Issue-Datei.",
-            "Du änderst NIEMALS direkt Quellcode — write_codebase schreibt ausschliesslich in vault/Codebase/.",
+            f"You are alan, the code agent of outheis — a local, privacy-first multi-agent system.",
+            f"Your task: analyze local source code and answer questions about the implementation.",
+            f"Respond in {config.human.language}.",
+            "",
+            "Write proposals as individual files in vault/Codebase/.",
+            "Exchange.md is the decision basis for the user: overview of all open issues,",
+            "1-2 paragraphs per issue (problem, proposed solution, reference to detail file).",
+            "Never modify source code directly — write_codebase writes exclusively to vault/Codebase/.",
             "",
             f"## Source root: `{src_root}`",
             "",
-            "Lies erst die Verzeichnisstruktur mit list_files, dann gezielt einzelne Dateien mit read_file.",
-            "Mach keine Annahmen über Dateiinhalte — lies den Code bevor du antwortest.",
+            "First read the directory structure with list_files, then read specific files with read_file.",
+            "Do not make assumptions about file contents — read the code before answering.",
         ]
 
         if exchange:
             parts += [
                 "",
-                "## Offene Proposals (vault/Codebase/Exchange.md)",
+                "## Open proposals (vault/Codebase/Exchange.md)",
                 "",
                 exchange,
             ]
-
-        parts += [
-            "",
-            "## Verfügbare Tools",
-            "- read_file(path) — Quellcode-Datei lesen (beliebiger lokaler Pfad)",
-            "- search_code(query, path) — Code nach Pattern/Namen durchsuchen",
-            "- list_files(path) — Verzeichnis auflisten",
-            "- write_codebase(path, content) — Datei in vault/Codebase/ schreiben (NUR dort)",
-            "- append_codebase(path, content) — An vault/Codebase/Datei anhängen",
-            "- load_skill(topic) — Detail-Skills nachladen",
-            "",
-            "## Prinzipien",
-            "- Lies Code bevor du Aussagen machst — keine Annahmen",
-            "- Proposals gehen IMMER durch vault/Codebase/ — nie direkt in src/",
-            "- Exchange.md nur für die Übersicht aktualisieren, Detailtiefe in Issue-Dateien",
-            "- Sei präzise: Zitiere Datei + Zeilennummer",
-            "",
-            f"Sprache: {config.human.language}",
-        ]
 
         if skills:
             parts += ["", "## Skills", "", skills]
         if rules:
             parts += ["", "## Rules", "", rules]
-        if memory:
-            parts += ["", "## Memory", "", memory]
 
         return "\n".join(parts)
 

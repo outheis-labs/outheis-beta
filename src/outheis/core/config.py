@@ -119,6 +119,7 @@ class ProviderConfig:
     """Configuration for a single LLM provider."""
     api_key: str | None = None
     base_url: str | None = None
+    env_vars: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -238,6 +239,7 @@ def _parse_providers(data: dict) -> dict[str, ProviderConfig]:
             result[name] = ProviderConfig(
                 api_key=cfg.get("api_key"),
                 base_url=cfg.get("base_url"),
+                env_vars=cfg.get("env_vars") or {},
             )
         else:
             result[name] = ProviderConfig()

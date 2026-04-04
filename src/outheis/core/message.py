@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from typing import Literal
 from uuid import uuid4
 
+from outheis.core.snowflake import generate_str as _snowflake_str
+
 # =============================================================================
 # TYPES
 # =============================================================================
@@ -137,9 +139,8 @@ class Message:
 # =============================================================================
 
 def generate_id() -> str:
-    """Generate a unique message ID."""
-    # Simple UUID for now. Could use Snowflake for timestamp-sortable IDs.
-    return str(uuid4())
+    """Generate a unique, time-sortable message ID (Snowflake)."""
+    return _snowflake_str()
 
 
 def generate_conversation_id() -> str:

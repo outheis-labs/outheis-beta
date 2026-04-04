@@ -236,6 +236,10 @@ class Dispatcher:
 
     # Signal transport thread
     _signal_thread: threading.Thread | None = None
+    _signal_transport: any = field(default=None, repr=False)
+
+    # Fallback mode — activated when cloud billing fails
+    _fallback_mode: bool = False
 
     # Task execution lock — prevents concurrent runs of the same task
     _running_tasks: set = field(default_factory=set)
@@ -250,6 +254,105 @@ class Dispatcher:
         self._wakeup_read, self._wakeup_write = os.pipe()
         os.set_blocking(self._wakeup_read, False)
         os.set_blocking(self._wakeup_write, False)
+
+    def _enter_fallback_mode(self, reason: str, conversation_id: str | None = None) -> None:
+        """Switch to local fallback models when cloud billing fails.
+
+        - Overrides relay/data/agenda/pattern/code models to local_fallback alias.
+        - Disables agents that have no viable fallback (action).
+        - Writes system_status.json so WebUI can show the yellow flag.
+        - Sends a broadcast notification to all transports.
+        """
+        import time as _time
+        from outheis.core.config import get_status_path
+        from outheis.core.message import create_agent_message
+        from outheis.core.queue import append
+
+        if self._fallback_mode:
+            return  # Already in fallback — don't repeat
+
+        fallback = self.config.llm.local_fallback
+        if not fallback:
+            print(f"[fallback] Billing error but no local_fallback configured: {reason}", flush=True)
+            return
+
+        self._fallback_mode = True
+        print(f"[fallback] Entering fallback mode: {reason}", flush=True)
+
+        # Override model alias for all cloud-dependent agents
+        fallback_agents = {"relay", "data", "agenda", "pattern", "code"}
+        for role, agent_cfg in self.config.agents.items():
+            if role in fallback_agents and agent_cfg.enabled:
+                agent_cfg.model = fallback
+                # Evict cached agent instance so it is recreated with new model
+                self._agents.pop(role, None)
+
+        # Write status file for WebUI
+        status = {
+            "mode": "fallback",
+            "reason": reason,
+            "fallback_model": fallback,
+            "since": _time.time(),
+        }
+        try:
+            get_status_path().write_text(__import__("json").dumps(status))
+        except Exception as e:
+            print(f"[fallback] Could not write status file: {e}", flush=True)
+
+        # Broadcast notification to all transports
+        text = (
+            f"Cloud provider unavailable ({reason}). "
+            f"Switched to local fallback model '{fallback}'. "
+            f"Some capabilities may be reduced."
+        )
+        notif = create_agent_message(
+            from_agent="relay",
+            to="transport",
+            type="response",
+            payload={"text": text},
+            conversation_id=conversation_id or "system",
+            intent="broadcast",
+        )
+        try:
+            append(self.queue_path, notif)
+        except Exception as e:
+            print(f"[fallback] Could not append broadcast: {e}", flush=True)
+
+    def _check_billing_at_startup(self) -> None:
+        """Probe cloud providers at startup. Enter fallback mode if billing fails."""
+        from outheis.core.llm import call_llm, BillingError, resolve_model
+
+        # Collect unique cloud providers used by enabled agents
+        cloud_aliases: set[str] = set()
+        for role, agent_cfg in self.config.agents.items():
+            if not agent_cfg.enabled:
+                continue
+            try:
+                mc = resolve_model(agent_cfg.model)
+                if mc.provider != "ollama":
+                    cloud_aliases.add(agent_cfg.model)
+            except Exception:
+                pass
+
+        if not cloud_aliases:
+            return  # All agents already on local models
+
+        # Test with the cheapest available alias
+        test_alias = next(iter(cloud_aliases))
+        try:
+            call_llm(
+                model=test_alias,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                agent="startup_check",
+            )
+            print(f"[startup] Cloud provider OK (tested alias: {test_alias})")
+        except BillingError as e:
+            print(f"[startup] Billing error detected: {e}")
+            self._enter_fallback_mode(str(e), conversation_id=None)
+        except Exception as e:
+            # Other errors (network, timeout) — don't enter fallback, log only
+            print(f"[startup] Cloud probe warning (non-billing): {e}")
 
     def _handle_shutdown(self, signum, frame):
         """Handle shutdown signals."""
@@ -567,7 +670,18 @@ class Dispatcher:
             try:
                 result = agent.handle_direct(query)
             except Exception as e:
-                result = f"Agent '{to}' error: {e}"
+                from outheis.core.llm import BillingError
+                if isinstance(e, BillingError):
+                    self._enter_fallback_mode(str(e), conversation_id)
+                    # Retry once with fallback model now active
+                    try:
+                        self._agents.pop(to, None)
+                        agent = self.get_agent(to)
+                        result = agent.handle_direct(query) if agent else f"Agent '{to}' not available."
+                    except Exception as e2:
+                        result = f"Agent '{to}' error after fallback: {e2}"
+                else:
+                    result = f"Agent '{to}' error: {e}"
 
         # Log response
         response_msg = create_agent_message(
@@ -621,8 +735,19 @@ class Dispatcher:
             try:
                 agent.handle(msg)
             except Exception as e:
-                # Log error, send error response
-                self._handle_agent_error(msg, target, e)
+                from outheis.core.llm import BillingError
+                if isinstance(e, BillingError):
+                    self._enter_fallback_mode(str(e), msg.conversation_id)
+                    # Retry with fallback model
+                    try:
+                        self._agents.pop(target, None)
+                        agent = self.get_agent(target)
+                        if agent:
+                            agent.handle(msg)
+                    except Exception as e2:
+                        self._handle_agent_error(msg, target, e2)
+                else:
+                    self._handle_agent_error(msg, target, e)
 
     def _handle_agent_error(self, msg: Message, agent: str, error: Exception) -> None:
         """Handle agent processing error."""
@@ -673,6 +798,9 @@ class Dispatcher:
         print(f"Watching: {self.queue_path}")
         print(f"Scheduled tasks: {[t.name for t in self.scheduler.tasks]}")
 
+        # Startup billing check — detect exhausted credits before first user message
+        self._check_billing_at_startup()
+
         # Recover any pending messages from crashed processes
         recovered = recover_pending(self.queue_path)
         if recovered:
@@ -699,6 +827,7 @@ class Dispatcher:
             try:
                 from outheis.transport.signal import SignalTransport
                 signal_transport = SignalTransport(self.config)
+                self._signal_transport = signal_transport
                 self._signal_thread = threading.Thread(
                     target=signal_transport.run,
                     daemon=True,

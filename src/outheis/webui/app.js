@@ -104,8 +104,13 @@ async function renderOverview() {
       <div class="metrics">
         <div class="metric">
           <div class="metric-label">Dispatcher</div>
-          <div class="metric-value ${status.running ? 'success' : ''}">${status.running ? 'Running' : 'Stopped'}</div>
+          <div class="metric-value ${status.running ? (status.system_mode === 'fallback' ? 'warning' : 'success') : ''}">${status.running ? (status.system_mode === 'fallback' ? 'Fallback' : 'Running') : 'Stopped'}</div>
         </div>
+        ${status.system_mode === 'fallback' ? `
+        <div class="metric" style="grid-column: 1 / -1;">
+          <div class="metric-label">Fallback model</div>
+          <div class="metric-value warning">${status.fallback_model || '?'} — ${status.fallback_reason || 'cloud provider unavailable'}</div>
+        </div>` : ''}
         <div class="metric">
           <div class="metric-label">Active agents</div>
           <div class="metric-value">${status.enabled_agents} / ${status.total_agents}</div>
@@ -128,8 +133,10 @@ async function renderOverview() {
 
   if (status.running) {
     statusEl.classList.add('running');
+    statusEl.classList.toggle('fallback', status.system_mode === 'fallback');
   } else {
     statusEl.classList.remove('running');
+    statusEl.classList.remove('fallback');
   }
 }
 

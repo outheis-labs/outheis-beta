@@ -220,6 +220,7 @@ class SignalTransport(Transport):
     def _watch_responses(self) -> None:
         """Watcher thread: check for responses and send back via Signal."""
         sent_interim_ids: set[str] = set()
+        sent_broadcast_ids: set[str] = set()
 
         while self._watching:
             time.sleep(1)  # Check every second
@@ -227,11 +228,23 @@ class SignalTransport(Transport):
             with self._lock:
                 pending_copy = dict(self.pending)
 
+            # Check for responses and broadcasts
+            messages = read_last_n(self.queue_path, 30)
+
+            for msg in messages:
+                # Broadcast notifications (system alerts, fallback mode, etc.)
+                if msg.to == "transport" and msg.intent == "broadcast" and msg.id not in sent_broadcast_ids:
+                    text = msg.payload.get("text", "")
+                    if text and self.user_phone:
+                        try:
+                            self.rpc.send_to_phone(self.user_phone, self._strip_markdown(text))
+                            sent_broadcast_ids.add(msg.id)
+                            print(f"📢 Sent broadcast to Signal", flush=True)
+                        except Exception as e:
+                            print(f"⚠️ Failed to send broadcast: {e}", flush=True)
+
             if not pending_copy:
                 continue
-
-            # Check for responses
-            messages = read_last_n(self.queue_path, 30)
 
             for msg in messages:
                 if msg.reply_to in pending_copy and msg.to == "transport":

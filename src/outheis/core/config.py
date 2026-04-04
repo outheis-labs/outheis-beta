@@ -25,6 +25,11 @@ def get_outheis_dir() -> Path:
     return Path(os.path.expanduser("~/.outheis"))
 
 
+def get_status_path() -> Path:
+    """Path to system_status.json — used to signal degraded/fallback mode."""
+    return get_human_dir() / "system_status.json"
+
+
 def get_human_dir() -> Path:
     """Get user data directory. Respects OUTHEIS_HUMAN_DIR env var."""
     override = os.environ.get("OUTHEIS_HUMAN_DIR")
@@ -140,6 +145,7 @@ class LLMConfig:
         "fast": ModelConfig(provider="anthropic", name="claude-haiku-4-5"),
         "capable": ModelConfig(provider="anthropic", name="claude-sonnet-4-20250514"),
     })
+    local_fallback: str | None = None  # Model alias to use when cloud billing fails
 
     def get_model(self, alias: str) -> ModelConfig:
         """Get model config for alias. Raises KeyError if not found."""
@@ -369,6 +375,7 @@ def load_config() -> Config:
     llm = LLMConfig(
         providers=_parse_providers(llm_data.get("providers", {})),
         models=_parse_models(llm_data.get("models", {})),
+        local_fallback=llm_data.get("local_fallback") or None,
     )
     # Use defaults if empty
     if not llm.providers:

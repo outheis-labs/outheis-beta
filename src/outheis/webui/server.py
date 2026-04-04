@@ -620,12 +620,29 @@ async def get_status():
             except (json.JSONDecodeError, AttributeError):
                 pass
 
+    # System status (fallback mode etc.)
+    system_mode = "normal"
+    fallback_reason = None
+    fallback_model = None
+    status_path = HUMAN_DIR / "system_status.json"
+    if status_path.exists():
+        try:
+            s = json.loads(status_path.read_text())
+            system_mode = s.get("mode", "normal")
+            fallback_reason = s.get("reason")
+            fallback_model = s.get("fallback_model")
+        except Exception:
+            pass
+
     return {
         "running": running,
         "pid": pid,
         "enabled_agents": enabled_agents,
         "total_agents": 6,
         "messages_today": messages_today,
+        "system_mode": system_mode,
+        "fallback_reason": fallback_reason,
+        "fallback_model": fallback_model,
     }
 
 

@@ -21,6 +21,18 @@ from outheis.core.config import LLMConfig, ModelConfig
 
 
 # =============================================================================
+# EXCEPTIONS
+# =============================================================================
+
+class BillingError(Exception):
+    """Raised when the cloud provider rejects a call due to billing / auth issues.
+
+    Signals the dispatcher to enter local-fallback mode if configured.
+    """
+    pass
+
+
+# =============================================================================
 # GLOBAL STATE (set once at startup)
 # =============================================================================
 
@@ -33,6 +45,24 @@ def init_llm(config: LLMConfig) -> None:
     global _config, _clients
     _config = config
     _clients = {}
+
+
+def _raise_if_billing(exc: Exception) -> None:
+    """Re-raise exc as BillingError if it indicates a billing or auth failure."""
+    msg = str(exc).lower()
+    # Anthropic: HTTP 402 credit exhausted, 401 invalid key
+    status = getattr(exc, "status_code", None)
+    if status in (401, 402):
+        raise BillingError(str(exc)) from exc
+    # Anthropic SDK error types
+    type_name = type(exc).__name__
+    if type_name in ("AuthenticationError", "PermissionDeniedError"):
+        raise BillingError(str(exc)) from exc
+    # Message-based detection as fallback
+    billing_phrases = ("credit balance", "insufficient credits", "billing", "quota exceeded",
+                       "invalid api key", "authentication", "permission denied")
+    if any(p in msg for p in billing_phrases):
+        raise BillingError(str(exc)) from exc
 
 
 def get_llm_config() -> LLMConfig:
@@ -266,7 +296,11 @@ def call_llm(
             kwargs["system"] = system
         if tools:
             kwargs["tools"] = tools
-        response = client.messages.create(**kwargs)
+        try:
+            response = client.messages.create(**kwargs)
+        except Exception as e:
+            _raise_if_billing(e)
+            raise
 
     else:  # openai or ollama
         oai_messages = _to_openai_messages(messages, system)
@@ -284,7 +318,11 @@ def call_llm(
             kwargs["extra_body"] = {
                 "keep_alive": -1 if model_config.run_mode == "persistent" else 0
             }
-        raw = client.chat.completions.create(**kwargs)
+        try:
+            raw = client.chat.completions.create(**kwargs)
+        except Exception as e:
+            _raise_if_billing(e)
+            raise
         response = _wrap_openai_response(raw)
 
     try:

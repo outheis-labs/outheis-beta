@@ -209,12 +209,13 @@ class SignalTransport(Transport):
         text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
         # Inline code
         text = re.sub(r'`(.+?)`', r'\1', text)
-        # Horizontal rules: --- → 〰️
-        text = re.sub(r'^---+$', '〰️', text, flags=re.MULTILINE)
+        # Horizontal rules: --- → 〰️〰️〰️
+        text = re.sub(r'^---+$', '〰️{20}', text, flags=re.MULTILINE)
         # Remaining underscore sequences used as dividers (e.g. from Daily.md)
-        text = re.sub(r'^_{10,}$', '〰️', text, flags=re.MULTILINE)
-        # Checkboxes: - [ ] and - [x] → just the text
-        text = re.sub(r'^(\s*)-\s+\[[ xX]\]\s+', r'\1', text, flags=re.MULTILINE)
+        text = re.sub(r'^_{10,}$', '〰️{20}', text, flags=re.MULTILINE)
+        # Checkboxes: - [x] → ☑️, - [ ] → 🟩
+        text = re.sub(r'^(\s*)-\s+\[[xX]\]\s+', r'\1☑️ ', text, flags=re.MULTILINE)
+        text = re.sub(r'^(\s*)-\s+\[ \]\s+', r'\1🟩 ', text, flags=re.MULTILINE)
         # Remaining bullet points
         text = re.sub(r'^(\s*)[-*]\s+', r'\1', text, flags=re.MULTILINE)
         return text

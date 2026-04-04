@@ -3,17 +3,21 @@ LLM client abstraction.
 
 Supports multiple providers per config:
 - Anthropic (Claude)
-- Ollama (local models)
-- OpenAI (future)
+- Ollama (local models, OpenAI-compatible API)
+- OpenAI
 
-Config is loaded once at startup. Call init_llm() from dispatcher.
+All providers expose the same Anthropic-style response interface to callers.
+OpenAI/Ollama responses are wrapped in compatible dataclasses so that agent
+code never needs to branch on provider.
 """
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass, field
 from typing import Any
 
-from outheis.core.config import LLMConfig, ModelConfig, ProviderConfig
+from outheis.core.config import LLMConfig, ModelConfig
 
 
 # =============================================================================
@@ -25,20 +29,14 @@ _clients: dict[str, Any] = {}  # provider_name -> client
 
 
 def init_llm(config: LLMConfig) -> None:
-    """
-    Initialize LLM with config. Called once at dispatcher startup.
-    """
+    """Initialize LLM with config. Called once at dispatcher startup."""
     global _config, _clients
     _config = config
-    _clients = {}  # Reset clients
+    _clients = {}
 
 
 def get_llm_config() -> LLMConfig:
-    """
-    Get LLM config.
-    
-    Returns cached config, or loads from file if not initialized.
-    """
+    """Get LLM config. Loads from file if not yet initialized."""
     global _config
     if _config is None:
         from outheis.core.config import load_config
@@ -47,62 +45,192 @@ def get_llm_config() -> LLMConfig:
 
 
 def get_client(provider_name: str) -> Any:
-    """
-    Get LLM client for a provider. Creates on first use, then reuses.
-    """
+    """Get LLM client for a provider. Creates on first use, then reuses."""
     global _clients
-    
+
     if provider_name in _clients:
         return _clients[provider_name]
-    
+
     config = get_llm_config()
     provider = config.get_provider(provider_name)
-    
+
     if provider_name == "anthropic":
         import anthropic
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if provider.api_key:
             kwargs["api_key"] = provider.api_key
         if provider.base_url:
             kwargs["base_url"] = provider.base_url
         _clients[provider_name] = anthropic.Anthropic(**kwargs)
-    
-    elif provider_name == "ollama":
-        import anthropic
-        base_url = provider.base_url or "http://localhost:11434/v1"
-        _clients[provider_name] = anthropic.Anthropic(
-            base_url=base_url,
-            api_key="ollama",  # Ollama doesn't need a real key
-        )
-    
-    elif provider_name == "openai":
+
+    elif provider_name in ("ollama", "openai"):
         try:
             import openai
-            kwargs = {}
+        except ImportError:
+            raise ImportError("openai package not installed — run: pip install openai")
+        kwargs = {}
+        if provider_name == "ollama":
+            kwargs["base_url"] = provider.base_url or "http://localhost:11434/v1"
+            kwargs["api_key"] = "ollama"
+        else:
             if provider.api_key:
                 kwargs["api_key"] = provider.api_key
             if provider.base_url:
                 kwargs["base_url"] = provider.base_url
-            _clients[provider_name] = openai.OpenAI(**kwargs)
-        except ImportError:
-            raise ImportError("openai package not installed")
-    
+        _clients[provider_name] = openai.OpenAI(**kwargs)
+
     else:
         raise ValueError(f"Unknown provider: {provider_name}")
-    
+
     return _clients[provider_name]
 
 
+# =============================================================================
+# ANTHROPIC-COMPATIBLE RESPONSE WRAPPERS FOR OPENAI/OLLAMA
+# =============================================================================
+
+@dataclass
+class _FakeUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
+@dataclass
+class _FakeTextBlock:
+    text: str
+    type: str = "text"
+
+
+@dataclass
+class _FakeToolUseBlock:
+    id: str
+    name: str
+    input: dict
+    type: str = "tool_use"
+
+
+@dataclass
+class _FakeResponse:
+    content: list
+    stop_reason: str
+    usage: _FakeUsage
+
+
+def _to_openai_messages(messages: list[dict], system: str | None) -> list[dict]:
+    """Convert Anthropic-format messages list to OpenAI chat format."""
+    result: list[dict] = []
+
+    if system:
+        result.append({"role": "system", "content": system})
+
+    for msg in messages:
+        role = msg["role"]
+        content = msg["content"]
+
+        if role == "user":
+            if isinstance(content, str):
+                result.append({"role": "user", "content": content})
+            elif isinstance(content, list):
+                # Tool results → one "tool" message per result
+                tool_results = [c for c in content if isinstance(c, dict) and c.get("type") == "tool_result"]
+                if tool_results:
+                    for tr in tool_results:
+                        body = tr.get("content", "")
+                        result.append({
+                            "role": "tool",
+                            "tool_call_id": tr.get("tool_use_id", ""),
+                            "content": body if isinstance(body, str) else json.dumps(body),
+                        })
+                else:
+                    # Plain text content list
+                    text = " ".join(
+                        c.get("text", "") if isinstance(c, dict) else (c.text if hasattr(c, "text") else "")
+                        for c in content
+                    )
+                    result.append({"role": "user", "content": text})
+
+        elif role == "assistant":
+            if isinstance(content, str):
+                result.append({"role": "assistant", "content": content})
+            elif isinstance(content, list):
+                text = ""
+                tool_calls = []
+                for block in content:
+                    btype = block.get("type") if isinstance(block, dict) else getattr(block, "type", "")
+                    if btype == "text":
+                        text = block.get("text", "") if isinstance(block, dict) else block.text
+                    elif btype == "tool_use":
+                        bid   = block.get("id", "")    if isinstance(block, dict) else block.id
+                        bname = block.get("name", "")  if isinstance(block, dict) else block.name
+                        binp  = block.get("input", {}) if isinstance(block, dict) else block.input
+                        tool_calls.append({
+                            "id": bid,
+                            "type": "function",
+                            "function": {"name": bname, "arguments": json.dumps(binp)},
+                        })
+                oai_msg: dict[str, Any] = {"role": "assistant", "content": text or None}
+                if tool_calls:
+                    oai_msg["tool_calls"] = tool_calls
+                result.append(oai_msg)
+
+    return result
+
+
+def _to_openai_tools(tools: list[dict] | None) -> list[dict] | None:
+    """Convert Anthropic tool definitions to OpenAI function format."""
+    if not tools:
+        return None
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "parameters": t.get("input_schema", {"type": "object", "properties": {}}),
+            },
+        }
+        for t in tools
+    ]
+
+
+def _wrap_openai_response(response: Any) -> _FakeResponse:
+    """Wrap an OpenAI chat completion in Anthropic-compatible dataclasses."""
+    choice = response.choices[0]
+    message = choice.message
+    finish_reason = choice.finish_reason or "stop"
+
+    stop_reason = "tool_use" if finish_reason == "tool_calls" else "end_turn"
+
+    content: list[Any] = []
+
+    if message.content:
+        content.append(_FakeTextBlock(text=message.content))
+
+    for tc in (getattr(message, "tool_calls", None) or []):
+        try:
+            arguments = json.loads(tc.function.arguments)
+        except (json.JSONDecodeError, AttributeError):
+            arguments = {}
+        content.append(_FakeToolUseBlock(
+            id=tc.id,
+            name=tc.function.name,
+            input=arguments,
+        ))
+
+    usage = _FakeUsage(
+        input_tokens=getattr(response.usage, "prompt_tokens", 0),
+        output_tokens=getattr(response.usage, "completion_tokens", 0),
+    )
+
+    return _FakeResponse(content=content, stop_reason=stop_reason, usage=usage)
+
+
+# =============================================================================
+# PUBLIC API
+# =============================================================================
+
 def resolve_model(alias: str) -> ModelConfig:
-    """
-    Resolve model alias to ModelConfig.
-    
-    Args:
-        alias: Model alias ("fast", "capable") or explicit model name
-    
-    Returns:
-        ModelConfig with provider, name, run_mode
-    """
+    """Resolve model alias to ModelConfig."""
     config = get_llm_config()
     return config.get_model(alias)
 
@@ -118,33 +246,37 @@ def call_llm(
     """
     Call LLM with messages.
 
-    Args:
-        model: Model alias ("fast", "capable") or explicit model name
-        messages: List of message dicts with role/content
-        system: System prompt (optional)
-        tools: Tool definitions (optional)
-        max_tokens: Maximum response tokens
-        agent: Calling agent name for token tracking
-
-    Returns:
-        API response object
+    Messages and tools are always passed in Anthropic format.
+    For OpenAI/Ollama providers the conversion happens transparently here;
+    callers always receive an Anthropic-compatible response object.
     """
     model_config = resolve_model(model)
     client = get_client(model_config.provider)
 
-    kwargs: dict[str, Any] = {
-        "model": model_config.name,
-        "max_tokens": max_tokens,
-        "messages": messages,
-    }
+    if model_config.provider == "anthropic":
+        kwargs: dict[str, Any] = {
+            "model": model_config.name,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if system:
+            kwargs["system"] = system
+        if tools:
+            kwargs["tools"] = tools
+        response = client.messages.create(**kwargs)
 
-    if system:
-        kwargs["system"] = system
-
-    if tools:
-        kwargs["tools"] = tools
-
-    response = client.messages.create(**kwargs)
+    else:  # openai or ollama
+        oai_messages = _to_openai_messages(messages, system)
+        oai_tools = _to_openai_tools(tools)
+        kwargs = {
+            "model": model_config.name,
+            "max_tokens": max_tokens,
+            "messages": oai_messages,
+        }
+        if oai_tools:
+            kwargs["tools"] = oai_tools
+        raw = client.chat.completions.create(**kwargs)
+        response = _wrap_openai_response(raw)
 
     try:
         from outheis.core.tokens import record_usage

@@ -971,8 +971,9 @@ def _validate_api_keys(config: Config) -> list[str]:
                 try:
                     import anthropic
                     client = anthropic.Anthropic(api_key=api_key)
+                    capable_model = config.llm.get_model("capable").name
                     client.messages.create(
-                        model="claude-sonnet-4-20250514",
+                        model=capable_model,
                         max_tokens=1,
                         messages=[{"role": "user", "content": "hi"}],
                     )

@@ -2,7 +2,9 @@
 
 *Nobody — and everybody who refuses to be captured.*
 
-Second brain multi-agent AI assistant, grounded in privacy and human-centricity. Engineered as infrastructure, not as a product. Designed for both personal assistant (1:1) and domain expert (many:1) usage.
+Second brain multi-agent AI assistant, grounded in privacy and human-centricity. Engineered as infrastructure, not as a product. 
+
+Designed for both personal assistant (1:1) and domain expert (many:1) usage.
 
 ![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/ba35428e-b320-4be3-ae9a-6d4ec61a5962)
 

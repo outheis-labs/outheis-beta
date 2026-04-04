@@ -61,27 +61,27 @@ class ActionAgent(BaseAgent):
         parts = [
             "# Action Agent (hiro)",
             "",
-            "Du hast zwei Aufgaben:",
-            "1. Tasks ausführen (News, Daten holen, etc.)",
-            "2. Code lesen — erkläre was im outheis-Code passiert",
+            "You have two responsibilities:",
+            "1. Execute tasks (news, data fetching, etc.)",
+            "2. Read code — explain what happens in the outheis codebase",
             "",
-            "## Verfügbare Tools",
+            "## Available Tools",
             "",
-            "### Task-Management",
-            "- run_task(task_id) — Task ausführen",
+            "### Task Management",
+            "- run_task(task_id) — run a task",
             "- list_tasks() — Alle Tasks auflisten",
-            "- run_due_tasks() — Fällige Tasks ausführen",
+            "- run_due_tasks() — run all due tasks",
             "",
             "### Code-Introspection",
-            "- list_source_files() — Alle Source-Dateien",
-            "- read_source(path) — Source-Datei lesen",
+            "- list_source_files() — list all source files",
+            "- read_source(path) — read a source file",
             "- search_source(query) — In Source suchen",
-            "- explain_behavior(question) — Verhalten anhand Code erklären",
+            "- explain_behavior(question) — explain behavior from code",
             "",
-            "## Prinzipien",
-            "- Wenn gefragt 'warum kann X nicht Y?' → Code lesen und erklären",
-            "- Konkrete Zeilennummern und Funktionsnamen nennen",
-            "- Vorschläge machen was geändert werden müsste",
+            "## Principles",
+            "- When asked 'why can't X do Y?' → read code and explain",
+            "- Cite specific line numbers and function names",
+            "- Suggest what would need to change",
         ]
         
         if skills:
@@ -197,7 +197,7 @@ class ActionAgent(BaseAgent):
         task = registry.get(task_id)
         
         if not task:
-            return f"Task nicht gefunden: {task_id}"
+            return f"Task not found: {task_id}"
         
         result = task.execute()
         registry.mark_completed(task)
@@ -211,7 +211,7 @@ class ActionAgent(BaseAgent):
         """List all tasks."""
         registry = get_registry()
         if not registry.tasks:
-            return "Keine Tasks registriert."
+            return "No tasks registered."
         
         lines = []
         for task in registry.tasks.values():
@@ -224,7 +224,7 @@ class ActionAgent(BaseAgent):
         due_tasks = registry.get_due_tasks()
         
         if not due_tasks:
-            return "Keine fälligen Tasks."
+            return "No tasks due."
         
         results = []
         for task in due_tasks:
@@ -245,7 +245,7 @@ class ActionAgent(BaseAgent):
         target = source_dir / subdir if subdir else source_dir
         
         if not target.exists():
-            return f"Verzeichnis nicht gefunden: {subdir}"
+            return f"Directory not found: {subdir}"
         
         files = []
         for path in sorted(target.rglob("*.py")):
@@ -259,12 +259,12 @@ class ActionAgent(BaseAgent):
             rel_path = md_path.relative_to(source_dir)
             files.append(str(rel_path))
         
-        return "\n".join(files) if files else "Keine Dateien gefunden."
+        return "\n".join(files) if files else "No files found."
     
     def _tool_read_source(self, path: str) -> str:
         """Read a source file."""
         if not path:
-            return "Pfad erforderlich"
+            return "Path required"
         
         source_dir = get_outheis_source_dir()
         full_path = source_dir / path
@@ -273,10 +273,10 @@ class ActionAgent(BaseAgent):
         try:
             full_path.resolve().relative_to(source_dir.resolve())
         except ValueError:
-            return "Zugriff verweigert: Nur outheis-Source erlaubt."
+            return "Access denied: only outheis source allowed."
         
         if not full_path.exists():
-            return f"Datei nicht gefunden: {path}"
+            return f"File not found: {path}"
         
         try:
             content = full_path.read_text(encoding="utf-8")
@@ -285,12 +285,12 @@ class ActionAgent(BaseAgent):
             numbered = [f"{i+1:4d} | {line}" for i, line in enumerate(lines)]
             return "\n".join(numbered)
         except Exception as e:
-            return f"Fehler beim Lesen: {e}"
+            return f"Error reading: {e}"
     
     def _tool_search_source(self, query: str) -> str:
         """Search in source files."""
         if not query:
-            return "Suchbegriff erforderlich"
+            return "Search query required"
         
         source_dir = get_outheis_source_dir()
         results = []
@@ -317,7 +317,7 @@ class ActionAgent(BaseAgent):
             except Exception:
                 continue
         
-        return "\n".join(results) if results else f"Keine Treffer für '{query}'."
+        return "\n".join(results) if results else f"No matches for '{query}'."
     
     # =========================================================================
     # MESSAGE HANDLING
@@ -376,7 +376,7 @@ class ActionAgent(BaseAgent):
             
             if not tool_uses:
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]
-                return "\n".join(text_parts) if text_parts else "Keine Antwort."
+                return "\n".join(text_parts) if text_parts else "No response."
             
             tool_results = []
             for tool in tool_uses:

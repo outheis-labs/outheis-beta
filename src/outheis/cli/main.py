@@ -862,7 +862,7 @@ def task_add(
     # For now, only SZ headlines task is supported
     # TODO: Parse instruction and create appropriate task type
     
-    if "sz" in instruction.lower() or "süddeutsche" in instruction.lower() or "schlagzeilen" in instruction.lower():
+    if "sz" in instruction.lower() or "sueddeutsche" in instruction.lower() or "headlines" in instruction.lower():
         # Create SZ headlines task
         if not task_id:
             task_id = f"sz-headlines-{datetime.now().strftime('%Y%m%d%H%M%S')}"
@@ -887,7 +887,7 @@ def task_add(
         typer.echo(f"  Directory: {task.get_task_dir()}")
     else:
         typer.echo("⚠ Currently only SZ headlines tasks are supported.")
-        typer.echo("  Try: outheis task add 'SZ Schlagzeilen 2x täglich'")
+        typer.echo("  Try: outheis task add 'SZ Headlines twice daily'")
         raise typer.Exit(1)
 
 

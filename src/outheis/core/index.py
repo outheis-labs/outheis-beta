@@ -338,9 +338,9 @@ class SearchIndex:
             more = len(analysis["singular_tags"]) - 5
             tag_list = ", ".join(f"#{t}" for t in singular)
             if more > 0:
-                suggestions.append(f"Singuläre Tags (nur 1x verwendet): {tag_list} (+{more} weitere)")
+                suggestions.append(f"Singular tags (used only once): {tag_list} (+{more} more)")
             else:
-                suggestions.append(f"Singuläre Tags (nur 1x verwendet): {tag_list}")
+                suggestions.append(f"Singular tags (used only once): {tag_list}")
         
         return suggestions
     

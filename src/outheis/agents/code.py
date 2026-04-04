@@ -423,7 +423,7 @@ class CodeAgent(BaseAgent):
             except Exception:
                 lang = "en"
             if lang.startswith("de"):
-                pending = "(Zusammenfassung ausstehend — diesen Eintrag mit einer kurzen Beschreibung des Proposals ergänzen.)"
+                pending = "(Summary pending — add a brief description of this proposal.)"
             else:
                 pending = "(Summary pending — update this entry with a brief description of the proposal.)"
             stub = f"\n\n## {filename}\n*{ts}*\n\n{pending}"
@@ -538,7 +538,7 @@ class CodeAgent(BaseAgent):
 
             if not tool_uses:
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]
-                return "\n".join(text_parts) if text_parts else "Keine Antwort."
+                return "\n".join(text_parts) if text_parts else "No response."
 
             tool_results = []
             for tool in tool_uses:

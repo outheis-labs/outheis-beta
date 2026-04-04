@@ -323,9 +323,9 @@ def parse_explicit_memory(text: str) -> tuple[str | None, MemoryType | None, str
     Parse explicit memory marker from user input.
     
     User can prefix with "!" to explicitly save to memory:
-    - "! ich bevorzuge kurze Antworten" → feedback
-    - "! meine Kinder heißen Leo und Emma" → user
-    - "! ich arbeite gerade an Project Alpha" → context
+    - "! I prefer short answers" → feedback
+    - "! my children are named Leo and Emma" → user
+    - "! I am currently working on Project Alpha" → context
     
     Returns:
         (content, memory_type, remaining_text)
@@ -349,15 +349,13 @@ def parse_explicit_memory(text: str) -> tuple[str | None, MemoryType | None, str
     
     # Feedback indicators (how to work)
     feedback_keywords = [
-        "bevorzuge", "prefer", "bitte", "please", "immer", "always",
-        "nie", "never", "antwort", "response", "format", "stil", "style",
-        "kurz", "short", "lang", "long", "formell", "formal", "casual",
+        "prefer", "please", "always", "never", "response", "format", "style",
+        "short", "long", "formal", "casual",
     ]
     
     # Context indicators (current work)
     context_keywords = [
-        "arbeite", "working", "projekt", "project", "gerade", "currently",
-        "fokus", "focus", "deadline", "diese woche", "this week",
+        "working", "project", "currently", "focus", "deadline", "this week",
     ]
     
     # Check for feedback

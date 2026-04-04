@@ -101,7 +101,7 @@ class NewsHeadlinesTask(Task):
     def format_for_agenda(self, result: TaskResult) -> str:
         """Format headlines for Daily.md insertion."""
         if not result.success:
-            return f"## {self.source_name} (Fehler)\n\n_{result.error}_\n"
+            return f"## {self.source_name} (Error)\n\n_{result.error}_\n"
         
         data = result.data
         lines = [f"## {self.source_name}"]
@@ -131,8 +131,8 @@ def create_sz_task(
     """Create an SZ headlines task with default settings."""
     return NewsHeadlinesTask(
         id=task_id,
-        name="SZ Schlagzeilen",
-        instruction=instruction or "2x täglich die wichtigsten Schlagzeilen der SZ",
+        name="SZ Headlines",
+        instruction=instruction or "SZ top headlines twice daily",
         source=source,
         schedule=TaskSchedule.TWICE_DAILY,
         times=times or ["08:00", "18:00"],

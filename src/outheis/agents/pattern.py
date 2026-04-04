@@ -883,17 +883,14 @@ Be conservative - only remove entries when clearly redundant or wrong."""
         
         # Feedback indicators
         feedback_words = [
-            "bevorzugt", "präferiert", "mag nicht", "will nicht",
-            "soll nicht", "immer", "niemals", "nie", "besser",
-            "lieber", "preference", "prefer"
+            "prefers", "preference", "prefer", "always", "never", "better", "rather"
         ]
         if any(w in content_lower for w in feedback_words):
             return "feedback"
         
         # Context indicators (temporary)
         context_words = [
-            "aktuell", "gerade", "momentan", "diese woche",
-            "heute", "current", "currently", "working on"
+            "current", "currently", "working on", "this week", "today"
         ]
         if any(w in content_lower for w in context_words):
             return "context"

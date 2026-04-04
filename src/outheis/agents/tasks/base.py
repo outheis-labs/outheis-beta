@@ -167,7 +167,7 @@ class Task(ABC):
             "",
             "## Anweisung",
             "",
-            self.instruction or "(keine Anweisung)",
+            self.instruction or "(no instruction)",
             "",
         ]
         
@@ -179,18 +179,18 @@ class Task(ABC):
             "## Konfiguration",
             "",
             f"- **Schedule:** {self.schedule.value}",
-            f"- **Zeiten:** {', '.join(self.times) if self.times else 'nicht festgelegt'}",
+            f"- **Zeiten:** {', '.join(self.times) if self.times else 'not set'}",
             f"- **Ziel:** {self.target_agent}",
             f"- **Aktiv:** {'ja' if self.enabled else 'nein'}",
             "",
             "## Historie",
             "",
             f"- Erstellt: {self.source.timestamp.isoformat() if self.source else 'unbekannt'}",
-            f"- Ausführungen: {self.run_count}",
+            f"- Executions: {self.run_count}",
         ])
         
         if self.last_run:
-            lines.append(f"- Letzte Ausführung: {self.last_run.isoformat()}")
+            lines.append(f"- Last run: {self.last_run.isoformat()}")
         
         return "\n".join(lines) + "\n"
     

@@ -119,15 +119,15 @@ def get_usage_summary(days: int = 7, date: str | None = None) -> str:
     # Resolve date → calendar-day boundaries
     if date:
         d = date.strip().lower()
-        if d in ("today", "heute"):
+        if d in ("today", "today"):
             target = now.date()
-        elif d in ("yesterday", "gestern"):
+        elif d in ("yesterday", "yesterday"):
             target = (now - timedelta(days=1)).date()
         else:
             try:
                 target = date_type.fromisoformat(d)
             except ValueError:
-                return f"Ungültiges Datumsformat: '{date}'. Bitte YYYY-MM-DD verwenden."
+                return f"Invalid date format: '{date}'. Use YYYY-MM-DD."
         cutoff_low  = datetime(target.year, target.month, target.day, 0, 0, 0)
         cutoff_high = datetime(target.year, target.month, target.day, 23, 59, 59)
         label = target.strftime("%d.%m.%Y")
@@ -135,11 +135,11 @@ def get_usage_summary(days: int = 7, date: str | None = None) -> str:
     else:
         cutoff_low  = now - timedelta(days=days)
         cutoff_high = now
-        label = "heute" if days == 1 else f"letzte {days} Tage"
-        no_data_label = "heute" if days == 1 else f"in den letzten {days} Tagen"
+        label = "today" if days == 1 else f"last {days} days"
+        no_data_label = "today" if days == 1 else f"last {days} days"
 
     if not path.exists():
-        return f"Keine Token-Daten {no_data_label} vorhanden."
+        return f"No token data for {no_data_label}."
 
     total_input = 0
     total_output = 0
@@ -177,14 +177,14 @@ def get_usage_summary(days: int = 7, date: str | None = None) -> str:
 
     total_tokens = total_input + total_output
     if total_tokens == 0:
-        return f"Keine Token-Nutzung {no_data_label} aufgezeichnet."
+        return f"No token usage recorded for {no_data_label}."
 
     lines = [
-        f"Token-Nutzung ({label})",
-        f"Gesamt: {total_tokens:,} Tokens  (Input: {total_input:,} / Output: {total_output:,})",
-        f"Geschätzte Kosten: ${total_cost:.4f}  (Näherungswert, Listenpreise Anthropic)",
+        f"Token usage ({label})",
+        f"Total: {total_tokens:,} tokens  (input: {total_input:,} / output: {total_output:,})",
+        f"Estimated cost: ${total_cost:.4f}  (approximate, Anthropic list prices)",
         "",
-        "Nach Agent:",
+        "By agent:",
     ]
     for agent, s in sorted(by_agent.items(), key=lambda x: -(x[1]["input"] + x[1]["output"])):
         t = s["input"] + s["output"]

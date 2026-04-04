@@ -90,34 +90,34 @@ class AgendaAgent(BaseAgent):
         parts = [
             "# Agenda Agent (cato)",
             "",
-            "Du bist der persönliche Sekretär. Termine, Tagesstruktur, Rhythmus.",
+            "You are the personal secretary. Appointments, daily structure, rhythm.",
             "",
-            f"**Heute:** {today} ({today_iso})",
-            f"**Jetzt:** {now}",
-            f"**Wochentag:** {weekday}",
-            f"**Sprache:** {config.human.language}",
+            f"**Today:** {today} ({today_iso})",
+            f"**Now:** {now}",
+            f"**Weekday:** {weekday}",
+            f"**Language:** {config.human.language}",
             "",
             "---",
             "",
-            "## Aktueller Stand (alle 3 Dateien)",
+            "## Current State (all 3 files)",
             "",
             agenda_context,
             "",
             "---",
             "",
-            "## Verfügbare Tools",
-            "- get_daily() — Tagesagenda lesen (gibt Daily.md exakt zurück)",
-            "- write_file(file, content) — Datei schreiben (daily/inbox/exchange)",
-            "- append_file(file, content) — An Datei anhängen",
-            "- load_skill(topic) — Detail-Skills nachladen wenn nötig",
+            "## Available Tools",
+            "- get_daily() — read today's agenda (returns Daily.md verbatim)",
+            "- write_file(file, content) — write file (daily/inbox/exchange)",
+            "- append_file(file, content) — append to file",
+            "- load_skill(topic) — load detailed skills if needed",
             "",
-            "## Prinzipien",
-            "- Wenn der User die Agenda lesen will: get_daily() aufrufen und das Ergebnis",
-            "  **zeichengenau und unverändert** zurückgeben — kein Umformulieren, kein Kürzen,",
-            "  keine Ergänzungen.",
-            "- Struktur des Users übernehmen, nicht aufzwingen",
-            "- Bei Unsicherheit via Exchange.md fragen",
-            "- Kurz und direkt",
+            "## Principles",
+            "- When the user wants to read the agenda: call get_daily() and return the result",
+            "  **character-exact and unchanged** — no rephrasing, no shortening,",
+            "  no additions.",
+            "- Adopt the user's structure, don't impose one",
+            "- When uncertain, ask via Exchange.md",
+            "- Brief and direct",
         ]
         
         if skills:
@@ -146,7 +146,7 @@ class AgendaAgent(BaseAgent):
         """
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
-            return "(Kein Agenda-Verzeichnis)"
+            return "(No agenda directory)"
 
         parts = []
 
@@ -164,7 +164,7 @@ class AgendaAgent(BaseAgent):
                     ).strip()
                 parts.append(f"### {filename}\n\n```markdown\n{content}\n```")
             else:
-                parts.append(f"### {filename}\n\n(existiert nicht)")
+                parts.append(f"### {filename}\n\n(does not exist)")
 
         # If Shadow.md is absent or sparse, trigger a background scan via zeno
         shadow_path = agenda_dir / "Shadow.md"
@@ -252,7 +252,7 @@ class AgendaAgent(BaseAgent):
     def _execute_tool(self, name: str, inputs: dict) -> str:
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
-            return "Kein Agenda-Verzeichnis gefunden."
+            return "No agenda directory found."
 
         file_map = {"daily": "Daily.md", "inbox": "Inbox.md", "exchange": "Exchange.md"}
 
@@ -262,13 +262,13 @@ class AgendaAgent(BaseAgent):
         elif name == "write_file":
             filename = file_map.get(inputs.get("file", "").lower())
             if not filename:
-                return "Ungültige Datei. Wähle: daily, inbox, exchange"
+                return "Invalid file. Choose: daily, inbox, exchange"
             return self._write_file(agenda_dir / filename, inputs.get("content", ""))
         
         elif name == "append_file":
             filename = file_map.get(inputs.get("file", "").lower())
             if not filename:
-                return "Ungültige Datei. Wähle: daily, inbox, exchange"
+                return "Invalid file. Choose: daily, inbox, exchange"
             return self._append_file(agenda_dir / filename, inputs.get("content", ""))
         
         elif name == "load_skill":
@@ -284,25 +284,25 @@ class AgendaAgent(BaseAgent):
     def _read_file(self, path: Path) -> str:
         """Read file, return content or message if not exists."""
         if not path.exists():
-            return f"{path.name} existiert noch nicht."
+            
         return path.read_text(encoding="utf-8")
     
     def _write_file(self, path: Path, content: str) -> str:
         """Write file."""
         try:
             path.write_text(content, encoding="utf-8")
-            return f"✓ {path.name} geschrieben"
+            return f"✓ {path.name} written"
         except Exception as e:
-            return f"Fehler: {e}"
+            return f"Error: {e}"
     
     def _append_file(self, path: Path, content: str) -> str:
         """Append to file."""
         try:
             existing = path.read_text(encoding="utf-8") if path.exists() else ""
             path.write_text(existing + content, encoding="utf-8")
-            return f"✓ An {path.name} angehängt"
+            return f"✓ Appended to {path.name}"
         except Exception as e:
-            return f"Fehler: {e}"
+            return f"Error: {e}"
     
     def _load_skill(self, topic: str) -> str:
         """Load detailed skill."""
@@ -316,7 +316,7 @@ class AgendaAgent(BaseAgent):
             content += "\n\n" + system_skills_path.read_text(encoding="utf-8")
         
         if not content:
-            return "Keine Skills gefunden."
+            return "No skills found."
         
         # Find relevant section
         topic_lower = topic.lower()
@@ -336,7 +336,7 @@ class AgendaAgent(BaseAgent):
         
         if relevant:
             return "\n".join(relevant)
-        return f"Kein Abschnitt '{topic}' gefunden."
+        return f"Section '{topic}' not found."
     
 
     # =========================================================================
@@ -377,10 +377,10 @@ class AgendaAgent(BaseAgent):
         """Return Daily.md verbatim. Sets _passthrough_content for state saving."""
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
-            return "(Kein Agenda-Verzeichnis)"
+            return "(No agenda directory)"
         path = agenda_dir / "Daily.md"
         if not path.exists():
-            return "(Daily.md existiert noch nicht)"
+            return "(Daily.md does not exist yet)"
         content = path.read_text(encoding="utf-8")
         self._passthrough_content = content
         return content
@@ -497,7 +497,7 @@ class AgendaAgent(BaseAgent):
             # Inject the prior pass-through as a synthetic exchange so the LLM
             # knows what it last sent verbatim.
             messages = [
-                {"role": "user", "content": "Zeig mir die aktuelle Agenda."},
+                {"role": "user", "content": "Show me the current agenda."},
                 {"role": "assistant", "content": prior_content},
                 {"role": "user", "content": query},
             ]
@@ -521,7 +521,7 @@ class AgendaAgent(BaseAgent):
             
             if not tool_uses:
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]
-                return "\n".join(text_parts) if text_parts else "Keine Antwort."
+                return "\n".join(text_parts) if text_parts else "No response."
             
             tool_results = []
             for tool in tool_uses:
@@ -584,25 +584,25 @@ class AgendaAgent(BaseAgent):
         # Build context-aware prompt
         hour = now.hour
         if force and hour <= 6:
-            context = "Morgenreview: Erstelle oder aktualisiere Daily.md für heute."
+            context = "Morning review: create or update Daily.md for today."
         elif force and hour >= 22:
-            context = "Abendreview: Schließe den Tag ab, archiviere was erledigt ist."
+            context = "Evening review: close out the day, archive completed items."
         elif force:
-            context = "Pflichtreview."
+            context = "Scheduled review."
         elif comment_trigger:
-            context = "User-Kommentare in Daily.md erkannt — bitte verarbeiten."
+            context = "User comments detected in Daily.md — please process."
         else:
-            context = "Änderungen in Agenda-Dateien erkannt."
+            context = "Changes detected in agenda files."
         
         query = (
-            f"Es ist {now.strftime('%H:%M')} Uhr. {context}\n\n"
-            "Du hast bereits alle aktuellen Dateien im Kontext oben.\n\n"
-            "Führe folgende Schritte aus:\n"
-            "1. Inbox verarbeiten: Jeden Eintrag nach Daily.md übertragen oder via Exchange.md klären. "
-            "Dann Inbox.md LEER schreiben — nur Header `# Inbox\\n\\n---`. Kein Eintrag darf stehen bleiben.\n"
-            "2. Daily.md prüfen: Neuer Tag? User-Kommentare (Zeilen mit '>') lesen, als Anweisungen ausführen, dann LÖSCHEN — keine '>'-Zeile darf in der regenerierten Daily.md erscheinen.\n"
-            "3. Exchange.md prüfen: User-Antworten verarbeiten?\n\n"
-            "Antworte kurz was du getan hast."
+            f"It is {now.strftime('%H:%M')}. {context}\n\n"
+            "You already have all current files in the context above.\n\n"
+            "Perform the following steps:\n"
+            "1. Process Inbox: transfer each entry to Daily.md or clarify via Exchange.md. "
+            "Then write Inbox.md EMPTY — header only: `# Inbox\\n\\n---`. No entry may remain.\n"
+            "2. Check Daily.md: New day? Read user comments (lines with '>'), execute as instructions, then DELETE — no '>' line may appear in the regenerated Daily.md.\n"
+            "3. Check Exchange.md: process user replies?\n\n"
+            "Reply briefly with what you did."
         )
         
         try:
@@ -616,18 +616,18 @@ class AgendaAgent(BaseAgent):
     def refresh_daily(self) -> str:
         """Manual refresh — called by user command."""
         return self._process_with_tools(
-            "Aktualisiere Daily.md für heute. Prüfe ob das Datum stimmt, "
-            "ob die Struktur passt. Verarbeite Inbox-Items wenn vorhanden. "
-            "Berichte was du getan hast."
+            "Update Daily.md for today. Check that the date is correct, "
+            "that the structure fits. Process inbox items if present. "
+            "Report what you did."
         )
     
     def insert_to_daily(self, content: str, section: str | None = None) -> bool:
         """Insert content to Daily.md — called by Relay."""
         section_hint = f" in Sektion '{section}'" if section else ""
         result = self._process_with_tools(
-            f"Füge folgendes zu Daily.md hinzu{section_hint}: {content}"
+            f"Add the following to Daily.md{section_hint}: {content}"
         )
-        return "✓" in result or "hinzugefügt" in result.lower()
+        return "✓" in result or "added" in result.lower()
     
     # =========================================================================
     # LEARNING

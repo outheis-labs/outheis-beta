@@ -61,26 +61,26 @@ class DataAgent(BaseAgent):
         parts = [
             "# Data Agent (zeno)",
             "",
-            "Du verwaltest den Vault. Lesen UND Schreiben.",
+            "You manage the vault. Reading AND writing.",
             "",
-            "## Vault-Übersicht (Index)",
+            "## Vault Overview (Index)",
             "",
             vault_overview,
             "",
             "---",
             "",
-            "## Verfügbare Tools",
-            "- search(query) — Suche im Vault (wenn Index nicht reicht)",
-            "- read_file(path) — Datei-Detail laden",
-            "- write_file(path, content) — Datei schreiben",
-            "- append_file(path, content) — An Datei anhängen",
-            "- load_skill(topic) — Detail-Skills nachladen",
+            "## Available Tools",
+            "- search(query) — search the vault (when index is not enough)",
+            "- read_file(path) — load file detail",
+            "- write_file(path, content) — write file",
+            "- append_file(path, content) — append to file",
+            "- load_skill(topic) — load detailed skills",
             "",
             "## Prinzipien",
-            "- Du HAST den Index oben — nicht nochmal suchen wenn Info da",
-            "- read_file nur wenn Detail nötig",
-            "- Formatierung: wie der User es macht",
-            "- Bei Unsicherheit fragen",
+            "- You HAVE the index above — don't search again if info is already there",
+            "- read_file only when detail is needed",
+            "- Formatting: follow the user's style",
+            "- When uncertain, ask",
             "",
             f"Sprache: {config.human.language}",
         ]
@@ -114,7 +114,7 @@ class DataAgent(BaseAgent):
         vault = config.human.primary_vault()
         
         if not vault.exists():
-            return "(Kein Vault konfiguriert)"
+            return "(No vault configured)"
         
         # Try to load cached index
         cache_dir = get_human_dir() / "cache" / "index"
@@ -139,9 +139,9 @@ class DataAgent(BaseAgent):
             entries.sort(key=lambda e: e.get("mtime", ""), reverse=True)
             
             # Show recent files with tags
-            lines.append(f"**{len(entries)} Dateien im Vault**")
+            lines.append(f"**{len(entries)} files in vault**")
             lines.append("")
-            lines.append("Kürzlich geändert:")
+            lines.append("Recently changed:")
             
             for entry in entries[:15]:  # Top 15 recent
                 name = entry.get("name", "?")
@@ -150,10 +150,10 @@ class DataAgent(BaseAgent):
                 lines.append(f"- {name} {tag_str}")
             
             if len(entries) > 15:
-                lines.append(f"- ... und {len(entries) - 15} weitere")
+                lines.append(f"- ... and {len(entries) - 15} more")
             
         except Exception as e:
-            lines.append(f"(Index-Fehler: {e})")
+            lines.append(f"(Index error: {e})")
         
         return "\n".join(lines)
     
@@ -162,14 +162,14 @@ class DataAgent(BaseAgent):
         files = list(vault.glob("*.md"))[:20]
         
         if not files:
-            return "(Vault ist leer)"
+            return "(Vault is empty)"
         
-        lines = [f"**{len(list(vault.glob('*.md')))} .md Dateien**", ""]
+        lines = [f"**{len(list(vault.glob('*.md')))} .md files**", ""]
         for f in files:
             lines.append(f"- {f.name}")
         
         if len(list(vault.glob("*.md"))) > 20:
-            lines.append("- ... (mehr Dateien vorhanden)")
+            lines.append("- ... (more files)")
         
         return "\n".join(lines)
     
@@ -285,7 +285,7 @@ class DataAgent(BaseAgent):
                 })
         
         if not results:
-            return "Keine Ergebnisse gefunden."
+            return "No results found."
         
         return json.dumps(results, ensure_ascii=False, indent=2)
     
@@ -293,20 +293,20 @@ class DataAgent(BaseAgent):
         """Read file from vault."""
         full_path = vault / path
         if not full_path.exists():
-            return f"Datei nicht gefunden: {path}"
+            return f"File not found: {path}"
         if not full_path.is_file():
-            return f"Ist ein Verzeichnis, keine Datei: {path}"
+            return f"Is a directory, not a file: {path}"
         
         try:
             content = full_path.read_text(encoding="utf-8")
             return content
         except Exception as e:
-            return f"Fehler beim Lesen: {e}"
+            return f"Error reading: {e}"
     
     def _tool_write_file(self, vault: Path, path: str, content: str) -> str:
         """Write file to vault."""
         if not path:
-            return "Kein Pfad angegeben"
+            return "No path provided"
         
         full_path = vault / path
         
@@ -317,32 +317,32 @@ class DataAgent(BaseAgent):
             full_path.write_text(content, encoding="utf-8")
             # Update index
             self._ensure_index_fresh()
-            return f"✓ Geschrieben: {path}"
+            return f"✓ Written: {path}"
         except Exception as e:
-            return f"Fehler beim Schreiben: {e}"
+            return f"Error writing: {e}"
     
     def _tool_append_to_file(self, vault: Path, path: str, content: str) -> str:
         """Append to file in vault."""
         full_path = vault / path
         
         if not full_path.exists():
-            return f"Datei nicht gefunden: {path}"
+            return f"File not found: {path}"
         
         try:
             existing = full_path.read_text(encoding="utf-8")
             full_path.write_text(existing + content, encoding="utf-8")
-            return f"✓ Angehängt an: {path}"
+            return f"✓ Appended to: {path}"
         except Exception as e:
-            return f"Fehler: {e}"
+            return f"Error: {e}"
     
     def _tool_list_dir(self, vault: Path, path: str) -> str:
         """List directory contents."""
         target = vault / path if path else vault
         
         if not target.exists():
-            return f"Verzeichnis nicht gefunden: {path or '/'}"
+            return f"Directory not found: {path or '/'}"
         if not target.is_dir():
-            return f"Ist eine Datei, kein Verzeichnis: {path}"
+            return f"Is a file, not a directory: {path}"
         
         try:
             items = []
@@ -354,7 +354,7 @@ class DataAgent(BaseAgent):
             
             return json.dumps(items, ensure_ascii=False, indent=2)
         except Exception as e:
-            return f"Fehler: {e}"
+            return f"Error: {e}"
     
     def _tool_file_exists(self, vault: Path, path: str) -> str:
         """Check if path exists."""
@@ -362,16 +362,16 @@ class DataAgent(BaseAgent):
         
         if full_path.exists():
             if full_path.is_dir():
-                return f"Ja, Verzeichnis existiert: {path}"
+                return f"Yes, directory exists: {path}"
             else:
-                return f"Ja, Datei existiert: {path}"
+                return f"Yes, file exists: {path}"
         else:
             # Try fuzzy search
             results = self.find_by_path(path)
             if results:
                 matches = [r[1].path for r in results[:3]]
-                return f"Nicht gefunden: {path}\nÄhnliche: {', '.join(matches)}"
-            return f"Nicht gefunden: {path}"
+                return f"Not found: {path}\nSimilar: {', '.join(matches)}"
+            return f"Not found: {path}"
     
     def _tool_get_tags(self) -> str:
         """Get all tags with counts."""
@@ -383,7 +383,7 @@ class DataAgent(BaseAgent):
         
         sorted_tags = sorted(all_tags.items(), key=lambda x: -x[1])
         lines = [f"#{tag}: {count}" for tag, count in sorted_tags[:20]]
-        return "\n".join(lines) if lines else "Keine Tags gefunden."
+        return "\n".join(lines) if lines else "No tags found."
     
     def _tool_load_skill(self, topic: str) -> str:
         """Load detailed skill from file."""
@@ -399,7 +399,7 @@ class DataAgent(BaseAgent):
             content += "\n\n" + system_skills_path.read_text(encoding="utf-8")
         
         if not content:
-            return "Keine Skills gefunden."
+            return "No skills found."
         
         # Find relevant section
         topic_lower = topic.lower()
@@ -421,7 +421,7 @@ class DataAgent(BaseAgent):
             return "\n".join(relevant)
         else:
             # Return summary if no specific section found
-            return f"Kein Abschnitt '{topic}' gefunden. Verfügbar:\n{content[:500]}..."
+            return f"Section '{topic}' not found. Available:\n{content[:500]}..."
     
     # =========================================================================
     # INDEX MANAGEMENT
@@ -512,14 +512,14 @@ class DataAgent(BaseAgent):
         tools = self._get_tools()
         
         # Tool use loop
-        max_iterations = 10  # Komplexe Vault-Operationen brauchen mehr Tools
+        max_iterations = 10  # Complex vault operations need more tool calls
         system = self.get_system_prompt()
         for iteration in range(max_iterations):
             # Budget warning when running low
             if iteration == max_iterations - 2:
                 messages.append({
                     "role": "user",
-                    "content": "[System: Nur noch 2 Tool-Aufrufe möglich. Fasse jetzt zusammen mit dem was du hast.]"
+                    "content": "[System: Only 2 tool calls remaining. Summarise now with what you have.]"
                 })
 
             response = call_llm(
@@ -537,7 +537,7 @@ class DataAgent(BaseAgent):
             if not tool_uses:
                 # No tools, extract text response
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]
-                return "\n".join(text_parts) if text_parts else "Keine Antwort."
+                return "\n".join(text_parts) if text_parts else "No response."
             
             # Execute tools
             tool_results = []
@@ -718,19 +718,19 @@ class DataAgent(BaseAgent):
         from outheis.core.llm import call_llm
 
         prompt = (
-            f"Datei: {filename}\n\n"
+            f"File: {filename}\n\n"
             f"{content}\n\n"
             "---\n"
-            "Erkenne alle zeitlich relevanten Einträge in dieser Datei — nicht nur explizite "
-            "Termine und Deadlines, sondern auch implizite: ausstehende Projekte, Abhängigkeiten "
-            "(\"nach Abschluss von X\"), Wiedervorlagen, offene Aufgaben mit zeitlichem Bezug, "
-            "überfällige Punkte, Projektphasen die noch nicht begonnen haben.\n\n"
-            "Format — antworte NUR mit einer Markdown-Bullet-Liste, kein anderer Text:\n"
+            "Identify all time-relevant entries in this file — not only explicit "
+            "appointments and deadlines, but also implicit ones: pending projects, dependencies "
+            "(\"after completing X\"), follow-ups, open tasks with a time dimension, "
+            "overdue items, project phases not yet started.\n\n"
+            "Format — respond ONLY with a markdown bullet list, no other text:\n"
             "- ⏰ **2026-05-15** Mokatassen bei Suzanne Bühler abholen `#action-required`\n"
             "- 📅 **—** Willi Stemmer: Workshop-Finanzierung besprechen nach Rückkehr\n"
             "- 📋 **nach Tisch Strauss** Galina Schwarz: Projektstart Kommode + Truhe\n\n"
             "Icons: ⏰ deadline · 📅 appointment · 🎂 birthday · 🔄 recurring · 📋 task/pending\n"
-            "Wenn keine zeitlich relevanten Einträge vorhanden: antworte mit NONE"
+            "If no time-relevant entries are present: respond with NONE"
         )
 
         try:

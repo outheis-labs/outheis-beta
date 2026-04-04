@@ -177,7 +177,7 @@ class RelayAgent(BaseAgent):
         self._send_interim(msg, "code")
         result = self._dispatcher.dispatch_sync("code", text, msg.conversation_id)
         if result.startswith("Agent 'code' not available"):
-            return "Code agent (alan) ist nicht aktiviert. Aktiviere ihn in config.json unter agents.code.enabled: true."
+            return "Code agent (alan) is not enabled. Enable it in config.json under agents.code.enabled: true."
         return result
 
     def _merge_contexts(
@@ -220,7 +220,7 @@ class RelayAgent(BaseAgent):
         try:
             return self._call_llm_with_tools(text, context, original_msg.conversation_id)
         except Exception as e:
-            return f"Ein Fehler ist aufgetreten: {e}"
+            return f"An error occurred: {e}"
 
     def _call_llm_with_tools(self, text: str, context: list[Message], conversation_id: str = "relay") -> str:
         """Call LLM API with tool support for vault/agenda access."""
@@ -247,7 +247,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "check_agenda",
-                "description": "Read and return the current agenda/schedule. Use this when the user asks to see their agenda, schedule, or Daily.md — including bare commands like 'Agenda', 'agenda', 'was steht heute an', 'was ist heute'. Returns the exact file content. Do NOT use refresh_agenda unless the user explicitly asks to update, regenerate, or refresh.",
+                "description": "Read and return the current agenda/schedule. Use this when the user asks to see their agenda, schedule, or Daily.md — including bare commands like 'Agenda', 'agenda', 'what is on today', 'what is today'. Returns the exact file content. Do NOT use refresh_agenda unless the user explicitly asks to update, regenerate, or refresh.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -261,7 +261,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "refresh_agenda",
-                "description": "Regenerate/update Daily.md. ONLY use when the user explicitly says 'aktualisiere', 'aktualisiere daily', 'aktualisiere agenda', 'update daily', 'refresh agenda', 'regeneriere', or similar explicit update commands. Never use just because the user asks to see the agenda.",
+                "description": "Regenerate/update Daily.md. ONLY use when the user explicitly says 'update', 'update daily', 'update agenda', 'refresh agenda', 'regenerate', or similar explicit update commands. Never use just because the user asks to see the agenda.",
                 "input_schema": {
                     "type": "object",
                     "properties": {},
@@ -284,7 +284,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "memory_migrate",
-                "description": "Process migration files from vault/Migration/ directory. Use when user says 'memory migrate', 'migriere memory', 'process migration', or asks to import/migrate data. Reads .json and .md files, creates Migration.md for approval.",
+                "description": "Process migration files from vault/Migration/ directory. Use when user says 'memory migrate', 'process migration', or asks to import/migrate data. Reads .json and .md files, creates Migration.md for approval.",
                 "input_schema": {
                     "type": "object",
                     "properties": {},
@@ -329,7 +329,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "add_to_daily",
-                "description": "Add content to Daily.md. Use when user wants to add a task, note, reminder, or any content to their daily file. Examples: 'füge X zu Daily hinzu', 'add task X', 'schreib in Daily', 'track X daily', 'add to my daily checklist'.",
+                "description": "Add content to Daily.md. Use when user wants to add a task, note, reminder, or any content to their daily file. Examples: 'add X to Daily', 'add task X', 'write to Daily', 'track X daily', 'add to my daily checklist'.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -375,7 +375,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "check_token_usage",
-                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'wie viele tokens', 'was kostet das', 'token-verbrauch', 'kosten diese woche', 'wie viel habe ich verbraucht', etc. For single-day queries set date: 'heute'/'today' for today, 'gestern'/'yesterday' for yesterday, or 'YYYY-MM-DD' for a specific date. For multi-day windows (last 7 days etc.) use the days parameter instead. IMPORTANT: Always forward the complete tool output verbatim, including the per-agent breakdown — never summarize or omit the agent list.",
+                "description": "Show token usage and estimated API costs for a time period. Use when user asks about token consumption, costs, 'how many tokens', 'what does it cost', 'token usage', 'costs this week', 'wie viel habe ich verbraucht', etc. For single-day queries set date: 'heute'/'today' for today, 'gestern'/'yesterday' for yesterday, or 'YYYY-MM-DD' for a specific date. For multi-day windows (last 7 days etc.) use the days parameter instead. IMPORTANT: Always forward the complete tool output verbatim, including the per-agent breakdown — never summarize or omit the agent list.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
@@ -414,7 +414,7 @@ class RelayAgent(BaseAgent):
         
         # Build messages — exclude relay responses that signal tool failures
         # (they poison the LLM context and cause repeated refusals)
-        _failure_markers = ("antwortet nicht", "agent error", "not available", "kann das nicht")
+        _failure_markers = ("not responding", "agent error", "not available", "cannot do that")
         messages = []
         for msg in context[-5:]:
             if msg.from_user:
@@ -449,7 +449,7 @@ class RelayAgent(BaseAgent):
             if turn == max_turns - 1:
                 messages.append({
                     "role": "user",
-                    "content": "[System: Letzter Turn. Antworte jetzt dem User.]"
+                    "content": "[System: Last turn. Respond to the user now.]"
                 })
             
             # Check if tool use is needed
@@ -458,7 +458,7 @@ class RelayAgent(BaseAgent):
                 for block in response.content:
                     if hasattr(block, "text"):
                         return block.text
-                return "Ich konnte keine Antwort formulieren."
+                return "I was unable to formulate a response."
             
             # Process tool calls
             tool_results = []
@@ -485,7 +485,7 @@ class RelayAgent(BaseAgent):
                         if self._dispatcher is None:
                             result = "Dispatcher not available."
                         else:
-                            result = self._dispatcher.dispatch_sync("agenda", "Aktualisiere Daily.md für heute.", conversation_id)
+                            result = self._dispatcher.dispatch_sync("agenda", "Update Daily.md for today.", conversation_id)
                     elif block.name == "get_config":
                         result = self._get_config_info(block.input.get("aspect", "all"))
                     elif block.name == "memory_migrate":
@@ -501,7 +501,7 @@ class RelayAgent(BaseAgent):
                         if self._dispatcher is None:
                             result = "Dispatcher not available."
                         else:
-                            result = self._dispatcher.dispatch_sync("data", "Zeige alle Tags im Vault mit Anzahl", conversation_id)
+                            result = self._dispatcher.dispatch_sync("data", "Show all tags in the vault with counts", conversation_id)
                     elif block.name == "add_to_daily":
                         content = block.input.get("content", "")
                         section = block.input.get("section", "")
@@ -512,11 +512,11 @@ class RelayAgent(BaseAgent):
                             else:
                                 result = self._dispatcher.dispatch_sync(
                                     "agenda",
-                                    f"Füge zu Daily.md hinzu{section_hint}: {content}",
+                                    f"Add to Daily.md{section_hint}: {content}",
                                     conversation_id
                                 )
                         else:
-                            result = "Kein Inhalt angegeben"
+                            result = "No content provided"
                     elif block.name == "write_to_inbox":
                         content = block.input.get("content", "")
                         if content:
@@ -525,11 +525,11 @@ class RelayAgent(BaseAgent):
                             else:
                                 result = self._dispatcher.dispatch_sync(
                                     "agenda",
-                                    f"Notiere in Inbox.md: {content}",
+                                    f"Note in Inbox.md: {content}",
                                     conversation_id
                                 )
                         else:
-                            result = "Kein Inhalt angegeben"
+                            result = "No content provided"
                     elif block.name == "explain_code":
                         question = block.input.get("question", "")
                         if question:
@@ -541,11 +541,11 @@ class RelayAgent(BaseAgent):
                                 target = "code" if code_agent is not None else "action"
                                 result = self._dispatcher.dispatch_sync(
                                     target,
-                                    question if target == "code" else f"Schau im outheis-Code nach und erkläre: {question}",
+                                    question if target == "code" else f"Look at the outheis source code and explain: {question}",
                                     conversation_id
                                 )
                         else:
-                            result = "Keine Frage angegeben"
+                            result = "No question provided"
                     elif block.name == "check_token_usage":
                         from outheis.core.tokens import get_usage_summary
                         date_param = block.input.get("date")
@@ -561,7 +561,7 @@ class RelayAgent(BaseAgent):
                             else:
                                 result = self._dispatcher.dispatch_sync(agent, task, conversation_id)
                         else:
-                            result = "Agent und Task müssen angegeben werden"
+                            result = "Agent and task must be specified"
                     else:
                         result = "Tool not found"
                     
@@ -585,7 +585,7 @@ class RelayAgent(BaseAgent):
             )
 
         # Max turns reached
-        return "Maximale Anzahl an Schritten erreicht. Bitte präzisiere deine Anfrage."
+        return "Maximum number of steps reached. Please refine your request."
 
     def _get_config_info(self, aspect: str) -> str:
         """Get configuration information for the user."""
@@ -654,7 +654,7 @@ class RelayAgent(BaseAgent):
         migration_dir = vault / "Migration"
 
         if not migration_dir.exists():
-            return "Kein Migration/ Verzeichnis im Vault gefunden. Nichts zu tun."
+            return "No migration/ directory found in vault. Nothing to do."
 
         agenda_dir = get_agenda_dir()
         exchange_path = agenda_dir / "Exchange.md" if agenda_dir else None
@@ -713,7 +713,7 @@ class RelayAgent(BaseAgent):
                     new_entries.extend(entries)
                     files_processed.append(f)
                 else:
-                    parse_errors.append(f"{f.name}: keine Einträge gefunden")
+                    parse_errors.append(f"{f.name}: no entries found")
             except Exception as e:
                 parse_errors.append(f"{f.name}: {e}")
 
@@ -733,21 +733,21 @@ class RelayAgent(BaseAgent):
         # ── Build response ────────────────────────────────────────────────────────
         parts = []
         if adopted_items:
-            parts.append(f"{len(adopted_items)} Einträge übernommen.")
+            parts.append(f"{len(adopted_items)} entries accepted.")
         if rejected_count:
             parts.append(f"{rejected_count} abgelehnt.")
         if files_processed:
             names = ", ".join(f.name for f in files_processed)
-            parts.append(f"{len(files_processed)} Datei(en) geparst: {names}")
+            parts.append(f"{len(files_processed)} file(s) parsed: {names}")
         if all_candidates:
             parts.append(
-                f"{len(all_candidates)} Einträge zur Bestätigung in Exchange.md — "
-                "bitte prüfen und mit [x] / [-] markieren, dann erneut `memory migrate` ausführen."
+                f"{len(all_candidates)} entries pending confirmation in Exchange.md — "
+                "review and mark with [x] / [-], then run `memory migrate` again."
             )
         if parse_errors:
-            parts.append("Fehler: " + "; ".join(parse_errors))
+            parts.append("Errors: " + "; ".join(parse_errors))
         if not parts:
-            parts.append("Keine neuen Einträge zu verarbeiten.")
+            parts.append("No new entries to process.")
         return "\n".join(parts)
 
     def _deduplicate_migration_entries(
@@ -820,11 +820,11 @@ class RelayAgent(BaseAgent):
         lines = [
             "",
             "<!-- outheis:migration:start -->",
-            "## Migration-Vorschläge",
+            "## Migration Proposals",
             "",
-            f"*{ts} — Bitte prüfen und markieren:*",
-            "*`[x]` übernehmen · `[-]` ablehnen · `[ ]` offen lassen*",
-            "*Anschließend: `memory migrate` erneut ausführen.*",
+            f"*{ts} — Please review and mark:*",
+            "*`[x]` accept · `[-]` reject · `[ ]` leave open*",
+            "*Then run `memory migrate` again.*",
             "",
         ]
         for content_text, entry_type in entries:
@@ -984,7 +984,7 @@ class RelayAgent(BaseAgent):
         # User traits
         user_entries = store.get("user")
         if user_entries:
-            lines.append("## Identität")
+            lines.append("## Identity")
             for e in user_entries[:10]:
                 lines.append(f"  • {e.content}")
             lines.append("")
@@ -992,7 +992,7 @@ class RelayAgent(BaseAgent):
         # Feedback
         feedback_entries = store.get("feedback")
         if feedback_entries:
-            lines.append("## Präferenzen")
+            lines.append("## Preferences")
             for e in feedback_entries[:10]:
                 lines.append(f"  • {e.content}")
             lines.append("")
@@ -1023,13 +1023,13 @@ class RelayAgent(BaseAgent):
         """Write trait directly to rules."""
         valid_agents = ["relay", "data", "agenda", "pattern", "common"]
         if agent not in valid_agents:
-            return f"Ungültiger Agent: {agent}. Verwende: {', '.join(valid_agents)}"
+            return f"Invalid agent: {agent}. Use: {', '.join(valid_agents)}"
         
         if not trait:
-            return "Kein Trait angegeben."
+            return "No trait provided."
         
         self._add_to_rules(agent, trait)
-        return f"✓ Regel hinzugefügt zu {agent}: {trait}"
+        return f"✓ Rule added to {agent}: {trait}"
 
 
 # =============================================================================

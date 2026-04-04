@@ -2,9 +2,9 @@
 
 *Nobody — and everybody who refuses to be captured.*
 
-A multi-agent AI assistant built on proven operating system engineering principles.
+Second brain multi-agent AI assistant, based on privacy and human-centricity. Engineered as infrastructure, not as a product.
 
-It's conceptionally conceived for both personal assistant (1:1) and domain expert (many:1) usage.
+It is conceptionally conceived for both personal assistant (1:1) and domain expert (many:1) usage.
 
 
 ## The Problem

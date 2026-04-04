@@ -417,17 +417,6 @@ class AgendaAgent(BaseAgent):
                 reply_to=msg.id,
             )
 
-        # Read-only agenda query: return Daily.md verbatim, skip LLM
-        if self._is_read_query(query):
-            content = self._get_daily_content()
-            if content:
-                return self.respond(
-                    to=response_to,
-                    payload={"text": content},
-                    conversation_id=msg.conversation_id,
-                    reply_to=msg.id,
-                )
-
         try:
             answer = self._process_with_tools(query, verbose)
             

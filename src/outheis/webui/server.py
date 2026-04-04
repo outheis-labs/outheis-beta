@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
@@ -583,8 +584,6 @@ async def run_scheduler_task(task: str):
 # Status API
 @app.get("/api/status")
 async def get_status():
-    import subprocess
-
     try:
         from outheis.dispatcher.daemon import read_pid, get_pid_path
         _pid = read_pid()

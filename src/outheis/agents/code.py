@@ -416,8 +416,17 @@ class CodeAgent(BaseAgent):
         content = exchange.read_text(encoding="utf-8") if exchange.exists() else ""
         if f"## {filename}" not in content:
             from datetime import datetime, timezone
+            from outheis.core.config import load_config
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-            stub = f"\n\n## {filename}\n*{ts}*\n\n(Summary pending — update this entry with a brief description of the proposal.)"
+            try:
+                lang = load_config().human.language
+            except Exception:
+                lang = "en"
+            if lang.startswith("de"):
+                pending = "(Zusammenfassung ausstehend — diesen Eintrag mit einer kurzen Beschreibung des Proposals ergänzen.)"
+            else:
+                pending = "(Summary pending — update this entry with a brief description of the proposal.)"
+            stub = f"\n\n## {filename}\n*{ts}*\n\n{pending}"
             exchange.write_text(content.rstrip() + stub + "\n", encoding="utf-8")
 
     def _tool_append_codebase(self, path: str, content: str) -> str:

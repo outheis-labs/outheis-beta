@@ -646,6 +646,60 @@ async def get_status():
     }
 
 
+@app.post("/api/restart")
+async def restart_daemon():
+    import os
+    import shutil
+    import subprocess
+    import sys
+
+    from outheis.dispatcher.daemon import read_pid
+
+    current_pid = read_pid()
+    if not current_pid:
+        return {"status": "not_running"}
+
+    outheis_cmd = shutil.which("outheis")
+    if outheis_cmd:
+        start_cmd = repr([outheis_cmd, "start"])
+    else:
+        start_cmd = repr([sys.executable, "-m", "outheis.cli.main", "start"])
+
+    script = f"""
+import os, time, signal, subprocess
+
+pid = {current_pid}
+start_cmd = {start_cmd}
+
+time.sleep(2)
+
+try:
+    os.kill(pid, signal.SIGTERM)
+except ProcessLookupError:
+    pass
+
+for _ in range(20):
+    time.sleep(0.5)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        break
+
+time.sleep(0.5)
+subprocess.run(start_cmd, check=False)
+"""
+
+    subprocess.Popen(
+        [sys.executable, "-c", script],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    return {"status": "restarting"}
+
+
 # WebSocket
 class ConnectionManager:
     def __init__(self):

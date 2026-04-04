@@ -123,6 +123,10 @@ async function renderOverview() {
           <div class="metric-label">PID</div>
           <div class="metric-value">${status.pid || '—'}</div>
         </div>
+        ${status.running ? `
+        <div class="metric" style="grid-column: 1 / -1;">
+          <button class="btn-restart" onclick="restartDaemon()">Restart outheis</button>
+        </div>` : ''}
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">Recent conversations</span></div>
@@ -1302,6 +1306,14 @@ function connectWebSocket() {
   };
   ws.onclose = () => { connectionStatus.textContent = 'Disconnected'; setTimeout(connectWebSocket, 3000); };
   ws.onerror = () => { connectionStatus.textContent = 'Disconnected'; };
+}
+
+// Restart
+async function restartDaemon() {
+  if (!confirm('Restart outheis?\n\nThe daemon and Web UI will go offline for a few seconds.')) return;
+  const btn = document.querySelector('.btn-restart');
+  if (btn) { btn.disabled = true; btn.textContent = 'Restarting…'; }
+  await fetchAPI('/api/restart', { method: 'POST' });
 }
 
 // Utilities

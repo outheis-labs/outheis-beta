@@ -343,6 +343,25 @@ html, body {
 .btn-icon:hover { color: var(--text-primary); }
 .btn-icon.danger:hover { color: var(--accent-danger); border-color: var(--accent-danger); }
 
+.btn-restart {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 7px 16px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--accent-warning);
+  background: transparent;
+  border: 0.5px solid var(--accent-warning);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  opacity: 0.8;
+}
+.btn-restart:hover { opacity: 1; }
+.btn-restart:disabled { opacity: 0.4; cursor: default; }
+
 /* Forms */
 .form-row { display: flex; align-items: center; margin-bottom: 14px; }
 .form-row:last-child { margin-bottom: 0; }

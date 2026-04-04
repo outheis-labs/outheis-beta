@@ -476,6 +476,7 @@ class RelayAgent(BaseAgent):
                         if self._dispatcher is None:
                             result = "Dispatcher not available."
                         else:
+                            self._send_interim(original_msg, "agenda")
                             result = self._dispatcher.dispatch_sync("agenda", block.input["query"], conversation_id)
                         # Return agenda content directly — no second LLM pass
                         if result and result != "Dispatcher not available.":

@@ -351,15 +351,14 @@ html, body {
   font-family: inherit;
   font-size: 12px;
   font-weight: 400;
-  color: var(--accent-warning);
-  background: transparent;
-  border: 0.5px solid var(--accent-warning);
+  color: #fff;
+  background: #000;
+  border: 0.5px solid #000;
   border-radius: var(--radius);
   cursor: pointer;
   transition: all 0.15s ease;
-  opacity: 0.8;
 }
-.btn-restart:hover { opacity: 1; }
+.btn-restart:hover { color: #000; background: #fff; }
 .btn-restart:disabled { opacity: 0.4; cursor: default; }
 
 /* Forms */

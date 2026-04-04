@@ -51,7 +51,7 @@ outheis explores what AI assistance looks like when sovereignty is non-negotiabl
 
 ## Status
 
-Prototype working since November 2025. Overhaul ongoing, new implementation nearly done.
+Prototype working since November 2025. Overhaul ongoing, public beta started.
 
 
 ## License

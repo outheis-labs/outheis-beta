@@ -122,17 +122,64 @@ class RelayAgent(BaseAgent):
             reply_to=msg.id,
         )
 
+    def _is_ollama_agent(self, agent_name: str) -> bool:
+        """Return True if the agent's configured model uses the Ollama provider."""
+        try:
+            from outheis.core.config import load_config
+            from outheis.core.llm import resolve_model
+            config = load_config()
+            agent_cfg = config.agents.get(agent_name)
+            if not agent_cfg:
+                return False
+            return resolve_model(agent_cfg.model).provider == "ollama"
+        except Exception:
+            return False
+
+    def _send_interim(self, msg: Message, agent_name: str) -> None:
+        """Write a 'please wait' notification to transport before a slow local-model call."""
+        if not self._is_ollama_agent(agent_name):
+            return
+        try:
+            from outheis.core.config import load_config, get_messages_path
+            from outheis.core.message import create_agent_message
+            from outheis.core.queue import append
+            config = load_config()
+            if config.human.language and "deutsch" in config.human.language.lower():
+                text = "Einen Moment — lokales Modell, das dauert etwas länger..."
+            else:
+                text = "One moment — local model, this may take a little longer..."
+            interim = create_agent_message(
+                from_agent="relay",
+                to="transport",
+                type="response",
+                payload={"text": text},
+                conversation_id=msg.conversation_id,
+                reply_to=msg.id,
+                intent="interim",
+            )
+            append(get_messages_path(), interim)
+        except Exception:
+            pass
+
+    def _handle_with_data_agent(self, text: str, msg: Message) -> str:
+        """Delegate to Data agent (zeno) via dispatcher."""
+        if self._dispatcher is None:
+            return "Dispatcher not available."
+        self._send_interim(msg, "data")
+        return self._dispatcher.dispatch_sync("data", text, msg.conversation_id)
+
     def _handle_with_agenda_agent(self, text: str, msg: Message) -> str:
         """Delegate to Agenda agent via dispatcher."""
         if self._dispatcher is None:
             return "Dispatcher not available."
+        self._send_interim(msg, "agenda")
         return self._dispatcher.dispatch_sync("agenda", text, msg.conversation_id)
-    
 
     def _handle_with_code_agent(self, text: str, msg: Message) -> str:
         """Delegate to Code agent (alan) via dispatcher."""
         if self._dispatcher is None:
             return "Dispatcher not available."
+        self._send_interim(msg, "code")
         result = self._dispatcher.dispatch_sync("code", text, msg.conversation_id)
         if result.startswith("Agent 'code' not available"):
             return "Code agent (alan) ist nicht aktiviert. Aktiviere ihn in config.json unter agents.code.enabled: true."

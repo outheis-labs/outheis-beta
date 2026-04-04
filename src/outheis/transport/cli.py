@@ -69,14 +69,15 @@ class CLITransport:
         """
         Wait for a response to a message.
 
-        Polls the queue for a response message.
+        Polls the queue for a response message. Interim notifications
+        (intent="interim") are displayed immediately but polling continues.
         """
         import time
 
         start = time.time()
+        displayed_interim_ids: set[str] = set()
 
         while time.time() - start < timeout:
-            # Check for response
             messages = read_last_n(self.queue_path, 10)
 
             for msg in messages:
@@ -85,7 +86,12 @@ class CLITransport:
                     and msg.to == "transport"
                     and msg.from_agent
                 ):
-                    return msg
+                    if msg.intent == "interim":
+                        if msg.id not in displayed_interim_ids:
+                            displayed_interim_ids.add(msg.id)
+                            print(f"\n[{msg.from_agent}] {msg.payload.get('text', '')}")
+                    else:
+                        return msg
 
             time.sleep(0.1)
 

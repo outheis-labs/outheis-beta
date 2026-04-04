@@ -219,6 +219,8 @@ class SignalTransport(Transport):
 
     def _watch_responses(self) -> None:
         """Watcher thread: check for responses and send back via Signal."""
+        sent_interim_ids: set[str] = set()
+
         while self._watching:
             time.sleep(1)  # Check every second
 
@@ -233,19 +235,29 @@ class SignalTransport(Transport):
 
             for msg in messages:
                 if msg.reply_to in pending_copy and msg.to == "transport":
+                    is_interim = msg.intent == "interim"
+
+                    if is_interim and msg.id in sent_interim_ids:
+                        continue
+
                     sender_uuid = pending_copy[msg.reply_to]
                     response_text = msg.payload.get("text", "")
 
                     if response_text:
                         try:
                             self.rpc.send_message(sender_uuid, self._strip_markdown(response_text))
-                            print(f"📤 Sent response to Signal", flush=True)
+                            if is_interim:
+                                sent_interim_ids.add(msg.id)
+                                print(f"📤 Sent interim to Signal", flush=True)
+                            else:
+                                print(f"📤 Sent response to Signal", flush=True)
                         except Exception as e:
                             print(f"⚠️ Failed to send: {e}", flush=True)
 
-                    # Remove from pending
-                    with self._lock:
-                        self.pending.pop(msg.reply_to, None)
+                    # Only remove from pending on final response
+                    if not is_interim:
+                        with self._lock:
+                            self.pending.pop(msg.reply_to, None)
     
     def _handle_message(self, msg: SignalMessage) -> None:
         """Handle incoming Signal message."""

@@ -344,6 +344,23 @@ class Dispatcher:
             results = agent.rebuild_indices()
             print(f"Index rebuild: {results}")
 
+    def _warmup_persistent_models(self) -> None:
+        """Send a minimal call to each persistent local model to load it into memory."""
+        import sys
+        for alias, model_cfg in self.config.llm.models.items():
+            if model_cfg.provider == "ollama" and model_cfg.run_mode == "persistent":
+                try:
+                    from outheis.core.llm import call_llm
+                    call_llm(
+                        model=alias,
+                        messages=[{"role": "user", "content": "hi"}],
+                        max_tokens=1,
+                        agent="warmup",
+                    )
+                    print(f"  ✓ {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
+                except Exception as e:
+                    print(f"  ✗ {alias} warmup failed: {e}", file=sys.stderr)
+
     def _run_archive_rotation(self) -> None:
         """Rotate old messages to archive."""
         # TODO: Implement archive rotation
@@ -632,6 +649,9 @@ class Dispatcher:
         
         # Initialize LLM with config (once, at startup)
         init_llm(self.config.llm)
+
+        # Warmup persistent local models
+        self._warmup_persistent_models()
 
         # Set up scheduled tasks
         self._setup_scheduled_tasks()

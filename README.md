@@ -8,6 +8,7 @@ Designed for both personal assistant (1:1) and domain expert (many:1) usage.
 
 ---
 ![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/ba35428e-b320-4be3-ae9a-6d4ec61a5962)
+
 ---
 
 The name comes from Homer. When Polyphemus asks who blinded him, Ulysses answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody is hurting me!" No help comes. Ulysses slips away, clinging to the belly of the ram.

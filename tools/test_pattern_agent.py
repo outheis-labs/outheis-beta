@@ -675,12 +675,13 @@ def available_models() -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pattern agent capability test")
     parser.add_argument("--models", nargs="*", help="Models to test (default: all local)")
-    parser.add_argument("--url", default=BASE_URL, help="Ollama API URL")
+    parser.add_argument("--url", default=None, help="Ollama API URL")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
     global BASE_URL
-    BASE_URL = args.url
+    if args.url:
+        BASE_URL = args.url
 
     models = args.models or available_models()
     if not models:

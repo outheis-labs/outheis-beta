@@ -402,50 +402,65 @@ class AgendaAgent(BaseAgent):
         return path.read_text(encoding="utf-8") if path.exists() else None
 
     # =========================================================================
-    # PASS-THROUGH STATE  (per user identity, no TTL)
+    # PASS-THROUGH STATE  (per user identity, Snowflake-based freshness)
     # =========================================================================
     #
-    # Signal creates a new conversation_id for every message, so we key by
-    # the sender's identity (phone number) instead.  The context stays valid
-    # as long as the verbatim agenda was the last thing cato sent to that
-    # identity — i.e. until cato produces an LLM response for that user,
-    # which clears the entry.
+    # Signal assigns a new conversation_id per message, so we key by the
+    # sender's phone identity instead.
+    #
+    # Freshness is derived entirely from the message queue: on load, we
+    # scan the last 50 messages for any to="transport" response with a
+    # higher Snowflake ID than the stored pass-through that also replies
+    # to a message from this identity.  If one exists, cato has since
+    # spoken — context is stale.  No explicit clear step needed.
 
     def _passthrough_path(self) -> Path:
         return get_human_dir() / "cache" / "agenda" / "passthrough.json"
 
-    def _save_passthrough(self, identity: str, content: str) -> None:
-        """Record the verbatim agenda that was just sent to this identity."""
+    def _save_passthrough(self, identity: str, response_id: str, content: str) -> None:
+        """Persist pass-through response ID and content for this identity."""
         path = self._passthrough_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
             data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         except Exception:
             data = {}
-        data[identity] = content
+        data[identity] = {"id": response_id, "content": content}
         path.write_text(json.dumps(data), encoding="utf-8")
 
     def _load_passthrough(self, identity: str) -> str | None:
-        """Return stored pass-through content for this identity, if any."""
+        """Return pass-through content if still the last message sent to this identity.
+
+        Uses the message queue as the source of truth: if a newer to="transport"
+        response exists that replies to a message from this identity, the
+        pass-through is considered superseded and None is returned.
+        """
         path = self._passthrough_path()
         if not path.exists():
             return None
         try:
-            return json.loads(path.read_text(encoding="utf-8")).get(identity)
+            entry = json.loads(path.read_text(encoding="utf-8")).get(identity)
         except Exception:
+            return None
+        if not entry:
             return None
 
-    def _clear_passthrough(self, identity: str) -> None:
-        """Remove stored pass-through for this identity after an LLM response is sent."""
-        path = self._passthrough_path()
-        if not path.exists():
-            return
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            data.pop(identity, None)
-            path.write_text(json.dumps(data), encoding="utf-8")
-        except Exception:
-            pass
+        passthrough_id: str = entry["id"]
+        content: str = entry["content"]
+
+        from outheis.core.config import get_messages_path
+        from outheis.core.queue import read_last_n
+        recent = read_last_n(get_messages_path(), 50)
+
+        # IDs of messages that came FROM this identity (potential reply_to targets)
+        user_ids = {m.id for m in recent if m.from_user and m.from_user.identity == identity}
+
+        # Any newer outgoing response to this identity → context superseded
+        superseded = any(
+            m.to == "transport" and m.id > passthrough_id and m.reply_to in user_ids
+            for m in recent
+        )
+        return None if superseded else content
 
     def handle(self, msg: Message) -> Message | None:
         """Handle incoming message with tools."""
@@ -462,31 +477,26 @@ class AgendaAgent(BaseAgent):
                 reply_to=msg.id,
             )
 
-        # Read-only: return Daily.md verbatim — no LLM, no risk of modification.
-        # Save what was sent keyed by sender identity so follow-up LLM calls
-        # in a later (different conversation_id) message can reference it.
+        # Read-only: return Daily.md verbatim — no LLM, no modification risk.
+        # Capture the response ID so freshness can be derived from the queue.
         if self._is_read_query(query):
             content = self._get_daily_content()
             if content:
-                if identity:
-                    self._save_passthrough(identity, content)
-                return self.respond(
+                response = self.respond(
                     to=response_to,
                     payload={"text": content},
                     conversation_id=msg.conversation_id,
                     reply_to=msg.id,
                 )
+                if identity:
+                    self._save_passthrough(identity, response.id, content)
+                return response
 
-        # LLM path: inject prior pass-through as synthetic context if the
-        # verbatim agenda was the last thing sent to this identity.
+        # LLM path: inject prior pass-through as synthetic context when the
+        # verbatim agenda is still the last thing sent to this identity.
         prior = self._load_passthrough(identity) if identity else None
         try:
             answer = self._process_with_tools(query, verbose, prior_content=prior)
-
-            # LLM has now responded — the agenda is no longer "last sent"
-            if identity:
-                self._clear_passthrough(identity)
-
             return self.respond(
                 to=response_to,
                 payload={"text": answer},

@@ -59,9 +59,13 @@ class CodeAgent(BaseAgent):
             f"Your task: analyze local source code and answer questions about the implementation.",
             f"Respond in {config.human.language}.",
             "",
-            "Write proposals as individual files in vault/Codebase/.",
-            "Exchange.md is the decision basis for the user: overview of all open issues,",
-            "1-2 paragraphs per issue (problem, proposed solution, reference to detail file).",
+            "Write proposals as individual files in vault/Codebase/ using write_codebase.",
+            "After every write_codebase call for a proposal, update Exchange.md with append_codebase.",
+            "Exchange.md format: one section per proposal, header MUST be '## <filename>':",
+            "  ## my-proposal.md",
+            "  1-2 paragraphs: problem, proposed solution, reference to detail file.",
+            "  ---",
+            "The '## <filename>' header is required — it allows stale entries to be removed automatically when files are deleted.",
             "Never modify source code directly — write_codebase writes exclusively to vault/Codebase/.",
             "",
             f"## Source root: `{src_root}`",
@@ -122,14 +126,47 @@ class CodeAgent(BaseAgent):
         return ""
 
     def _get_exchange(self) -> str:
-        """Get current vault/Codebase/Exchange.md contents."""
+        """Get vault/Codebase/Exchange.md, removing entries for deleted proposal files."""
         codebase_dir = self._get_codebase_dir()
         exchange = codebase_dir / "Exchange.md"
-        if exchange.exists():
-            content = exchange.read_text(encoding="utf-8").strip()
-            if content:
-                return content[:2000]
-        return ""
+        if not exchange.exists():
+            return ""
+
+        content = exchange.read_text(encoding="utf-8").strip()
+        if not content:
+            return ""
+
+        # Parse sections by ## <filename> headers and remove stale ones
+        existing_files = {f.name for f in codebase_dir.iterdir() if f.is_file() and f.name != "Exchange.md"}
+        sections = []
+        current_header = None
+        current_lines: list[str] = []
+
+        for line in content.splitlines():
+            if line.startswith("## "):
+                if current_header is not None:
+                    sections.append((current_header, current_lines))
+                current_header = line[3:].strip()
+                current_lines = [line]
+            else:
+                if current_header is not None:
+                    current_lines.append(line)
+
+        if current_header is not None:
+            sections.append((current_header, current_lines))
+
+        # Keep only sections whose file still exists; fall back to unstructured content if no headers found
+        if not sections:
+            return content[:2000]
+
+        kept = ["\n".join(lines) for header, lines in sections if header in existing_files]
+        if len(kept) != len(sections):
+            # Rewrite Exchange.md without stale entries
+            new_content = "\n\n---\n\n".join(kept)
+            exchange.write_text(new_content + "\n" if new_content else "", encoding="utf-8")
+
+        result = "\n\n---\n\n".join(kept)
+        return result[:2000] if result else ""
 
     def _get_codebase_dir(self) -> Path:
         """Get vault/Codebase/ directory, creating if needed."""
@@ -342,6 +379,9 @@ class CodeAgent(BaseAgent):
         return "\n".join(items) if items else "(empty)"
 
     def _tool_write_codebase(self, path: str, content: str) -> str:
+        import time as _time
+        from datetime import datetime, timezone
+
         if not path:
             return "No path provided"
 
@@ -354,8 +394,31 @@ class CodeAgent(BaseAgent):
             return "Write rejected: path must be within vault/Codebase/"
 
         target.parent.mkdir(parents=True, exist_ok=True)
+
+        is_proposal = path != "Exchange.md"
+
+        # Prepend ISO timestamp to proposal files
+        if is_proposal:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            content = f"*{ts}*\n\n{content}"
+
         target.write_text(content, encoding="utf-8")
-        return f"✓ Written: vault/Codebase/{path}"
+
+        # Ensure Exchange.md has an entry for this proposal
+        if is_proposal:
+            self._ensure_exchange_entry(path, codebase_dir)
+
+        return f"Written: vault/Codebase/{path}"
+
+    def _ensure_exchange_entry(self, filename: str, codebase_dir: Path) -> None:
+        """Add a stub Exchange.md entry if the proposal has no entry yet."""
+        exchange = codebase_dir / "Exchange.md"
+        content = exchange.read_text(encoding="utf-8") if exchange.exists() else ""
+        if f"## {filename}" not in content:
+            from datetime import datetime, timezone
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            stub = f"\n\n## {filename}\n*{ts}*\n\n(Summary pending — update this entry with a brief description of the proposal.)"
+            exchange.write_text(content.rstrip() + stub + "\n", encoding="utf-8")
 
     def _tool_append_codebase(self, path: str, content: str) -> str:
         if not path:

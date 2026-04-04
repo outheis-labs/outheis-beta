@@ -682,7 +682,7 @@ class DataAgent(BaseAgent):
             return sections
         content = shadow_path.read_text(encoding="utf-8")
         pattern = re.compile(
-            r"<!-- BEGIN: (.+?) -->\n(.*?)<!-- END: .+? -->",
+            r"<!-- BEGIN: (.+?) -->\n## .+?\n(.*?)<!-- END: .+? -->",
             re.DOTALL,
         )
         for match in pattern.finditer(content):

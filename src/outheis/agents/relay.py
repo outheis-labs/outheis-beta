@@ -90,15 +90,13 @@ class RelayAgent(BaseAgent):
             # The agent now knows this information (it's in context)
             text = stored_content
 
-        # Check for explicit agent mentions (@zeno, @cato) and bare agenda read commands
+        # Explicit agent mentions only — routing decisions go through the LLM
         text_lower = text.lower().strip()
-        text_clean = text_lower.rstrip("?!. ")
-        _AGENDA_READ_COMMANDS = {"agenda", "daily", "tagesagenda", "was steht heute", "was ist heute"}
         if "@zeno" in text_lower:
             if verbose:
                 print("[explicit @zeno → data]", file=sys.stderr)
             response_text = self._handle_with_data_agent(text, msg)
-        elif "@cato" in text_lower or text_clean in _AGENDA_READ_COMMANDS:
+        elif "@cato" in text_lower:
             if verbose:
                 print("[explicit @cato → agenda]", file=sys.stderr)
             response_text = self._handle_with_agenda_agent(text, msg)

@@ -105,14 +105,17 @@ class AgendaAgent(BaseAgent):
             "",
             "---",
             "",
-            "## Verfügbare Tools (nur Output)",
+            "## Verfügbare Tools",
+            "- get_daily() — Tagesagenda lesen (gibt Daily.md exakt zurück)",
             "- write_file(file, content) — Datei schreiben (daily/inbox/exchange)",
             "- append_file(file, content) — An Datei anhängen",
             "- load_skill(topic) — Detail-Skills nachladen wenn nötig",
             "",
             "## Prinzipien",
+            "- Wenn der User die Agenda lesen will: get_daily() aufrufen und das Ergebnis",
+            "  **zeichengenau und unverändert** zurückgeben — kein Umformulieren, kein Kürzen,",
+            "  keine Ergänzungen.",
             "- Struktur des Users übernehmen, nicht aufzwingen",
-            "- Du HAST bereits alle Dateien oben — nicht nochmal lesen",
             "- Bei Unsicherheit via Exchange.md fragen",
             "- Kurz und direkt",
         ]
@@ -199,13 +202,16 @@ class AgendaAgent(BaseAgent):
     
     
     def _get_tools(self) -> list[dict]:
-        """
-        Define available tools — OUTPUT ONLY.
-        
-        Context is provided in system prompt.
-        Tools are only for writing, not reading.
-        """
         return [
+            {
+                "name": "get_daily",
+                "description": (
+                    "Return the verbatim content of Daily.md. "
+                    "Call this whenever the user wants to see today's agenda. "
+                    "Always return the result exactly as received — no modifications."
+                ),
+                "input_schema": {"type": "object", "properties": {}, "required": []},
+            },
             {
                 "name": "write_file",
                 "description": "Write/replace a file (Daily.md, Inbox.md, or Exchange.md)",
@@ -244,22 +250,16 @@ class AgendaAgent(BaseAgent):
         ]
     
     def _execute_tool(self, name: str, inputs: dict) -> str:
-        """
-        Execute a tool — OUTPUT ONLY.
-        
-        No read tools needed since context is in system prompt.
-        """
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
             return "Kein Agenda-Verzeichnis gefunden."
-        
-        file_map = {
-            "daily": "Daily.md",
-            "inbox": "Inbox.md",
-            "exchange": "Exchange.md",
-        }
-        
-        if name == "write_file":
+
+        file_map = {"daily": "Daily.md", "inbox": "Inbox.md", "exchange": "Exchange.md"}
+
+        if name == "get_daily":
+            return self._tool_get_daily()
+
+        elif name == "write_file":
             filename = file_map.get(inputs.get("file", "").lower())
             if not filename:
                 return "Ungültige Datei. Wähle: daily, inbox, exchange"
@@ -373,33 +373,17 @@ class AgendaAgent(BaseAgent):
     # MESSAGE HANDLING
     # =========================================================================
     
-    _READ_KEYWORDS = {
-        "agenda", "daily", "daily.md", "today", "heute", "tag",
-        "was steht", "was liegt", "was gibt", "zeig", "zeige",
-        "wie schaut", "was habe ich", "was hab ich", "überblick",
-        "tagesplan", "tagesagenda", "was ist heute",
-    }
-    _WRITE_KEYWORDS = {
-        "update", "aktualisier", "add", "füge", "hinzufüg", "eintrag",
-        "remove", "entfern", "lösch", "mark", "markier", "erledigt",
-        "change", "änder", "schreib", "write", "verschieb", "postpone",
-        "erstell", "create", "regenerier", "refresh",
-    }
-
-    def _is_read_query(self, query: str) -> bool:
-        """True if query is a read-only request for the current agenda."""
-        q = query.lower()
-        has_read = any(kw in q for kw in self._READ_KEYWORDS)
-        has_write = any(kw in q for kw in self._WRITE_KEYWORDS)
-        return has_read and not has_write
-
-    def _get_daily_content(self) -> str | None:
-        """Return raw Daily.md content, or None if not found."""
+    def _tool_get_daily(self) -> str:
+        """Return Daily.md verbatim. Sets _passthrough_content for state saving."""
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
-            return None
+            return "(Kein Agenda-Verzeichnis)"
         path = agenda_dir / "Daily.md"
-        return path.read_text(encoding="utf-8") if path.exists() else None
+        if not path.exists():
+            return "(Daily.md existiert noch nicht)"
+        content = path.read_text(encoding="utf-8")
+        self._passthrough_content = content
+        return content
 
     # =========================================================================
     # PASS-THROUGH STATE  (per user identity, Snowflake-based freshness)
@@ -477,32 +461,19 @@ class AgendaAgent(BaseAgent):
                 reply_to=msg.id,
             )
 
-        # Read-only: return Daily.md verbatim — no LLM, no modification risk.
-        # Capture the response ID so freshness can be derived from the queue.
-        if self._is_read_query(query):
-            content = self._get_daily_content()
-            if content:
-                response = self.respond(
-                    to=response_to,
-                    payload={"text": content},
-                    conversation_id=msg.conversation_id,
-                    reply_to=msg.id,
-                )
-                if identity:
-                    self._save_passthrough(identity, response.id, content)
-                return response
-
-        # LLM path: inject prior pass-through as synthetic context when the
-        # verbatim agenda is still the last thing sent to this identity.
         prior = self._load_passthrough(identity) if identity else None
+        self._passthrough_content = None  # reset; _tool_get_daily sets if called
         try:
             answer = self._process_with_tools(query, verbose, prior_content=prior)
-            return self.respond(
+            response = self.respond(
                 to=response_to,
                 payload={"text": answer},
                 conversation_id=msg.conversation_id,
                 reply_to=msg.id,
             )
+            if identity and self._passthrough_content:
+                self._save_passthrough(identity, response.id, self._passthrough_content)
+            return response
         except Exception as e:
             return self.respond(
                 to=response_to,
@@ -513,10 +484,7 @@ class AgendaAgent(BaseAgent):
 
     def handle_direct(self, query: str) -> str:
         """Direct query interface for Relay delegation."""
-        if self._is_read_query(query):
-            content = self._get_daily_content()
-            if content:
-                return content
+        self._passthrough_content = None
         return self._process_with_tools(query)
 
     def _process_with_tools(self, query: str, verbose: bool = False,

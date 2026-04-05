@@ -49,6 +49,14 @@ def get_today_iso() -> str:
     return date.today().isoformat()
 
 
+def get_daily_template() -> str | None:
+    """Read DailyTemplate.md from ~/Documents if it exists."""
+    template_path = Path.home() / "Documents" / "DailyTemplate.md"
+    if template_path.exists():
+        return template_path.read_text(encoding="utf-8")
+    return None
+
+
 # =============================================================================
 # AGENDA AGENT
 # =============================================================================
@@ -87,6 +95,8 @@ class AgendaAgent(BaseAgent):
         # Load all agenda files upfront
         agenda_context = self._load_agenda_context()
         
+        template = get_daily_template()
+
         parts = [
             "# Agenda Agent (cato)",
             "",
@@ -99,6 +109,21 @@ class AgendaAgent(BaseAgent):
             "",
             "---",
             "",
+        ]
+
+        if template:
+            parts += [
+                "## Daily.md Template (canonical structure)",
+                "",
+                "```markdown",
+                template,
+                "```",
+                "",
+                "---",
+                "",
+            ]
+
+        parts += [
             "## Current State (all 3 files)",
             "",
             agenda_context,
@@ -338,6 +363,67 @@ class AgendaAgent(BaseAgent):
             return "\n".join(relevant)
         return f"Section '{topic}' not found."
     
+
+    # =========================================================================
+    # SHADOW BRIEFING
+    # =========================================================================
+
+    def _extract_shadow_briefing(self, shadow_path: Path) -> str:
+        """
+        Parse Shadow.md and return a date-sorted briefing for the LLM.
+
+        Code extracts structure (date tags in **YYYY-MM-DD** format).
+        LLM decides meaning, selection, and presentation.
+
+        Categories: overdue | today | upcoming (7 days) | undated (capped at 20).
+        """
+        import re
+
+        if not shadow_path.exists():
+            return "(Shadow.md not available — vault scan pending)"
+
+        content = shadow_path.read_text(encoding="utf-8")
+        today_d = date.today()
+        today_iso = today_d.isoformat()
+        week_iso = (today_d + timedelta(days=7)).isoformat()
+
+        overdue: list[str] = []
+        due_today: list[str] = []
+        upcoming: list[str] = []
+        undated: list[str] = []
+
+        for line in content.splitlines():
+            if not line.startswith("- "):
+                continue
+            m = re.search(r'\*\*(\d{4}-\d{2}-\d{2})\*\*', line)
+            if m:
+                entry_date = m.group(1)
+                if entry_date < today_iso:
+                    overdue.append(line)
+                elif entry_date == today_iso:
+                    due_today.append(line)
+                elif entry_date <= week_iso:
+                    upcoming.append(line)
+                # beyond 7 days: omit from briefing
+            else:
+                undated.append(line)
+
+        parts = []
+        if overdue:
+            parts.append("**Overdue (action required):**\n" + "\n".join(overdue))
+        if due_today:
+            parts.append(f"**Due today ({today_iso}):**\n" + "\n".join(due_today))
+        if upcoming:
+            parts.append("**Upcoming this week:**\n" + "\n".join(upcoming))
+        if undated:
+            cap = undated[:20]
+            suffix = f"\n*(+{len(undated)-20} more)*" if len(undated) > 20 else ""
+            parts.append("**Open (no fixed date):**\n" + "\n".join(cap) + suffix)
+
+        if not parts:
+            return "(Shadow.md contains no actionable entries yet)"
+
+        return "\n\n".join(parts)
 
     # =========================================================================
     # HASH-BASED CHANGE DETECTION
@@ -601,9 +687,13 @@ class AgendaAgent(BaseAgent):
         else:
             context = "Changes detected in agenda files."
         
+        shadow_briefing = self._extract_shadow_briefing(agenda_dir / "Shadow.md")
+
         query = (
             f"It is {now.strftime('%H:%M')}. {context}\n\n"
             "You already have all current files in the context above.\n\n"
+            f"## Shadow briefing (pre-sorted by date)\n\n{shadow_briefing}\n\n"
+            "---\n\n"
             "Perform the following steps:\n"
             "1. Process Inbox: transfer each entry to Daily.md or clarify via Exchange.md. "
             "Then write Inbox.md EMPTY — header only: `# Inbox\\n\\n---`. No entry may remain.\n"

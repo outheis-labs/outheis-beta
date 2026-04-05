@@ -218,11 +218,11 @@ class RelayAgent(BaseAgent):
     ) -> str:
         """Generate a response using LLM with tools."""
         try:
-            return self._call_llm_with_tools(text, context, original_msg.conversation_id)
+            return self._call_llm_with_tools(text, context, original_msg.conversation_id, original_msg)
         except Exception as e:
             return f"An error occurred: {e}"
 
-    def _call_llm_with_tools(self, text: str, context: list[Message], conversation_id: str = "relay") -> str:
+    def _call_llm_with_tools(self, text: str, context: list[Message], conversation_id: str = "relay", original_msg: Message | None = None) -> str:
         """Call LLM API with tool support for vault/agenda access."""
         import os
         import sys
@@ -476,7 +476,8 @@ class RelayAgent(BaseAgent):
                         if self._dispatcher is None:
                             result = "Dispatcher not available."
                         else:
-                            self._send_interim(original_msg, "agenda")
+                            if original_msg is not None:
+                                self._send_interim(original_msg, "agenda")
                             result = self._dispatcher.dispatch_sync("agenda", block.input["query"], conversation_id)
                         # Return agenda content directly — no second LLM pass
                         if result and result != "Dispatcher not available.":

@@ -704,6 +704,8 @@ class RelayAgent(BaseAgent):
         for f in sorted(migration_dir.iterdir()):
             if f.name.startswith("x-") or f.suffix.lower() not in [".json", ".md"]:
                 continue
+            if f.name == "Migration.md":  # output file — never re-parse
+                continue
             try:
                 entries = (
                     self._parse_json_migration(f)
@@ -736,7 +738,7 @@ class RelayAgent(BaseAgent):
         if adopted_items:
             parts.append(f"{len(adopted_items)} entries accepted.")
         if rejected_count:
-            parts.append(f"{rejected_count} abgelehnt.")
+            parts.append(f"{rejected_count} rejected.")
         if files_processed:
             names = ", ".join(f.name for f in files_processed)
             parts.append(f"{len(files_processed)} file(s) parsed: {names}")
@@ -910,17 +912,31 @@ class RelayAgent(BaseAgent):
             f"File: {path.name}\n\n"
             f"{content}\n\n"
             "---\n"
-            "Extract all meaningful personal facts, preferences, rules, or behavioral guidelines "
-            "from this file. Ignore markdown formatting artifacts, table separators, section headers, "
-            "and structural elements. Each extracted entry must be a complete, self-contained statement.\n\n"
-            "Respond ONLY with a JSON array. Each element is an object with:\n"
-            '- "content": the entry as a clear statement\n'
-            '- "type": one of "user" (facts about the person), "feedback" (behavioral preferences), '
-            '"context" (current focus/projects), "rule:agenda", "rule:data", "rule:relay"\n\n'
-            "Example:\n"
-            '[{"content": "Works at senswork as Director Innovation Lab", "type": "user"},\n'
-            ' {"content": "Prefers short, direct answers", "type": "feedback"}]\n\n'
-            "If no meaningful entries found, respond with: []"
+            "Read this file as a whole. Your task: distil the KEY KNOWLEDGE into a small number "
+            "of rich, self-contained statements — the kind a new agent instance needs to know.\n\n"
+            "Rules:\n"
+            "- Synthesise related lines into ONE statement. A weekly schedule described over "
+            "7 lines becomes one entry: 'Weekly schedule: Mon/Wed/Thu = senswork until 18:00, ...'\n"
+            "- Aim for 3–10 entries total, regardless of how long the file is.\n"
+            "- Each entry must be fully self-contained — no pronouns without referents, "
+            "no dangling references.\n"
+            "- Do NOT extract: section headings, table rows, list bullets in isolation, "
+            "markdown formatting artifacts, meta-instructions ('mark with [x]'), "
+            "or structural elements.\n"
+            "- Do NOT split what belongs together. A project description with name, scope, "
+            "team, and files is ONE entry.\n\n"
+            "Respond ONLY with a JSON array. Each element:\n"
+            '- "content": the synthesised statement (complete, no shortcuts)\n'
+            '- "type": "user" (facts about the person/their life), '
+            '"feedback" (how they want the system to behave), '
+            '"context" (current projects/focus), '
+            '"rule:agenda", "rule:data", or "rule:relay" (agent-specific rules)\n\n'
+            "Example — a file with weekly schedule info produces:\n"
+            '[{"content": "Weekly schedule: Mon/Wed/Thu = senswork (until 18:00), '
+            'Tue = SCHATZL (hard stop 15:45), Fri = flexible, Sat = SCHATZL/rest. '
+            'Hard daily cutoff: 18:30 (dinner).", "type": "user"}]\n\n'
+            "If the file contains no extractable knowledge (only formatting, empty structure, "
+            "or already-processed migration output): respond with []"
         )
 
         try:

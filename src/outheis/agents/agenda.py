@@ -209,6 +209,7 @@ class AgendaAgent(BaseAgent):
         The scan runs in a background thread via the existing task-locking
         mechanism — no double-run risk even if called repeatedly.
         """
+        import sys
         import uuid
         from outheis.core.config import get_messages_path
         from outheis.core.message import create_agent_message

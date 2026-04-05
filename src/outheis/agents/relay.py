@@ -135,7 +135,7 @@ class RelayAgent(BaseAgent):
             return False
 
     def _send_interim(self, msg: Message, agent_name: str) -> None:
-        """Write a 'please wait' notification to transport before a slow local-model call."""
+        """Write a 'please wait' notification to transport (called by timer)."""
         if not self._is_ollama_agent(agent_name):
             return
         try:
@@ -156,26 +156,39 @@ class RelayAgent(BaseAgent):
         except Exception:
             pass
 
+    def _schedule_interim(self, msg: Message, agent_name: str, delay: float = 5.0):
+        """Send interim after delay seconds �� cancel the returned timer if response arrives first."""
+        import threading
+        timer = threading.Timer(delay, self._send_interim, args=[msg, agent_name])
+        timer.daemon = True
+        timer.start()
+        return timer
+
     def _handle_with_data_agent(self, text: str, msg: Message) -> str:
         """Delegate to Data agent (zeno) via dispatcher."""
         if self._dispatcher is None:
             return "Dispatcher not available."
-        self._send_interim(msg, "data")
-        return self._dispatcher.dispatch_sync("data", text, msg.conversation_id)
+        timer = self._schedule_interim(msg, "data")
+        result = self._dispatcher.dispatch_sync("data", text, msg.conversation_id)
+        timer.cancel()
+        return result
 
     def _handle_with_agenda_agent(self, text: str, msg: Message) -> str:
         """Delegate to Agenda agent via dispatcher."""
         if self._dispatcher is None:
             return "Dispatcher not available."
-        self._send_interim(msg, "agenda")
-        return self._dispatcher.dispatch_sync("agenda", text, msg.conversation_id)
+        timer = self._schedule_interim(msg, "agenda")
+        result = self._dispatcher.dispatch_sync("agenda", text, msg.conversation_id)
+        timer.cancel()
+        return result
 
     def _handle_with_code_agent(self, text: str, msg: Message) -> str:
         """Delegate to Code agent (alan) via dispatcher."""
         if self._dispatcher is None:
             return "Dispatcher not available."
-        self._send_interim(msg, "code")
+        timer = self._schedule_interim(msg, "code")
         result = self._dispatcher.dispatch_sync("code", text, msg.conversation_id)
+        timer.cancel()
         if result.startswith("Agent 'code' not available"):
             return "Code agent (alan) is not enabled. Enable it in config.json under agents.code.enabled: true."
         return result
@@ -476,9 +489,10 @@ class RelayAgent(BaseAgent):
                         if self._dispatcher is None:
                             result = "Dispatcher not available."
                         else:
-                            if original_msg is not None:
-                                self._send_interim(original_msg, "agenda")
+                            timer = self._schedule_interim(original_msg, "agenda") if original_msg is not None else None
                             result = self._dispatcher.dispatch_sync("agenda", block.input["query"], conversation_id)
+                            if timer is not None:
+                                timer.cancel()
                         # Return agenda content directly — no second LLM pass
                         if result and result != "Dispatcher not available.":
                             return result

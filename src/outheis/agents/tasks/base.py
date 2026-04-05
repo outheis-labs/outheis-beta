@@ -71,7 +71,7 @@ class TaskSource:
     def to_markdown(self) -> str:
         """Format source info for directive.md."""
         lines = [
-            "## Quelle",
+            "## Source",
             "",
             f"- **Timestamp:** {self.timestamp.isoformat()}",
             f"- **Interface:** {self.interface}",
@@ -176,16 +176,16 @@ class Task(ABC):
             lines.append("")
         
         lines.extend([
-            "## Konfiguration",
+            "## Configuration",
             "",
             f"- **Schedule:** {self.schedule.value}",
-            f"- **Zeiten:** {', '.join(self.times) if self.times else 'not set'}",
-            f"- **Ziel:** {self.target_agent}",
-            f"- **Aktiv:** {'ja' if self.enabled else 'nein'}",
+            f"- **Times:** {', '.join(self.times) if self.times else 'not set'}",
+            f"- **Target:** {self.target_agent}",
+            f"- **Active:** {'yes' if self.enabled else 'no'}",
             "",
-            "## Historie",
+            "## History",
             "",
-            f"- Erstellt: {self.source.timestamp.isoformat() if self.source else 'unbekannt'}",
+            f"- Created: {self.source.timestamp.isoformat() if self.source else 'unknown'}",
             f"- Executions: {self.run_count}",
         ])
         

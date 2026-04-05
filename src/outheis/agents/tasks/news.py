@@ -1,7 +1,7 @@
 """
 News headlines task — fetches headlines from news sites.
 
-PoC: Süddeutsche Zeitung (sz.de)
+PoC: Sueddeutsche Zeitung (sz.de)
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class NewsHeadlinesTask(Task):
     """
     Fetch top headlines from a news source.
     
-    Default: sz.de (Süddeutsche Zeitung)
+    Default: sz.de (Sueddeutsche Zeitung)
     """
     
     source_url: str = "https://www.sz.de"

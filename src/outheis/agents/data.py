@@ -556,7 +556,7 @@ class DataAgent(BaseAgent):
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         
-        return "Maximale Iterationen erreicht."
+        return "Max iterations reached."
     
     # =========================================================================
     # LEARNING
@@ -694,7 +694,7 @@ class DataAgent(BaseAgent):
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         lines = [
             "# Shadow — Vault Chronological Index",
-            f"*Zuletzt aktualisiert: {timestamp}*",
+            f"*Last updated: {timestamp}*",
             "",
         ]
         for name in sorted(sections):
@@ -726,9 +726,9 @@ class DataAgent(BaseAgent):
             "(\"after completing X\"), follow-ups, open tasks with a time dimension, "
             "overdue items, project phases not yet started.\n\n"
             "Format — respond ONLY with a markdown bullet list, no other text:\n"
-            "- ⏰ **2026-05-15** Mokatassen bei Suzanne Bühler abholen `#action-required`\n"
-            "- 📅 **—** Willi Stemmer: Workshop-Finanzierung besprechen nach Rückkehr\n"
-            "- 📋 **nach Tisch Strauss** Galina Schwarz: Projektstart Kommode + Truhe\n\n"
+            "- ⏰ **2026-05-15** Pick up cups from Suzanne `#action-required`\n"
+            "- 📅 **—** Call with client: discuss project funding after return\n"
+            "- 📋 **after meeting** Project kickoff: cabinet + chest of drawers\n\n"
             "Icons: ⏰ deadline · 📅 appointment · 🎂 birthday · 🔄 recurring · 📋 task/pending\n"
             "If no time-relevant entries are present: respond with NONE"
         )

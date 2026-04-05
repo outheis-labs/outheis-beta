@@ -393,7 +393,7 @@ class ActionAgent(BaseAgent):
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         
-        return "Maximale Iterationen erreicht."
+        return "Max iterations reached."
     
     def _handle_legacy_action(self, msg: Message, action: str, payload: dict) -> Message | None:
         """Handle legacy action-based messages."""

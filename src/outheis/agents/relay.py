@@ -293,7 +293,7 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "memory_traits",
-                "description": "Show recognized traits and memory summary. Use when user asks 'memory traits', 'zeige traits', 'was weißt du über mich', 'what do you know about me', or wants to see their profile/personality.",
+                "description": "Show recognized traits and memory summary. Use when user asks 'memory traits', 'what do you know about me', or wants to see their profile/personality.",
                 "input_schema": {
                     "type": "object",
                     "properties": {},

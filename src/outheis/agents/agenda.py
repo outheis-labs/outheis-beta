@@ -628,7 +628,7 @@ class AgendaAgent(BaseAgent):
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
         
-        return "Maximale Iterationen erreicht."
+        return "Max iterations reached."
     
     # =========================================================================
     # SCHEDULED TASKS

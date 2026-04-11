@@ -195,9 +195,13 @@ class MemoryStore:
         """
         self._ensure_loaded()
         
-        # Default decay for context type
+        # Default decay for context type — configurable via human.memory_context_decay_days
         if memory_type == "context" and decay_days is None and not is_explicit:
-            decay_days = 14  # Context expires after 2 weeks by default
+            try:
+                from outheis.core.config import load_config
+                decay_days = load_config().human.memory_context_decay_days
+            except Exception:
+                decay_days = 14
         
         entry = MemoryEntry(
             content=content,

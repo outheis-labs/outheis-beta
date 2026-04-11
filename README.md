@@ -7,7 +7,7 @@ Designed for both personal assistant (1:1) and domain expert (many:1) usage.
 
 ---
 
-![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/ba35428e-b320-4be3-ae9a-6d4ec61a5962)
+![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/d41843f0-bb11-4900-8d2c-6103c5adbf4f)
 
 ---
 

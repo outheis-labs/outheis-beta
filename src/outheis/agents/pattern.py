@@ -324,12 +324,12 @@ If nothing is ready for promotion:
         """Append a rule to the appropriate user rules file."""
         rules_dir = get_rules_dir()
         rules_dir.mkdir(parents=True, exist_ok=True)
-        
+
         rule_file = rules_dir / f"{agent}.md"
-        
+
         timestamp = datetime.now().strftime("%Y-%m-%d")
         entry = f"- {rule}  <!-- {timestamp} -->\n"
-        
+
         if rule_file.exists():
             current = rule_file.read_text(encoding="utf-8")
             # Don't add duplicates
@@ -339,6 +339,13 @@ If nothing is ready for promotion:
         else:
             header = f"# User Rules for {agent.title()} Agent\n\n"
             rule_file.write_text(header + entry, encoding="utf-8")
+
+    def _rewrite_user_rules(self, agent: str, consolidated_content: str) -> None:
+        """Overwrite a rules file with consolidated content."""
+        rules_dir = get_rules_dir()
+        rules_dir.mkdir(parents=True, exist_ok=True)
+        rule_file = rules_dir / f"{agent}.md"
+        rule_file.write_text(consolidated_content, encoding="utf-8")
 
     # =========================================================================
     # SKILL DISTILLATION — THE CENTRAL LEARNING MECHANISM
@@ -665,7 +672,12 @@ If nothing new:
         rules_count = self.consider_user_rules()
         if rules_count > 0:
             print(f"[{timestamp}] Pattern agent: created {rules_count} new user rules")
-        
+
+        # 4b. Consolidate rules (remove semantic duplicates and contradictions)
+        rules_consolidated = self.consolidate_rules()
+        if rules_consolidated > 0:
+            print(f"[{timestamp}] Pattern agent: consolidated {rules_consolidated} rule files")
+
         # 5. Validate own strategies (learn how to learn)
         self.validate_strategies()
         
@@ -679,103 +691,210 @@ If nothing new:
         Review memory for duplicates, contradictions, and outdated entries.
         
         Uses LLM judgment to decide what to merge, update, or remove.
-        Returns number of entries changed.
+        Returns number of memory files rewritten.
         """
         store = get_memory_store()
-        all_memory = store.get_all(include_expired=True)
-        
-        # Build a summary of all entries with indices for reference
-        entries_by_type: dict[str, list[tuple[int, dict]]] = {}
-        for memory_type in ["user", "feedback", "context"]:
+        all_memory = store.get_all()
+
+        # Build markdown representation per type
+        files_content: dict[str, str] = {}
+        for memory_type in ("user", "feedback", "context"):
             entries = all_memory.get(memory_type, [])
-            entries_by_type[memory_type] = [
-                (i, {"content": e.content, "created_at": e.created_at.isoformat(), "confidence": e.confidence})
-                for i, e in enumerate(entries)
-            ]
-        
-        if not any(entries_by_type.values()):
+            if entries:
+                lines = [e.to_line().rstrip() for e in entries]
+                files_content[memory_type] = "\n".join(lines)
+
+        if not files_content:
             return 0
-        
-        prompt = f"""Review this memory for consolidation. Look for:
+
+        prompt = f"""Review these memory files for consolidation. Look for:
 - Duplicates (same information stated differently)
-- Contradictions (conflicting facts)
+- Contradictions (conflicting facts — keep the more specific or more recent)
 - Superseded entries (newer info makes older obsolete)
-- Expired or no longer relevant context
+- Context entries no longer relevant
 
-CURRENT MEMORY:
-{json.dumps(entries_by_type, indent=2, default=str)}
+CURRENT MEMORY (one line per entry, with date):
+{json.dumps(files_content, indent=2, ensure_ascii=False)}
 
-For each action needed, respond with:
+For each file that needs rewriting, return the full consolidated content
+(only the list lines, no header). Preserve date comments on kept entries.
+
 {{
-  "actions": [
-    {{"type": "remove", "memory_type": "context", "index": 0, "reason": "Duplicate of index 1"}},
-    {{"type": "remove", "memory_type": "user", "index": 2, "reason": "Contradicted by newer entry"}}
-  ],
-  "reasoning": "Brief explanation of what you consolidated"
+  "rewrites": [
+    {{
+      "type": "context",
+      "content": "- remaining entry  <!-- 2026-04-07 -->",
+      "removed_count": 2,
+      "reasoning": "Removed 2 outdated entries"
+    }}
+  ]
 }}
 
 If nothing needs consolidation:
 {{
-  "actions": [],
+  "rewrites": [],
   "reasoning": "Memory is clean"
 }}
 
-Be conservative - only remove entries when clearly redundant or wrong."""
+Be conservative — only rewrite when there is genuine redundancy or contradiction."""
 
         try:
             from outheis.core.llm import call_llm
-            
+
             response = call_llm(
                 model=self.model_alias,
                 agent=self.name,
                 system=self.get_system_prompt(),
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=1000,
+                max_tokens=2000,
             )
-            
+
             response_text = response.content[0].text.strip()
-            
             if not response_text:
                 return 0
-            
+
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(lines[1:-1]).strip()
             if response_text.startswith("json"):
                 response_text = response_text[4:].strip()
-            
+
             data = json.loads(response_text)
-            actions = data.get("actions", [])
-            
-            if not actions:
+            rewrites = data.get("rewrites", [])
+
+            if not rewrites:
                 return 0
-            
-            # Process removals in reverse order to maintain indices
-            # Group by type and sort by index descending
-            removals: dict[str, list[int]] = {}
-            for action in actions:
-                if action.get("type") == "remove":
-                    mt = action.get("memory_type")
-                    idx = action.get("index")
-                    if mt and idx is not None:
-                        if mt not in removals:
-                            removals[mt] = []
-                        removals[mt].append(idx)
-            
+
             count = 0
-            for memory_type, indices in removals.items():
-                # Sort descending so we remove from end first
-                for idx in sorted(indices, reverse=True):
-                    if store.remove(memory_type, idx):
-                        count += 1
-            
+            for rewrite in rewrites:
+                memory_type = rewrite.get("type", "")
+                content = rewrite.get("content", "")
+                reasoning = rewrite.get("reasoning", "")
+                removed = rewrite.get("removed_count", 0)
+                if memory_type in ("user", "feedback", "context") and content is not None:
+                    written = store.rewrite_from_markdown(memory_type, content)
+                    count += 1
+                    if reasoning:
+                        self._append_meta_insight(
+                            f"Consolidated {memory_type} memory: removed {removed} entries, kept {written} | {reasoning}"
+                        )
+
             return count
-            
+
         except json.JSONDecodeError:
             pass
         except Exception as e:
             print(f"Pattern agent consolidation error: {e}")
-        
+
+        return 0
+
+    def consolidate_rules(self) -> int:
+        """
+        Review user rules for semantic duplicates and contradictions.
+
+        For each agent's rules file, uses LLM judgment to produce a
+        consolidated version — removing redundant entries, merging near-
+        duplicates, resolving contradictions. Rewrites the file in place.
+
+        Returns number of rule files rewritten.
+        """
+        rules_dir = get_rules_dir()
+        if not rules_dir.exists():
+            return 0
+
+        rule_files = list(rules_dir.glob("*.md"))
+        if not rule_files:
+            return 0
+
+        # Build per-agent content map
+        agents_content: dict[str, str] = {}
+        for rule_file in rule_files:
+            content = rule_file.read_text(encoding="utf-8").strip()
+            if content:
+                agents_content[rule_file.stem] = content
+
+        if not agents_content:
+            return 0
+
+        prompt = f"""Review these user rule files for semantic redundancy and contradictions.
+
+For EACH agent file listed, decide whether it needs consolidation:
+- Merge rules that say the same thing in different words
+- Remove rules made obsolete by a more general rule
+- Resolve contradictions (keep the more recent or more specific)
+- Preserve the timestamp comments <!-- YYYY-MM-DD --> on kept rules
+
+CURRENT RULES:
+{json.dumps(agents_content, indent=2, ensure_ascii=False)}
+
+Respond with ONLY the files that need rewriting:
+{{
+  "rewrites": [
+    {{
+      "agent": "common",
+      "content": "# User Rules for Common Agent\\n\\n- consolidated rule 1  <!-- 2026-04-03 -->\\n- consolidated rule 2  <!-- 2026-04-07 -->\\n",
+      "removed_count": 4,
+      "reasoning": "Merged 3 near-duplicate scheduling rules into 1, removed 1 obsolete entry"
+    }}
+  ]
+}}
+
+If nothing needs consolidation:
+{{
+  "rewrites": [],
+  "reasoning": "Rules are clean"
+}}
+
+Be conservative — only rewrite when the file has genuine redundancy (5+ rules covering the same principle). Preserve all semantically distinct rules."""
+
+        try:
+            from outheis.core.llm import call_llm
+
+            response = call_llm(
+                model=self.model_alias,
+                agent=self.name,
+                system=self.get_system_prompt(),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=4000,
+            )
+
+            response_text = response.content[0].text.strip()
+            if not response_text:
+                return 0
+
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                response_text = "\n".join(lines[1:-1]).strip()
+            if response_text.startswith("json"):
+                response_text = response_text[4:].strip()
+
+            data = json.loads(response_text)
+            rewrites = data.get("rewrites", [])
+
+            if not rewrites:
+                return 0
+
+            count = 0
+            for rewrite in rewrites:
+                agent = rewrite.get("agent", "")
+                content = rewrite.get("content", "")
+                reasoning = rewrite.get("reasoning", "")
+                removed = rewrite.get("removed_count", 0)
+                if agent and content:
+                    self._rewrite_user_rules(agent, content)
+                    count += 1
+                    if reasoning:
+                        self._append_meta_insight(
+                            f"Consolidated rules for {agent}: removed {removed} entries | {reasoning}"
+                        )
+
+            return count
+
+        except json.JSONDecodeError:
+            pass
+        except Exception as e:
+            print(f"Pattern agent rule consolidation error: {e}")
+
         return 0
 
     # =========================================================================

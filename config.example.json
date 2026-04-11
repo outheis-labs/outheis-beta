@@ -6,8 +6,7 @@
     "timezone": "Europe/Berlin",
     "vault": [
       "~/Documents/Vault"
-    ],
-    "memory_context_decay_days": 14
+    ]
   },
   "signal": {
     "enabled": false,

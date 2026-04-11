@@ -90,7 +90,6 @@ class HumanConfig:
     language: str = "en"
     timezone: str = "Europe/Berlin"
     vault: list[str] = field(default_factory=lambda: ["~/Documents/Vault"])
-    memory_context_decay_days: int = 14  # Days before context memory expires
 
     def primary_vault(self) -> Path:
         """Get primary vault path. Respects OUTHEIS_VAULT env var."""
@@ -357,7 +356,6 @@ def load_config() -> Config:
         language=human_data.get("language", "en"),
         timezone=human_data.get("timezone", "Europe/Berlin"),
         vault=human_data.get("vault", ["~/Documents/Vault"]),
-        memory_context_decay_days=human_data.get("memory_context_decay_days", 14),
     )
 
     # Signal

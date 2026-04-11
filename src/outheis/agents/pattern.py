@@ -324,12 +324,12 @@ If nothing is ready for promotion:
         """Append a rule to the appropriate user rules file."""
         rules_dir = get_rules_dir()
         rules_dir.mkdir(parents=True, exist_ok=True)
-        
+
         rule_file = rules_dir / f"{agent}.md"
-        
+
         timestamp = datetime.now().strftime("%Y-%m-%d")
         entry = f"- {rule}  <!-- {timestamp} -->\n"
-        
+
         if rule_file.exists():
             current = rule_file.read_text(encoding="utf-8")
             # Don't add duplicates
@@ -339,6 +339,13 @@ If nothing is ready for promotion:
         else:
             header = f"# User Rules for {agent.title()} Agent\n\n"
             rule_file.write_text(header + entry, encoding="utf-8")
+
+    def _rewrite_user_rules(self, agent: str, consolidated_content: str) -> None:
+        """Overwrite a rules file with consolidated content."""
+        rules_dir = get_rules_dir()
+        rules_dir.mkdir(parents=True, exist_ok=True)
+        rule_file = rules_dir / f"{agent}.md"
+        rule_file.write_text(consolidated_content, encoding="utf-8")
 
     # =========================================================================
     # SKILL DISTILLATION — THE CENTRAL LEARNING MECHANISM
@@ -665,7 +672,12 @@ If nothing new:
         rules_count = self.consider_user_rules()
         if rules_count > 0:
             print(f"[{timestamp}] Pattern agent: created {rules_count} new user rules")
-        
+
+        # 4b. Consolidate rules (remove semantic duplicates and contradictions)
+        rules_consolidated = self.consolidate_rules()
+        if rules_consolidated > 0:
+            print(f"[{timestamp}] Pattern agent: consolidated {rules_consolidated} rule files")
+
         # 5. Validate own strategies (learn how to learn)
         self.validate_strategies()
         
@@ -776,6 +788,115 @@ Be conservative - only remove entries when clearly redundant or wrong."""
         except Exception as e:
             print(f"Pattern agent consolidation error: {e}")
         
+        return 0
+
+    def consolidate_rules(self) -> int:
+        """
+        Review user rules for semantic duplicates and contradictions.
+
+        For each agent's rules file, uses LLM judgment to produce a
+        consolidated version — removing redundant entries, merging near-
+        duplicates, resolving contradictions. Rewrites the file in place.
+
+        Returns number of rule files rewritten.
+        """
+        rules_dir = get_rules_dir()
+        if not rules_dir.exists():
+            return 0
+
+        rule_files = list(rules_dir.glob("*.md"))
+        if not rule_files:
+            return 0
+
+        # Build per-agent content map
+        agents_content: dict[str, str] = {}
+        for rule_file in rule_files:
+            content = rule_file.read_text(encoding="utf-8").strip()
+            if content:
+                agents_content[rule_file.stem] = content
+
+        if not agents_content:
+            return 0
+
+        prompt = f"""Review these user rule files for semantic redundancy and contradictions.
+
+For EACH agent file listed, decide whether it needs consolidation:
+- Merge rules that say the same thing in different words
+- Remove rules made obsolete by a more general rule
+- Resolve contradictions (keep the more recent or more specific)
+- Preserve the timestamp comments <!-- YYYY-MM-DD --> on kept rules
+
+CURRENT RULES:
+{json.dumps(agents_content, indent=2, ensure_ascii=False)}
+
+Respond with ONLY the files that need rewriting:
+{{
+  "rewrites": [
+    {{
+      "agent": "common",
+      "content": "# User Rules for Common Agent\\n\\n- consolidated rule 1  <!-- 2026-04-03 -->\\n- consolidated rule 2  <!-- 2026-04-07 -->\\n",
+      "removed_count": 4,
+      "reasoning": "Merged 3 near-duplicate scheduling rules into 1, removed 1 obsolete entry"
+    }}
+  ]
+}}
+
+If nothing needs consolidation:
+{{
+  "rewrites": [],
+  "reasoning": "Rules are clean"
+}}
+
+Be conservative — only rewrite when the file has genuine redundancy (5+ rules covering the same principle). Preserve all semantically distinct rules."""
+
+        try:
+            from outheis.core.llm import call_llm
+
+            response = call_llm(
+                model=self.model_alias,
+                agent=self.name,
+                system=self.get_system_prompt(),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=4000,
+            )
+
+            response_text = response.content[0].text.strip()
+            if not response_text:
+                return 0
+
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                response_text = "\n".join(lines[1:-1]).strip()
+            if response_text.startswith("json"):
+                response_text = response_text[4:].strip()
+
+            data = json.loads(response_text)
+            rewrites = data.get("rewrites", [])
+
+            if not rewrites:
+                return 0
+
+            count = 0
+            for rewrite in rewrites:
+                agent = rewrite.get("agent", "")
+                content = rewrite.get("content", "")
+                reasoning = rewrite.get("reasoning", "")
+                removed = rewrite.get("removed_count", 0)
+                if agent and content:
+                    self._rewrite_user_rules(agent, content)
+                    count += 1
+                    if reasoning:
+                        self._append_meta_insight(
+                            f"Consolidated rules for {agent}: removed {removed} entries | {reasoning}"
+                        )
+
+            return count
+
+        except json.JSONDecodeError:
+            pass
+        except Exception as e:
+            print(f"Pattern agent rule consolidation error: {e}")
+
         return 0
 
     # =========================================================================

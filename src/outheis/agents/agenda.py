@@ -911,7 +911,11 @@ class AgendaAgent(BaseAgent):
         elif comment_trigger:
             context = "User comments detected in Agenda.md — please process."
         else:
-            context = "Changes detected in agenda files."
+            context = (
+                "Changes detected in agenda files. "
+                "Items may have been completed or deferred — check if 'Heute' has capacity "
+                "and pull additional candidates from Shadow.md to fill any freed slots."
+            )
         
         # Read current Agenda.md — stays on disk untouched until LLM writes the new version.
         agenda_path = agenda_dir / "Agenda.md"

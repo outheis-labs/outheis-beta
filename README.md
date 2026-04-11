@@ -1,3 +1,4 @@
+![outheis-leaving](https://github.com/user-attachments/assets/169ff628-6c8b-47ba-9b7b-52c71f4dace2)
 # οὐθείς (outheis)
 
 *Nobody — and everybody who refuses to be captured.*
@@ -7,7 +8,7 @@ Designed for both personal assistant (1:1) and domain expert (many:1) usage.
 
 ---
 
-![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/d41843f0-bb11-4900-8d2c-6103c5adbf4f)
+![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)]([https://github.com/user-attachments/assets/d41843f0-bb11-4900-8d2c-6103c5adbf4f](https://github.com/user-attachments/assets/fb41f325-3015-468a-830c-5001a95354f9))
 
 ---
 

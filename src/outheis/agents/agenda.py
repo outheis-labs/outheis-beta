@@ -938,6 +938,21 @@ class AgendaAgent(BaseAgent):
         today_iso = date.today().isoformat()
         week_iso = (date.today() + timedelta(days=7)).isoformat()
 
+        # Authoritative weekday lookup for the next 14 days — use this, never calculate.
+        from outheis.core.i18n import WEEKDAYS as _WDAYS
+        try:
+            from outheis.core.config import load_config as _lc
+            _lang = _lc().human.language[:2].lower()
+        except Exception:
+            _lang = "de"
+        _wnames = _WDAYS.get(_lang, _WDAYS["en"])
+        _weekday_ref = "\n".join(
+            f"  {(date.today() + timedelta(days=i)).isoformat()} = "
+            f"{_wnames[(date.today() + timedelta(days=i)).weekday()]}, "
+            f"{(date.today() + timedelta(days=i)).strftime('%d.%m.%Y')}"
+            for i in range(14)
+        )
+
         pre_content_block = (
             f"\n\n---\n## Current Agenda.md (with user annotations — process these)\n\n"
             f"```markdown\n{pre_scaffold_content}\n```\n"
@@ -950,7 +965,8 @@ class AgendaAgent(BaseAgent):
         )
         query = (
             f"It is {now.strftime('%H:%M')}. {context}\n\n"
-            f"Today: {today_iso}. This-week window: {today_iso} to {week_iso}."
+            f"Today: {today_iso}. This-week window: {today_iso} to {week_iso}.\n\n"
+            f"Authoritative weekday reference (do not calculate, use this table):\n{_weekday_ref}"
             f"{pre_content_block}"
             f"{scaffold_block}\n\n"
             "Shadow.md is also in your context above. Write the complete Agenda.md via write_file.\n"

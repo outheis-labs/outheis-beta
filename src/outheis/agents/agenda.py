@@ -587,10 +587,13 @@ class AgendaAgent(BaseAgent):
         if heute_count >= 5:
             return False  # already at capacity
 
-        # Check Shadow.md for any items with #date ≤ today or #action-required
+        # Check Shadow.md for any items that qualify for Heute
+        # Matches priority 1 + 2 from the query rule: overdue, due today,
+        # #action-required, or within ~10 days (near deadline).
         shadow_path = agenda_dir / "Shadow.md"
         if not shadow_path.exists():
             return False
+        near_limit = today + timedelta(days=10)
         shadow_text = shadow_path.read_text(encoding="utf-8")
         for line in shadow_text.splitlines():
             if "✓" in line:
@@ -600,7 +603,7 @@ class AgendaAgent(BaseAgent):
             m = DATE_RE.search(line)
             if m:
                 try:
-                    if date.fromisoformat(m.group(1)) <= today:
+                    if date.fromisoformat(m.group(1)) <= near_limit:
                         return True
                 except ValueError:
                     pass
@@ -1057,8 +1060,11 @@ class AgendaAgent(BaseAgent):
             "     birthday in autumn, etc.) — item is preserved in Shadow, reappears when due.\n"
             "   Note: moving between sections or to Shadow is structural maintenance, NOT deleting.\n"
             "   The 'never remove' rule applies only to items going permanently lost — not to correct placement.\n"
-            "   Then add from Shadow.md: overdue (date < today), due today, undated #action-required\n"
-            "   — not already listed. Overdue items have absolute priority over undated ones.\n"
+            "   Then fill remaining slots from Shadow.md (up to max 5 total).\n"
+            "   Priority 1 — must include: overdue (date < today), due today, #action-required.\n"
+            "   Priority 2 — fill remaining slots with: items due within ~10 days, items that unblock\n"
+            "   something else, or items that have been open for a long time without progress.\n"
+            "   Do not add items further out unless they meet priority 1 or 2.\n"
             "   Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
             "   Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
             "2. 🗓️ This Week — plain lines.\n"

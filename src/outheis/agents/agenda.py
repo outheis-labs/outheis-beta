@@ -529,6 +529,101 @@ class AgendaAgent(BaseAgent):
         return f"Section '{topic}' not found."
     
 
+    def _prefilter_heute(self, content: str, today: "date") -> str:
+        """
+        Enforce Heute eligibility before passing content to the LLM.
+
+        Scans the Heute section of content and relocates items:
+        - #date ≤ today  → stays in Heute   (overdue / due today)
+        - #date within 7 days → moved to Diese Woche
+        - #date > 7 days  → dropped from Agenda (lives in Shadow)
+        - no #date and no #action-required → stays in Heute (semantically incomplete)
+        - #action-required → stays in Heute
+
+        Returns the full content with sections rewritten.
+        """
+        import re
+
+        DATE_RE = re.compile(r'#date-(\d{4}-\d{2}-\d{2})')
+        week_limit = today + timedelta(days=7)
+
+        lines = content.splitlines()
+        result: list[str] = []
+        overflow_to_woche: list[str] = []
+
+        # State machine over sections
+        HEUTE_RE = re.compile(r'^##\s+📅')
+        WOCHE_RE = re.compile(r'^##\s+🗓️')
+        SECTION_RE = re.compile(r'^(##|---)')
+
+        in_heute = False
+        in_woche = False
+
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+
+            if HEUTE_RE.match(line):
+                in_heute = True
+                in_woche = False
+                result.append(line)
+                i += 1
+                continue
+
+            if WOCHE_RE.match(line):
+                in_heute = False
+                in_woche = True
+                result.append(line)
+                # Inject overflow items right after the section header
+                if overflow_to_woche:
+                    # Skip blank line if present, inject, re-add blank
+                    if i + 1 < len(lines) and lines[i + 1].strip() == "":
+                        result.append(lines[i + 1])
+                        i += 1
+                    for item in overflow_to_woche:
+                        result.append(item)
+                    overflow_to_woche = []
+                i += 1
+                continue
+
+            if SECTION_RE.match(line) and (in_heute or in_woche):
+                in_heute = False
+                in_woche = False
+                result.append(line)
+                i += 1
+                continue
+
+            if in_heute and line.strip():
+                m = DATE_RE.search(line)
+                if m:
+                    try:
+                        item_date = date.fromisoformat(m.group(1))
+                    except ValueError:
+                        result.append(line)
+                        i += 1
+                        continue
+                    if item_date <= today:
+                        result.append(line)       # keep: overdue or today
+                    elif item_date <= week_limit:
+                        overflow_to_woche.append(line)  # move: this week
+                    # else: drop — more than 7 days out, stays in Shadow
+                else:
+                    result.append(line)           # no date tag → semantically incomplete, keep
+                i += 1
+                continue
+
+            result.append(line)
+            i += 1
+
+        # Edge case: Diese Woche section never appeared but we have overflow
+        if overflow_to_woche:
+            result.append("")
+            result.append("## 🗓️ Diese Woche")
+            result.append("")
+            result.extend(overflow_to_woche)
+
+        return "\n".join(result)
+
     def _build_agenda_md(self, agenda_dir: Path) -> str:
         """
         Build structural scaffold for Agenda.md: header, date, week number, section placeholders.
@@ -924,6 +1019,12 @@ class AgendaAgent(BaseAgent):
         # is running will be rescued and appended by _write_file (see _agenda_snapshot).
         self._agenda_snapshot = pre_scaffold_content
 
+        # Pre-filter: enforce Heute eligibility in code before handing to LLM.
+        # Future-dated items are relocated to Diese Woche or dropped (> 7 days).
+        # Semantically incomplete items (no date, no #action-required) stay put.
+        if pre_scaffold_content:
+            pre_scaffold_content = self._prefilter_heute(pre_scaffold_content, date.today())
+
         # Build scaffold in memory only — do NOT write to disk yet.
         # Agenda.md keeps its current content until write_file is called by the LLM.
         try:
@@ -963,22 +1064,16 @@ class AgendaAgent(BaseAgent):
             "   A `>` reply like 'Show all open Shadow items for qualification' means:\n"
             "   include ALL open Shadow.md items (without ✓) in Today regardless of date — this is a one-time qualification pass.\n"
             "1. 📅 Today — plain lines, no dashes, no checkboxes.\n"
-            "   Evaluate each existing Today item for eligibility — do NOT carry over blindly:\n"
-            "   KEEP if: (a) #date-YYYY-MM-DD ≤ today (overdue or due today), OR\n"
-            "            (b) has #action-required, OR\n"
-            "            (c) has NO date tag and NO #action-required and NO explicit scheduling\n"
-            "               (= semantically incomplete, user placed it manually → keep until\n"
-            "                user tags, moves, or marks it done).\n"
-            "   MOVE to This Week if: #date is within the next 7 days.\n"
-            "   MOVE to Shadow.md if: #date is more than 7 days in the future.\n"
-            "   After evaluating existing items, add from Shadow.md: overdue items (date < today),\n"
-            "   items due today, and undated #action-required — not already listed. Max 5 items total.\n"
-            "   Overdue items have absolute priority over undated items when filling slots.\n"
+            "   The existing Today items have already been pre-filtered: only eligible items remain\n"
+            "   (overdue, due today, #action-required, or semantically incomplete). Carry them over verbatim.\n"
+            "   Add from Shadow.md: overdue items (date < today), items due today, undated #action-required\n"
+            "   — not already listed. Max 5 items total. Overdue items have absolute priority.\n"
             "   Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
             "   Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
+            "   Do NOT add items with future dates (#date > today) to Today.\n"
             "2. 🗓️ This Week — plain lines.\n"
             "   Carry over existing This Week items (unannotated) verbatim.\n"
-            "   Add items moved from Today (future-dated) and Shadow.md items with dates in the next 7 days not already listed.\n"
+            "   Add Shadow.md items with dates in the next 7 days not already listed.\n"
             "3. 🧘 Personal — carry over existing checkboxes unchanged.\n"
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"

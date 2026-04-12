@@ -45,6 +45,10 @@ AI can be genuinely helpful: finding connections in your notes, managing complex
 
 outheis explores what AI assistance looks like when sovereignty is non-negotiable.
 
+## Documentation
+
+**[→ outheis-labs.github.io/outheis-docs](https://outheis-labs.github.io/outheis-docs/)**
+
 ## Installation
 
 Install [signal-cli](https://github.com/AsamK/signal-cli) first:
@@ -64,18 +68,12 @@ pip install outheis
 outheis init
 ```
 
-## Documentation
 
-**[→ outheis-labs.github.io/outheis-docs](https://outheis-labs.github.io/outheis-docs/)**
+## License & Status
 
-## Status
-
-Prototype working since November 2025. Overhaul ongoing, public beta started.
+AGPL-3.0 / Prototype working since November 2025. Overhaul ongoing, public beta started.
 
 ## About
 
-Built by [Markus Schatzl](mailto:technology.culture@proton.me). If you're interested in the direction — as a user, collaborator, or investor — reach out: technology.culture@proton.me
-
-## License
-
-AGPL-3.0
+Built by [Markus Schatzl](mailto:technology.culture@proton.me).
+If you're interested in the direction — as a user, collaborator, or investor — reach out: technology.culture@proton.me

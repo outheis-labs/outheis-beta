@@ -192,7 +192,9 @@ class AgendaAgent(BaseAgent):
             "",
             "**1. Completion** — the item is done, no longer relevant.",
             f"   Keywords: {completion_kws}.",
-            "   Action: remove the item entirely. Remove the `>` line.",
+            "   Action: remove the item AND the `>` line entirely from Agenda.md.",
+            "   Note: a `>` completion annotation IS the explicit user consent required by the 'never remove'",
+            "   rule. It is not automatic removal — the user requested it. Remove without hesitation.",
             "",
             "**2. Postpone** — the item should leave the current view until a future date.",
             f"   Keywords: {postpone_kws}, [any future time reference].",
@@ -348,6 +350,20 @@ class AgendaAgent(BaseAgent):
                 }
             },
             {
+                "name": "get_weekday",
+                "description": (
+                    "Return the weekday name and formatted date for a given ISO date string (YYYY-MM-DD). "
+                    "Use this whenever you need to label an item with a day name — never calculate weekdays yourself."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string", "description": "ISO date string, e.g. '2026-04-13'"}
+                    },
+                    "required": ["date"]
+                }
+            },
+            {
                 "name": "propose_memory",
                 "description": (
                     "Propose a fact or rule for long-term memory, derived from a user annotation. "
@@ -371,6 +387,21 @@ class AgendaAgent(BaseAgent):
             return "No agenda directory found."
 
         file_map = {"agenda": "Agenda.md", "daily": "Agenda.md", "exchange": "Exchange.md", "shadow": "Shadow.md", "backlog": "Backlog.md"}
+
+        if name == "get_weekday":
+            d = inputs.get("date", "")
+            try:
+                from outheis.core.i18n import WEEKDAYS as _WDAYS
+                try:
+                    from outheis.core.config import load_config as _lc
+                    lang = _lc().human.language[:2].lower()
+                except Exception:
+                    lang = "de"
+                dt = date.fromisoformat(d)
+                wday = _WDAYS.get(lang, _WDAYS["en"])[dt.weekday()]
+                return f"{wday}, {dt.strftime('%d.%m.%Y')}"
+            except Exception as e:
+                return f"Error: {e}"
 
         if name == "get_daily":
             return self._tool_get_daily()
@@ -528,6 +559,60 @@ class AgendaAgent(BaseAgent):
             return "\n".join(relevant)
         return f"Section '{topic}' not found."
     
+
+    def _heute_needs_refill(self, agenda_dir: Path, agenda_text: str) -> bool:
+        """
+        Return True if Heute is below capacity AND Shadow has items that may qualify.
+
+        Structural check only — counts lines and scans date tags.
+        The LLM decides which Shadow items to actually add (semantic).
+        """
+        import re
+        HEUTE_RE = re.compile(r'^##\s+📅')
+        SECTION_RE = re.compile(r'^(##|---)')
+        DATE_RE = re.compile(r'#date-(\d{4}-\d{2}-\d{2})')
+        today = date.today()
+
+        # Count non-empty, non-completed items in Heute section
+        in_heute = False
+        heute_count = 0
+        for line in agenda_text.splitlines():
+            if HEUTE_RE.match(line):
+                in_heute = True
+                continue
+            if in_heute:
+                if SECTION_RE.match(line):
+                    break
+                stripped = line.strip()
+                if stripped and not stripped.startswith("*") and "✓" not in stripped:
+                    # Only count tagged items — untagged items will be processed/moved by cato
+                    if "#date-" in stripped or "#action-required" in stripped:
+                        heute_count += 1
+
+        if heute_count >= 5:
+            return False  # already at capacity
+
+        # Check Shadow.md for any items that qualify for Heute
+        # Matches priority 1 + 2 from the query rule: overdue, due today,
+        # #action-required, or within ~10 days (near deadline).
+        shadow_path = agenda_dir / "Shadow.md"
+        if not shadow_path.exists():
+            return False
+        near_limit = today + timedelta(days=10)
+        shadow_text = shadow_path.read_text(encoding="utf-8")
+        for line in shadow_text.splitlines():
+            if "✓" in line:
+                continue
+            if "#action-required" in line:
+                return True
+            m = DATE_RE.search(line)
+            if m:
+                try:
+                    if date.fromisoformat(m.group(1)) <= near_limit:
+                        return True
+                except ValueError:
+                    pass
+        return False
 
     def _build_agenda_md(self, agenda_dir: Path) -> str:
         """
@@ -876,11 +961,12 @@ class AgendaAgent(BaseAgent):
         filenames = ["Agenda.md", "Exchange.md"]
         current_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
         
+        agenda_path = agenda_dir / "Agenda.md"
+        daily_text = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
+
         comment_trigger = False
         if not force:
             # Force if Agenda.md is from a previous day
-            agenda_path = agenda_dir / "Agenda.md"
-            daily_text = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
             today_iso = date.today().isoformat()
             if agenda_path.exists() and today_iso not in daily_text:
                 force = True  # stale date — always regenerate
@@ -896,9 +982,12 @@ class AgendaAgent(BaseAgent):
                     or any(line.startswith(">") for line in exchange_text.splitlines())
                 )
                 if not has_comments:
-                    print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
-                    return
-                comment_trigger = True
+                    # Still run if Heute is below capacity and Shadow has qualifying items
+                    if not self._heute_needs_refill(agenda_dir, daily_text):
+                        print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
+                        return
+                else:
+                    comment_trigger = True
 
         # Build context-aware prompt
         hour = now.hour
@@ -910,8 +999,17 @@ class AgendaAgent(BaseAgent):
             context = "Scheduled review."
         elif comment_trigger:
             context = "User comments detected in Agenda.md — please process."
+        elif self._heute_needs_refill(agenda_dir, daily_text):
+            context = (
+                "Heute is below capacity and Shadow has qualifying items. "
+                "Add candidates from Shadow.md to fill available slots in Heute."
+            )
         else:
-            context = "Changes detected in agenda files."
+            context = (
+                "Changes detected in agenda files. "
+                "Items may have been completed or deferred — check if 'Heute' has capacity "
+                "and pull additional candidates from Shadow.md to fill any freed slots."
+            )
         
         # Read current Agenda.md — stays on disk untouched until LLM writes the new version.
         agenda_path = agenda_dir / "Agenda.md"
@@ -958,14 +1056,29 @@ class AgendaAgent(BaseAgent):
             "   - Remove the resolved item from Exchange.md (rewrite via write_file for exchange, keeping unresolved items).\n"
             "   A `>` reply like 'Show all open Shadow items for qualification' means:\n"
             "   include ALL open Shadow.md items (without ✓) in Today regardless of date — this is a one-time qualification pass.\n"
-            "1. 📅 Today — plain lines, no dashes, no checkboxes.\n"
-            "   Start from the existing Today items (carry over all unannotated items verbatim).\n"
-            "   Add Shadow.md items overdue (date < today), due today, or undated #action-required not already listed.\n"
+            "1. 📅 Today — plain lines, no dashes, no checkboxes. Max 5 items.\n"
+            "   For each existing Today item, decide: does it belong here NOW?\n"
+            "   For items without a date or tag: it is YOUR responsibility to assign date, tags, and\n"
+            "   correct placement based on the text. Read the item semantically:\n"
+            "     - explicit day/date reference → assign the corresponding #date, place accordingly.\n"
+            "     - preparatory or open-ended item with no time reference → assign #action-required.\n"
+            "     - far future reference → assign #date, move to Shadow.\n"
+            "   Never leave an item untagged — tagging is cato's job, not the user's.\n"
+            "   KEEP in Today if: overdue, due today, or #action-required.\n"
+            "   MOVE to This Week if: date within ~7 days.\n"
+            "   MOVE to Shadow.md if: far future — item is preserved, reappears when due.\n"
+            "   Note: moving between sections or to Shadow is structural maintenance, NOT deleting.\n"
+            "   The 'never remove' rule applies only to items going permanently lost — not to correct placement.\n"
+            "   Then fill remaining slots from Shadow.md (up to max 5 total).\n"
+            "   Priority 1 — must include: overdue (date < today), due today, #action-required.\n"
+            "   Priority 2 — fill remaining slots with: items due within ~10 days, items that unblock\n"
+            "   something else, or items that have been open for a long time without progress.\n"
+            "   Do not add items further out unless they meet priority 1 or 2.\n"
             "   Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
             "   Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
             "2. 🗓️ This Week — plain lines.\n"
-            "   Start from the existing This Week items (carry over all unannotated items verbatim).\n"
-            "   Add Shadow.md items with dates in the next 7 days not already listed.\n"
+            "   Carry over existing This Week items (unannotated) verbatim.\n"
+            "   Add items moved from Today and Shadow.md items with dates in the next 7 days not already listed.\n"
             "3. 🧘 Personal — carry over existing checkboxes unchanged.\n"
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"

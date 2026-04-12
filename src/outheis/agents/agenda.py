@@ -558,6 +558,54 @@ class AgendaAgent(BaseAgent):
         return f"Section '{topic}' not found."
     
 
+    def _heute_needs_refill(self, agenda_dir: Path, agenda_text: str) -> bool:
+        """
+        Return True if Heute is below capacity AND Shadow has items that may qualify.
+
+        Structural check only — counts lines and scans date tags.
+        The LLM decides which Shadow items to actually add (semantic).
+        """
+        import re
+        HEUTE_RE = re.compile(r'^##\s+📅')
+        SECTION_RE = re.compile(r'^(##|---)')
+        DATE_RE = re.compile(r'#date-(\d{4}-\d{2}-\d{2})')
+        today = date.today()
+
+        # Count non-empty, non-completed items in Heute section
+        in_heute = False
+        heute_count = 0
+        for line in agenda_text.splitlines():
+            if HEUTE_RE.match(line):
+                in_heute = True
+                continue
+            if in_heute:
+                if SECTION_RE.match(line):
+                    break
+                if line.strip() and not line.strip().startswith("*") and "✓" not in line:
+                    heute_count += 1
+
+        if heute_count >= 5:
+            return False  # already at capacity
+
+        # Check Shadow.md for any items with #date ≤ today or #action-required
+        shadow_path = agenda_dir / "Shadow.md"
+        if not shadow_path.exists():
+            return False
+        shadow_text = shadow_path.read_text(encoding="utf-8")
+        for line in shadow_text.splitlines():
+            if "✓" in line:
+                continue
+            if "#action-required" in line:
+                return True
+            m = DATE_RE.search(line)
+            if m:
+                try:
+                    if date.fromisoformat(m.group(1)) <= today:
+                        return True
+                except ValueError:
+                    pass
+        return False
+
     def _build_agenda_md(self, agenda_dir: Path) -> str:
         """
         Build structural scaffold for Agenda.md: header, date, week number, section placeholders.
@@ -925,9 +973,12 @@ class AgendaAgent(BaseAgent):
                     or any(line.startswith(">") for line in exchange_text.splitlines())
                 )
                 if not has_comments:
-                    print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
-                    return
-                comment_trigger = True
+                    # Still run if Heute is below capacity and Shadow has qualifying items
+                    if not self._heute_needs_refill(agenda_dir, daily_text):
+                        print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
+                        return
+                else:
+                    comment_trigger = True
 
         # Build context-aware prompt
         hour = now.hour
@@ -939,6 +990,11 @@ class AgendaAgent(BaseAgent):
             context = "Scheduled review."
         elif comment_trigger:
             context = "User comments detected in Agenda.md — please process."
+        elif self._heute_needs_refill(agenda_dir, daily_text):
+            context = (
+                "Heute is below capacity and Shadow has qualifying items. "
+                "Add candidates from Shadow.md to fill available slots in Heute."
+            )
         else:
             context = (
                 "Changes detected in agenda files. "

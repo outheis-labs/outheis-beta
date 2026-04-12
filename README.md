@@ -72,6 +72,10 @@ outheis init
 
 Prototype working since November 2025. Overhaul ongoing, public beta started.
 
+## About
+
+Built by [Markus Schatzl](mailto:technology.culture@proton.me). If you're interested in the direction — as a user, collaborator, or investor — reach out: technology.culture@proton.me
+
 ## License
 
 AGPL-3.0

@@ -1,24 +1,24 @@
-![outheis-leaving](https://github.com/user-attachments/assets/169ff628-6c8b-47ba-9b7b-52c71f4dace2)
 # οὐθείς (outheis)
 
-*Nobody — and everybody who refuses to be captured.*
+### Multi-agent AI assistant
 
-Second brain multi-agent AI assistant, grounded in privacy and human-centricity. Engineered as infrastructure, not as a product. 
-Designed for both personal assistant (1:1) and domain expert (many:1) usage.
+Any of your AI interactions represents you — queries, patterns, thinking. Over time, the puzzle completes. Not for you, but for the platform operators.
 
----
-
-![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)]([https://github.com/user-attachments/assets/d41843f0-bb11-4900-8d2c-6103c5adbf4f](https://github.com/user-attachments/assets/fb41f325-3015-468a-830c-5001a95354f9))
+*outheis takes a different position: cognitive sovereignty. It is the digital representation of the way you think — persistently on your machine, owned by you.*
 
 ---
 
-The name comes from Homer. When Polyphemus asks who blinded him, Ulysses answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody has blinded me!" No help comes. Ulysses slips away, clinging to the belly of the ram.
+![outheis-slips (Original: Henri Fuseli - Blinded Polyphemus Checks the Sheep as they leave the Cave)](https://github.com/user-attachments/assets/b996d2d1-4207-4c1a-a68f-509b64e5b796)
+
+---
+
+When Polyphemus asks who blinded him, Ulysses answers: οὐθείς — *nobody*. The Cyclops calls for help: "Nobody has blinded me!" No help comes. Ulysses slips away, clinging to the belly of the ram.
 
 It's a trick, but also a stance: by refusing to be named, captured, pinned down, Odysseus remains free to act.
 
 outheis carries this into AI interaction. The system knows you — but only locally, only under your control, only in service of your work.
 
-## The Problem
+## The Reality
 
 Every interaction with an AI system leaves traces. Queries reveal interests. Conversations expose thinking patterns. Over time, these traces form a profile — not for your benefit, but for extraction.
 

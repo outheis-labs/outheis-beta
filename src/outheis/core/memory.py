@@ -35,12 +35,57 @@ from outheis.core.config import get_human_dir
 
 MemoryType = Literal["user", "feedback", "context"]
 
-_COMMENT_RE = re.compile(r"\s*<!--\s*(\d{4}-\d{2}-\d{2})\s*-->")
+_COMMENT_RE = re.compile(r"\s*<!--\s*(\d{4}-\d{2}-\d{2})(?:\s+source:(\w+))?\s*-->")
 _HEADERS = {
     "user": "# User Memory\n\n",
     "feedback": "# Feedback Memory\n\n",
     "context": "# Context Memory\n\n",
 }
+
+# Characters that are invisible/non-printable and have no legitimate use
+# in memory entries. Stripped on write, not on read.
+_INVISIBLE_RE = re.compile(
+    "["
+    "\x00-\x08"      # ASCII control: NUL–BS
+    "\x0b\x0c"       # vertical tab, form feed
+    "\x0e-\x1f"      # ASCII control: SO–US
+    "\x7f"           # DEL
+    "\u00ad"         # soft hyphen
+    "\u200b-\u200f"  # zero-width spaces, joiners, marks
+    "\u2028\u2029"   # line/paragraph separators
+    "\u202a-\u202e"  # bidirectional overrides
+    "\u2060-\u2064"  # word joiner, invisible operators
+    "\ufeff"         # BOM
+    "\ufff9-\ufffc"  # interlinear annotation anchors
+    "]"
+)
+
+
+def _sanitize(text: str) -> str:
+    """Strip all invisible and non-printable characters from text."""
+    return _INVISIBLE_RE.sub("", text).strip()
+
+
+def _format_entry_line(entry: "MemoryEntry") -> str:
+    """Format a memory entry for inclusion in a prompt context string.
+
+    External entries are wrapped in boundary markers to limit prompt injection
+    surface area. Agent and user entries are rendered as plain bullet points.
+    """
+    if entry.source == "external":
+        return (
+            f"- <external_content>{entry.content}</external_content>"
+        )
+    return f"- {entry.content}"
+
+
+def wrap_external_content(text: str) -> str:
+    """Wrap externally-sourced text in boundary markers for safe prompt inclusion.
+
+    Use this when including content from external sources (web pages, repos,
+    user-supplied files) directly in a system or user prompt — not via memory.
+    """
+    return f"<external_content>{text}</external_content>"
 
 
 @dataclass
@@ -50,11 +95,13 @@ class MemoryEntry:
     content: str
     type: MemoryType
     created_at: datetime = field(default_factory=datetime.now)
+    source: str = "agent"  # "user" | "agent" | "external"
 
     def to_line(self) -> str:
         """Render as a markdown list line with date comment."""
         date = self.created_at.strftime("%Y-%m-%d")
-        return f"- {self.content}  <!-- {date} -->\n"
+        suffix = f" source:{self.source}" if self.source != "agent" else ""
+        return f"- {self.content}  <!-- {date}{suffix} -->\n"
 
 
 def _parse_line(line: str, memory_type: MemoryType) -> MemoryEntry | None:
@@ -70,12 +117,14 @@ def _parse_line(line: str, memory_type: MemoryType) -> MemoryEntry | None:
             created_at = datetime.strptime(m.group(1), "%Y-%m-%d")
         except ValueError:
             created_at = datetime.now()
+        source = m.group(2) or "agent"
     else:
         content = raw.strip()
         created_at = datetime.now()
+        source = "agent"
     if not content:
         return None
-    return MemoryEntry(content=content, type=memory_type, created_at=created_at)
+    return MemoryEntry(content=content, type=memory_type, created_at=created_at, source=source)
 
 
 # =============================================================================
@@ -177,6 +226,7 @@ class MemoryStore:
         self,
         content: str,
         memory_type: MemoryType,
+        source: str = "agent",
         # Legacy params accepted but ignored — kept for call-site compatibility
         confidence: float = 1.0,
         decay_days: int | None = None,
@@ -185,7 +235,8 @@ class MemoryStore:
         """Add a new memory entry."""
         self._ensure_loaded()
 
-        entry = MemoryEntry(content=content, type=memory_type)
+        content = _sanitize(content)
+        entry = MemoryEntry(content=content, type=memory_type, source=source)
 
         if memory_type not in self._entries:
             self._entries[memory_type] = []
@@ -255,17 +306,17 @@ class MemoryStore:
 
         user_entries = self._entries.get("user", [])
         if user_entries:
-            lines = [f"- {e.content}" for e in user_entries]
+            lines = [_format_entry_line(e) for e in user_entries]
             sections.append("## About the user\n" + "\n".join(lines))
 
         feedback_entries = self._entries.get("feedback", [])
         if feedback_entries:
-            lines = [f"- {e.content}" for e in feedback_entries]
+            lines = [_format_entry_line(e) for e in feedback_entries]
             sections.append("## Working preferences\n" + "\n".join(lines))
 
         context_entries = self._entries.get("context", [])
         if context_entries:
-            lines = [f"- {e.content}" for e in context_entries]
+            lines = [_format_entry_line(e) for e in context_entries]
             sections.append("## Current context\n" + "\n".join(lines))
 
         if not sections:

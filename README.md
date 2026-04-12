@@ -4,7 +4,7 @@
 
 Any of your AI interactions represents you — queries, patterns, thinking. Over time, the puzzle completes. Not for you, but for the platform operators.
 
-*outheis takes a different position: cognitive sovereignty. It is the digital representation of the way you think — persistently on your machine, owned by you.*
+**outheis takes a different position: cognitive sovereignty. It is the digital representation of the way you think — persistently on your machine, owned by you.**
 
 ---
 

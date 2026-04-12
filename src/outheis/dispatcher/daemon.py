@@ -674,17 +674,19 @@ class Dispatcher:
             except Exception as e:
                 print(f"Shadow scan failed: {e}")
 
-    def _run_agenda_review(self) -> None:
+    def _run_agenda_review(self, force: bool | None = None) -> None:
         """
         Review of Agenda files at configured times.
 
-        - First and last scheduled run of the day: force=True
-        - All other runs: force=False (hash-based skip)
+        - force=True: skip hash check, always run (manual trigger or first/last scheduled run)
+        - force=False: hash-based skip for intermediate scheduled runs
+        - force=None (default): compute from schedule (first/last hour → True, else False)
         """
-        time = self.config.schedule.agenda_review.time
-        hours = [int(t.split(":")[0]) for t in time if ":" in t]
-        hour = datetime.now().hour
-        force = bool(hours) and (hour == hours[0] or hour == hours[-1])
+        if force is None:
+            time = self.config.schedule.agenda_review.time
+            hours = [int(t.split(":")[0]) for t in time if ":" in t]
+            hour = datetime.now().hour
+            force = bool(hours) and (hour == hours[0] or hour == hours[-1])
         
         agent = self.get_agent("agenda")
         if agent and hasattr(agent, 'run_review'):
@@ -922,7 +924,7 @@ class Dispatcher:
                     "index_rebuild": self._run_index_rebuild,
                     "shadow_scan": self._run_shadow_scan,
                     "archive_rotation": self._run_archive_rotation,
-                    "agenda_review": self._run_agenda_review,
+                    "agenda_review": lambda: self._run_agenda_review(force=True),
                     "agenda_midnight": self._run_agenda_midnight,
                     "tag_scan": self._run_tag_scan,
                     "data_migrate": self._run_data_migrate,

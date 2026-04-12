@@ -953,11 +953,12 @@ class AgendaAgent(BaseAgent):
         filenames = ["Agenda.md", "Exchange.md"]
         current_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
         
+        agenda_path = agenda_dir / "Agenda.md"
+        daily_text = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
+
         comment_trigger = False
         if not force:
             # Force if Agenda.md is from a previous day
-            agenda_path = agenda_dir / "Agenda.md"
-            daily_text = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
             today_iso = date.today().isoformat()
             if agenda_path.exists() and today_iso not in daily_text:
                 force = True  # stale date — always regenerate

@@ -1,7 +1,7 @@
 ---
 title: Website Refresh
 tags: [project, internal, someday]
-created: 2025-06-01
+created: 2026-01-01
 status: on-hold
 ---
 
@@ -11,7 +11,7 @@ Internal project to update company website.
 
 ## Status
 
-On hold since August. Waiting for new brand guidelines.
+On hold since Q4 2025. Waiting for new brand guidelines.
 
 ## Ideas
 
@@ -22,4 +22,4 @@ On hold since August. Waiting for new brand guidelines.
 
 ## Notes
 
-Marketing said Q1 2026 is realistic target.
+Target: Q3 2026 once brand guidelines are ready.

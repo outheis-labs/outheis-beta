@@ -7,15 +7,16 @@ tags: [personal, reading, someday]
 
 ## Currently Reading
 
-- "The Craftsman" by Richard Sennett — recommended by Sarah
+- "A Philosophy of Software Design" by John Ousterhout
+- "Sapiens" by Yuval Noah Harari (halfway through)
 
 ## Want to Read
 
-- "A Philosophy of Software Design" by John Ousterhout
 - "Thinking in Systems" by Donella Meadows
 - "The Design of Everyday Things" by Don Norman
+- "The Craftsman" by Richard Sennett
 
-## Finished 2025
+## Finished 2026
 
-- "Staff Engineer" by Will Larson — good framework for thinking about senior IC roles
-- "An Elegant Puzzle" by Will Larson — useful for understanding engineering management
+- "Staff Engineer" by Will Larson — good framework for senior IC roles
+- "An Elegant Puzzle" by Will Larson — useful for engineering management

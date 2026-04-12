@@ -6,7 +6,7 @@ tags: [sport, running, fitness, health]
 # Running Training Plan
 
 ## Current Status
-- **Goal**: Munich Half Marathon (October 2025)
+- **Goal**: Half Marathon (autumn 2026)
 - **Current pace**: 5:45 min/km
 - **Weekly distance**: ~25 km
 
@@ -16,15 +16,15 @@ tags: [sport, running, fitness, health]
 - Wednesday: Easy run 8 km
 - Thursday: Rest
 - Friday: Tempo run 10 km
-- Saturday: Long run 15-18 km
+- Saturday: Long run 15–18 km
 - Sunday: Recovery walk
 
 ## Personal Records
-- 5K: 26:12 (March 2024)
-- 10K: 54:38 (June 2024)
-- Half Marathon: not yet completed
+- 5K: 26:12 (2025)
+- 10K: 54:38 (2025)
+- Half Marathon: first attempt planned for 2026
 
 ## Notes
-- New shoes needed around August (Asics Gel-Nimbus, current pair has ~600 km)
-- Shin splints flared up in April — need to keep stretching routine
-- Running group at English Garden (Englischer Garten): Saturdays 8:00, meeting point Chinese Tower
+- New shoes needed around summer (current pair has ~600 km)
+- Keep stretching routine to avoid recurring shin issues
+- Running group: Saturdays 8:00

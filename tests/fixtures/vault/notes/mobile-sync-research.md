@@ -1,7 +1,7 @@
 ---
 title: Mobile Sync Research
 tags: [research, technical, project/alpha]
-created: 2025-09-20
+created: 2026-01-20
 ---
 
 # Mobile Sync Research

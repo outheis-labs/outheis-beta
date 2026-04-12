@@ -6,24 +6,24 @@ tags: [health, medical, personal]
 # Health Notes
 
 ## Doctors
-- **GP**: Dr. Müller, practice at Marienplatz, Tel: 089-123456
-- **Dentist**: Dr. Weber, next checkup: August 2025
-- **Orthopedist**: Dr. Hoffmann (for running injuries)
+- **GP**: annual checkup
+- **Dentist**: next checkup scheduled for late 2026
+- **Specialist**: for sports injuries when needed
 
 ## Current
-- Annual checkup done: February 2025, all good
-- Blood pressure: 125/80 — normal range
-- Need to schedule eye exam (last one: 2023)
+- Annual checkup done: March 2026, all good
+- Blood pressure: normal range
+- Eye exam pending (last one: 2024)
 
 ## Allergies
-- Birch pollen (April-May) — take Cetirizine
+- Seasonal (spring) — antihistamine as needed
 - No food allergies
 
-## Medications
-- Vitamin D: daily October-March
-- Magnesium: before long runs
+## Supplements
+- Vitamin D: daily October–March
+- Magnesium: before long training sessions
 
 ## History
-- Appendectomy: 2008
-- Shin splints: recurring, managed with stretching
-- Lower back issues: occasional, helped by yoga
+- Minor surgery: 2008
+- Recurring sports injury: managed with stretching and strength work
+- Occasional back issues: helped by yoga

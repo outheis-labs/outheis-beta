@@ -5,48 +5,34 @@ tags: [family, kids, activities, school]
 
 # Kids
 
-## Leo (8)
+## Child A (9)
 
 ### School
-- Grundschule am Elisabethplatz, Class 3a
-- Class teacher: Ms. Schmidt
+- Primary school, Class 4
 - Strong in: Math, Science
-- Needs support: German (spelling)
+- Needs support: Writing
 
 ### Activities
-- **Soccer**: TSV München, Wednesdays 16:00-17:30
-  - Coach: Mr. Berger
-  - Season runs September-June
-- **Swimming**: Fridays after school, can do 50m freestyle
-
-### Friends
-- Best friend: Maximilian (same class, lives nearby)
-- Birthday party ideas: Escape Room? Laser tag?
+- **Team sport**: Wednesdays 16:00–17:30, season September–June
+- **Swimming**: Fridays after school
 
 ### Current Interests
-- Space, planets, NASA
-- Minecraft (limited to 1h/day on weekends)
-- Wants a pet (we said maybe a hamster)
+- Science, space
+- Video games (limited to 1h/day on weekends)
+- Wants a pet
 
 ---
 
-## Emma (5)
+## Child B (6)
 
-### Kindergarten
-- Kinderhaus Sonnenschein
-- Group: Butterflies
-- Starts preschool in September
+### School
+- Starts primary school in September 2026
 
 ### Activities
-- **Ballet**: Fridays 15:30-16:15, Ballettschule Schwabing
-- **Swimming**: learning, beginner badge almost done
-
-### Friends
-- Best friend: Sofia
-- Playdate regulars: Mia, Hannah
+- **Creative activity**: Fridays 15:30–16:15
+- **Swimming**: beginner level
 
 ### Current Interests
-- Unicorns, everything purple
-- Frozen (still!)
 - Drawing and crafts
-- Wants to learn piano (wait until 6?)
+- Building toys
+- Wants to learn an instrument (maybe next year)

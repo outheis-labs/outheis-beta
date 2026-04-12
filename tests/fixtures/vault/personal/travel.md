@@ -6,24 +6,22 @@ tags: [travel, vacation, personal]
 # Travel
 
 ## Upcoming
-- **Summer 2025**: Croatia — looking at Istria or Split area
-  - Need to book by end of March
-  - Julia wants somewhere with beach and old towns
-  - Kids need pool access
+- **Summer 2026**: Mediterranean — beach, old towns, pool access for kids
+  - Need to book by end of spring
   - Budget: ~3000€ for 2 weeks
 
 ## Past Favorites
-- **Japan 2019**: Tokyo, Kyoto, Osaka — 2 weeks — best trip ever
-- **Portugal 2022**: Lisbon + Algarve — great food, Leo loved the beaches
-- **South Tyrol 2023**: hiking with kids — Lake Prags (Pragser Wildsee) was stunning
+- **Japan 2019**: major cities — 2 weeks — best trip ever
+- **Portugal 2022**: capital + coast — great food, kids loved the beaches
+- **Alps 2023**: hiking with kids — mountain lakes were stunning
 
 ## Bucket List
 - Iceland — Northern Lights
 - New Zealand — maybe when kids are older
-- Scotland — whisky tour
+- Scotland
 - Norway — fjords
 
 ## Practical
-- Passports: all valid until 2028
-- ADAC membership: active
-- Travel insurance: through Allianz, covers family
+- Passports: all valid until 2028+
+- Travel insurance: covers family
+- AA/roadside membership: active

@@ -7,26 +7,26 @@ tags: [personal, hobbies, interests]
 
 ## Active
 - **Running** — see [[running]] for training plan
-- **Photography** — Fujifilm X-T4, mostly street and travel
-- **Reading** — crime, history, science fiction
+- **Photography** — mostly street and travel
+- **Reading** — fiction, history, non-fiction
 - **Woodworking** — small projects, beginner level
 
 ## Want to Try
-- Bouldering — Julia suggested we try together
-- Pottery — there's a course at VHS Schwabing
-- Chess — Leo is learning, could be fun together
+- Bouldering
+- Pottery
+- Chess
 
-## Current Books
-- "The Perfume" — Süskind (re-reading)
+## Currently Reading
 - "Sapiens" — Harari (halfway through)
+- "A Philosophy of Software Design" — Ousterhout
 
 ## Music
-- Spotify playlist: "Morning Run" for training
-- Concert wishlist: Radiohead, Nils Frahm
-- Learning guitar: on pause, last lesson was 2023
+- Playlist for training runs
+- Learning guitar: on pause since 2024
+- Concert wishlist: several artists
 
 ## Photography Gear
-- Fujifilm X-T4 body
-- 23mm f/2 (everyday)
-- 56mm f/1.2 (portraits)
-- Want: 16mm f/1.4 for landscapes
+- Mirrorless body
+- 23mm (everyday)
+- 56mm (portraits)
+- Want: wider lens for landscapes

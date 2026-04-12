@@ -5,32 +5,31 @@ tags: [home, household, maintenance]
 
 # Home & Household
 
-## Address
-Schwabing, Munich — Apartment, 95m², 4 rooms
+## Apartment
+City apartment, ~95m², 4 rooms
 
 ## Key Contacts
-- **Building management**: Meier GmbH, Tel: 089-987654
+- **Building management**: contact on file
 - **Chimney sweep**: comes annually in November
-- **Heating maintenance**: Müller Technik, last service: October 2024
+- **Heating maintenance**: last service October 2025
 
 ## Maintenance Schedule
 - Heating: yearly service in autumn
 - Smoke detectors: battery check January
-- Window cleaning: quarterly (hire someone for outside)
-- Basement storage: needs clearing out — too much old stuff
+- Window cleaning: quarterly
+- Basement storage: needs clearing out
 
 ## Projects
-- [ ] Bathroom renovation — get quotes, maybe 2026
-- [ ] New lighting in living room — LED strips?
-- [ ] Leo's room: needs desk for homework
-- [x] Kitchen faucet replaced (March 2025)
+- [ ] Bathroom renovation — get quotes, maybe 2027
+- [ ] New lighting in living room
+- [ ] Child's room: needs desk for homework
+- [x] Kitchen faucet replaced (2025)
 
 ## Insurance
-- Household contents: Allianz, ~150€/year
+- Household contents
 - Liability: included in family plan
-- Legal protection: Allianz
+- Legal protection
 
-## WiFi
-- Router: FritzBox 7590
-- Password: written on router bottom
-- Network name: AliceHome
+## Network
+- Router: current model
+- Password: written on router

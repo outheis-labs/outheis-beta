@@ -348,6 +348,20 @@ class AgendaAgent(BaseAgent):
                 }
             },
             {
+                "name": "get_weekday",
+                "description": (
+                    "Return the weekday name and formatted date for a given ISO date string (YYYY-MM-DD). "
+                    "Use this whenever you need to label an item with a day name — never calculate weekdays yourself."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "date": {"type": "string", "description": "ISO date string, e.g. '2026-04-13'"}
+                    },
+                    "required": ["date"]
+                }
+            },
+            {
                 "name": "propose_memory",
                 "description": (
                     "Propose a fact or rule for long-term memory, derived from a user annotation. "
@@ -371,6 +385,26 @@ class AgendaAgent(BaseAgent):
             return "No agenda directory found."
 
         file_map = {"agenda": "Agenda.md", "daily": "Agenda.md", "exchange": "Exchange.md", "shadow": "Shadow.md", "backlog": "Backlog.md"}
+
+        if name == "get_weekday":
+            import subprocess
+            d = inputs.get("date", "")
+            try:
+                from outheis.core.config import load_config as _lc
+                lang = _lc().human.language[:2].lower()
+            except Exception:
+                lang = "de"
+            locale_map = {"de": "de_DE.UTF-8", "en": "en_US.UTF-8", "fr": "fr_FR.UTF-8"}
+            locale = locale_map.get(lang, "de_DE.UTF-8")
+            try:
+                result = subprocess.run(
+                    ["date", "-j", "-f", "%Y-%m-%d", d, "+%A, %d.%m.%Y"],
+                    capture_output=True, text=True, check=True,
+                    env={**__import__("os").environ, "LC_ALL": locale}
+                )
+                return result.stdout.strip()
+            except Exception as e:
+                return f"Error: {e}"
 
         if name == "get_daily":
             return self._tool_get_daily()
@@ -937,21 +971,6 @@ class AgendaAgent(BaseAgent):
 
         today_iso = date.today().isoformat()
         week_iso = (date.today() + timedelta(days=7)).isoformat()
-
-        # Authoritative weekday lookup for the next 14 days — use this, never calculate.
-        from outheis.core.i18n import WEEKDAYS as _WDAYS
-        try:
-            from outheis.core.config import load_config as _lc
-            _lang = _lc().human.language[:2].lower()
-        except Exception:
-            _lang = "de"
-        _wnames = _WDAYS.get(_lang, _WDAYS["en"])
-        _weekday_ref = "\n".join(
-            f"  {(date.today() + timedelta(days=i)).isoformat()} = "
-            f"{_wnames[(date.today() + timedelta(days=i)).weekday()]}, "
-            f"{(date.today() + timedelta(days=i)).strftime('%d.%m.%Y')}"
-            for i in range(14)
-        )
 
         pre_content_block = (
             f"\n\n---\n## Current Agenda.md (with user annotations — process these)\n\n"

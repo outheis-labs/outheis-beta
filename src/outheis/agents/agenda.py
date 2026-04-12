@@ -1036,8 +1036,7 @@ class AgendaAgent(BaseAgent):
         )
         query = (
             f"It is {now.strftime('%H:%M')}. {context}\n\n"
-            f"Today: {today_iso}. This-week window: {today_iso} to {week_iso}.\n\n"
-            f"Authoritative weekday reference (do not calculate, use this table):\n{_weekday_ref}"
+            f"Today: {today_iso}. This-week window: {today_iso} to {week_iso}."
             f"{pre_content_block}"
             f"{scaffold_block}\n\n"
             "Shadow.md is also in your context above. Write the complete Agenda.md via write_file.\n"

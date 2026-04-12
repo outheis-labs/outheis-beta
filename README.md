@@ -75,5 +75,5 @@ AGPL-3.0 / Prototype working since November 2025. Overhaul ongoing, public beta 
 
 ## About
 
-Built by [Markus Schatzl](mailto:technology.culture@proton.me), technology.culture@proton.me
+Built by [Markus Schatzl](mailto:technology.culture@proton.me)
 Reach out if you're interested in the direction — as a user, researcher, collaborator, or investor.

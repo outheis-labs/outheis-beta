@@ -45,6 +45,25 @@ AI can be genuinely helpful: finding connections in your notes, managing complex
 
 outheis explores what AI assistance looks like when sovereignty is non-negotiable.
 
+## Installation
+
+Install [signal-cli](https://github.com/AsamK/signal-cli) first:
+
+```
+# macOS
+brew install signal-cli
+
+# Ubuntu/Debian
+apt install signal-cli
+```
+
+Then:
+
+```
+pip install outheis
+outheis init
+```
+
 ## Documentation
 
 **[→ outheis-labs.github.io/outheis-docs](https://outheis-labs.github.io/outheis-docs/)**

@@ -10,7 +10,7 @@ readme = "README.md"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.11"
 authors = [
-    { name = "outheis-labs" },
+    { name = "Markus Schatzl", email = "technology.culture@proton.me" },
 ]
 keywords = [
     "ai",

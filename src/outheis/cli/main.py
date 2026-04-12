@@ -38,7 +38,8 @@ def init() -> None:
     import os
     import shutil
     import subprocess
-    
+    from datetime import date, timedelta
+
     from outheis.core.config import (
         Config,
         HumanConfig,
@@ -55,49 +56,57 @@ def init() -> None:
         save_config,
         init_directories,
     )
-    
+
     typer.echo("\n" + "=" * 50)
     typer.echo("Welcome to outheis!")
     typer.echo("=" * 50)
     typer.echo("\nThis wizard will guide you through the setup.")
     typer.echo("Press Enter to keep existing values shown in [brackets].\n")
-    typer.echo("Configure via web instead: http://localhost:8080/setup")
-    typer.echo("(Web interface coming in a future release)\n")
-    
+
+    # === PREREQUISITE CHECK: signal-cli ===
+    signal_cli_path = shutil.which("signal-cli")
+    if not signal_cli_path:
+        typer.echo("─" * 50)
+        typer.echo("Prerequisite: signal-cli")
+        typer.echo("─" * 50)
+        typer.echo("\noutheis requires signal-cli to communicate with you.")
+        typer.echo("\n  macOS:  brew install signal-cli")
+        typer.echo("  Linux:  apt install signal-cli")
+        typer.echo("  Other:  https://github.com/AsamK/signal-cli\n")
+        if not typer.confirm("Continue without signal-cli?", default=False):
+            raise typer.Exit(0)
+        typer.echo("")
+    else:
+        typer.echo(f"✓ signal-cli found: {signal_cli_path}\n")
+
     # Load existing config or create new
     init_directories()
     try:
         config = load_config()
     except Exception:
         config = Config()
-    
+
     # === HUMAN SECTION ===
     typer.echo("─" * 50)
     typer.echo("Human (Administrator)")
     typer.echo("─" * 50 + "\n")
-    
-    # Name
+
     default_name = config.human.name or "Human"
     name = typer.prompt("Your name", default=default_name)
-    
-    # Language
+
     default_lang = config.human.language or "en"
-    language = typer.prompt("Language (en/de)", default=default_lang)
-    
-    # Timezone
+    language = typer.prompt("Language (en/de/fr/es/it)", default=default_lang)
+
     default_tz = config.human.timezone or "Europe/Berlin"
     timezone = typer.prompt("Timezone", default=default_tz)
-    
-    # Phone(s)
+
     default_phones = ", ".join(config.human.phone) if config.human.phone else ""
     phones_str = typer.prompt("Your phone number(s), comma-separated", default=default_phones or "")
     phones = [p.strip() for p in phones_str.split(",") if p.strip()]
-    
-    # Vault
+
     default_vault = config.human.vault[0] if config.human.vault else "~/Documents/Vault"
     vault_path = typer.prompt("Vault path", default=default_vault)
-    
-    # Update human config
+
     config.human = HumanConfig(
         name=name,
         phone=phones,
@@ -105,34 +114,28 @@ def init() -> None:
         timezone=timezone,
         vault=[vault_path],
     )
-    
+
     # === LLM SECTION ===
     typer.echo("\n" + "─" * 50)
     typer.echo("LLM Configuration")
     typer.echo("─" * 50 + "\n")
     typer.echo("outheis uses Anthropic Claude by default.")
-    typer.echo("You can switch to local models (Ollama) later.\n")
-    
-    # API Key
+    typer.echo("Local models (Ollama) are also supported — see https://ollama.com\n")
+
     existing_key = config.llm.providers.get("anthropic", ProviderConfig()).api_key
-    if existing_key:
-        masked = f"{existing_key[:10]}...{existing_key[-4:]}"
-    else:
-        masked = ""
-    
+    masked = f"{existing_key[:10]}...{existing_key[-4:]}" if existing_key else ""
+
     api_key_input = typer.prompt(
-        "Anthropic API key",
+        "Anthropic API key (leave blank to use Ollama only)",
         default=masked or "",
         hide_input=False,
     )
-    
-    # If user entered something new (not the masked version), use it
+
     if api_key_input and api_key_input != masked:
         api_key = api_key_input
     else:
         api_key = existing_key
-    
-    # Validate API key
+
     if api_key:
         typer.echo("Validating API key...", nl=False)
         if _validate_anthropic_key(api_key):
@@ -141,82 +144,73 @@ def init() -> None:
             typer.echo(" ✗ invalid")
             if not typer.confirm("Continue anyway?"):
                 raise typer.Exit(1)
-    
-    # Update LLM config
+    else:
+        typer.echo("No Anthropic key — configure Ollama in config.json after setup.")
+        typer.echo("See https://ollama.com for installation instructions.\n")
+
     config.llm.providers["anthropic"] = ProviderConfig(api_key=api_key)
-    
+
     # === SIGNAL SECTION ===
     typer.echo("\n" + "─" * 50)
     typer.echo("Signal Messenger (optional)")
     typer.echo("─" * 50 + "\n")
-    
-    # Check if signal-cli is installed
-    signal_cli_path = shutil.which("signal-cli")
+
     if signal_cli_path:
-        typer.echo(f"✓ signal-cli found: {signal_cli_path}\n")
-        
-        default_enabled = "y" if config.signal.enabled else "n"
         enable_signal = typer.confirm("Enable Signal?", default=config.signal.enabled)
-        
+
         if enable_signal:
-            # Bot phone
             default_bot_phone = config.signal.bot_phone or ""
             bot_phone = typer.prompt("Bot phone number", default=default_bot_phone)
-            
-            # Check registration
+
             if bot_phone:
                 typer.echo(f"Checking registration for {bot_phone}...", nl=False)
                 registered = _check_signal_registration(bot_phone)
-                
                 if registered:
                     typer.echo(" ✓ registered")
                 else:
                     typer.echo(" ✗ not registered")
                     if typer.confirm("Register now?"):
                         _register_signal(bot_phone)
-            
-            # Bot name
+
             default_bot_name = config.signal.bot_name or "Ou"
             bot_name = typer.prompt("Bot display name", default=default_bot_name)
-            
+
             config.signal = SignalConfig(
                 enabled=True,
                 bot_phone=bot_phone,
                 bot_name=bot_name,
-                allowed=config.signal.allowed,  # Keep existing whitelist
+                allowed=config.signal.allowed,
             )
         else:
             config.signal.enabled = False
     else:
-        typer.echo("ℹ signal-cli not found — skipping Signal setup")  # noqa: i18n — info symbol
-        typer.echo("  Install: brew install signal-cli (macOS)")
-        typer.echo("           or see https://github.com/AsamK/signal-cli\n")
-    
+        typer.echo("signal-cli not found — skipping Signal setup.")
+        typer.echo("Install it and re-run 'outheis init' to enable Signal.\n")
+
     # === SAVE CONFIG ===
     save_config(config)
     typer.echo("\n" + "─" * 50)
     typer.echo("Setup complete!")
     typer.echo("─" * 50 + "\n")
     typer.echo(f"✓ Config saved to {get_config_path()}")
-    
-    # Create Agenda files if vault exists
+
+    # === VAULT + AGENDA SCAFFOLD ===
     vault_expanded = os.path.expanduser(vault_path)
-    agenda_dir = os.path.join(vault_expanded, "Agenda")
-    
-    if os.path.exists(vault_expanded):
-        os.makedirs(agenda_dir, exist_ok=True)
-        
-        daily_path = os.path.join(agenda_dir, "Agenda.md")
-        if not os.path.exists(daily_path):
-            with open(daily_path, "w") as f:
-                f.write("# Daily\n\n## Today\n\n## Tomorrow\n")
-            typer.echo(f"✓ Created {daily_path}")
-        else:
-            typer.echo(f"⏭ {daily_path} exists, skipping")
-        
+    agenda_dir_path = os.path.join(vault_expanded, "Agenda")
+
+    os.makedirs(agenda_dir_path, exist_ok=True)
+    if not os.path.exists(vault_expanded):
+        typer.echo(f"✓ Created vault directory: {vault_expanded}")
+
+    agenda_path = os.path.join(agenda_dir_path, "Agenda.md")
+    if not os.path.exists(agenda_path):
+        scaffold = _build_agenda_scaffold(language)
+        with open(agenda_path, "w", encoding="utf-8") as f:
+            f.write(scaffold)
+        typer.echo(f"✓ Created {agenda_path}")
     else:
-        typer.echo(f"⚠ Vault {vault_expanded} does not exist — create it manually")
-    
+        typer.echo(f"⏭ {agenda_path} exists, skipping")
+
     typer.echo(f"\nRun 'outheis start' to begin.\n")
 
 
@@ -228,13 +222,59 @@ def _validate_anthropic_key(api_key: str) -> bool:
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
         client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-haiku-4-5-20251001",
             max_tokens=1,
             messages=[{"role": "user", "content": "hi"}],
         )
         return True
     except Exception:
         return False
+
+
+def _build_agenda_scaffold(language: str) -> str:
+    """Build a correctly structured empty Agenda.md for the given language."""
+    from datetime import date, timedelta
+    from outheis.core.i18n import AGENDA_LABELS, WEEKDAYS
+
+    lang = language[:2].lower()
+    lbl = AGENDA_LABELS.get(lang, AGENDA_LABELS["en"])
+    wdays = WEEKDAYS.get(lang, WEEKDAYS["en"])
+
+    today = date.today()
+    week_num = today.isocalendar()[1]
+    weekday = wdays[today.weekday()]
+    date_str = today.strftime("%d.%m.%Y")
+
+    lines = [
+        f"## ⛅ {weekday}, {date_str}",
+        f"*{lbl['week']} {week_num} / {lbl['generated']}: —*",
+        "",
+        "---",
+        "",
+        f"## 🧘 {lbl['personal']}",
+        "",
+        "- [ ] ",
+        "",
+        "---",
+        "",
+        f"## 📅 {lbl['today_hdr']}",
+        "",
+        lbl["empty_today"],
+        "",
+        "---",
+        "",
+        f"## 🗓️ {lbl['week_hdr']}",
+        "",
+        lbl["empty_week"],
+        "",
+        "---",
+        "",
+        "## 💶 Cashflow",
+        "",
+        "---",
+        "",
+    ]
+    return "\n".join(lines)
 
 
 def _check_signal_registration(phone: str) -> bool:

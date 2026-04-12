@@ -583,8 +583,11 @@ class AgendaAgent(BaseAgent):
             if in_heute:
                 if SECTION_RE.match(line):
                     break
-                if line.strip() and not line.strip().startswith("*") and "✓" not in line:
-                    heute_count += 1
+                stripped = line.strip()
+                if stripped and not stripped.startswith("*") and "✓" not in stripped:
+                    # Only count tagged items — untagged items will be processed/moved by cato
+                    if "#date-" in stripped or "#action-required" in stripped:
+                        heute_count += 1
 
         if heute_count >= 5:
             return False  # already at capacity
@@ -1055,11 +1058,15 @@ class AgendaAgent(BaseAgent):
             "   include ALL open Shadow.md items (without ✓) in Today regardless of date — this is a one-time qualification pass.\n"
             "1. 📅 Today — plain lines, no dashes, no checkboxes. Max 5 items.\n"
             "   For each existing Today item, decide: does it belong here NOW?\n"
-            "   KEEP if: overdue, due today, #action-required, or no date/tag (semantically incomplete —\n"
-            "     user placed it manually, keep until they tag/move/close it).\n"
-            "   MOVE to This Week (no user action needed) if: clear future date not yet due, within ~7 days.\n"
-            "   MOVE to Shadow.md (no user action needed) if: far future (next month, next year, friend's\n"
-            "     birthday in autumn, etc.) — item is preserved in Shadow, reappears when due.\n"
+            "   For items without a date or tag: it is YOUR responsibility to assign date, tags, and\n"
+            "   correct placement based on the text. Read the item semantically:\n"
+            "     - 'am Freitag' → assign #date of the coming Friday, place in Today or This Week accordingly.\n"
+            "     - 'zur Vorbereitung' / no time reference → assign #action-required, keep in Today.\n"
+            "     - far future reference → assign #date, move to Shadow.\n"
+            "   Never leave an item untagged — tagging is cato's job, not the user's.\n"
+            "   KEEP in Today if: overdue, due today, or #action-required.\n"
+            "   MOVE to This Week if: date within ~7 days.\n"
+            "   MOVE to Shadow.md if: far future — item is preserved, reappears when due.\n"
             "   Note: moving between sections or to Shadow is structural maintenance, NOT deleting.\n"
             "   The 'never remove' rule applies only to items going permanently lost — not to correct placement.\n"
             "   Then fill remaining slots from Shadow.md (up to max 5 total).\n"

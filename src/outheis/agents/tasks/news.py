@@ -100,15 +100,17 @@ class NewsHeadlinesTask(Task):
     
     def format_for_agenda(self, result: TaskResult) -> str:
         """Format headlines for Agenda.md insertion."""
+        from outheis.core.memory import wrap_external_content
+
         if not result.success:
             return f"## {self.source_name} (Error)\n\n_{result.error}_\n"
-        
+
         data = result.data
         lines = [f"## {self.source_name}"]
-        
+
         for headline in data.get("headlines", []):
-            lines.append(f"- {headline}")
-        
+            lines.append(f"- {wrap_external_content(headline)}")
+
         return "\n".join(lines) + "\n"
     
     def to_dict(self) -> dict:

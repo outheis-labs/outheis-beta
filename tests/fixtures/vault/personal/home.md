@@ -22,7 +22,7 @@ City apartment, ~95m², 4 rooms
 ## Projects
 - [ ] Bathroom renovation — get quotes, maybe 2027
 - [ ] New lighting in living room
-- [ ] Child's room: needs desk for homework
+- [ ] Ada's room: needs desk for homework
 - [x] Kitchen faucet replaced (2025)
 
 ## Insurance

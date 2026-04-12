@@ -7,12 +7,12 @@ tags: [family, personal, birthdays]
 
 ## Immediate Family
 - **Partner**: — Birthday: March
-- **Child A** (9) — Birthday: September
-- **Child B** (6) — Birthday: December
+- **Ada** (9) — Birthday: September
+- **Konrad** (6) — Birthday: December
 
 ## Parents
-- **Father**: — Birthday: July
-- **Mother**: — Birthday: November
+- **Max** (Father): — Birthday: July
+- **Anna** (Mother): — Birthday: November
 - Wedding anniversary: June
 
 ## Siblings
@@ -21,12 +21,12 @@ tags: [family, personal, birthdays]
 
 ## Key Dates
 - Summer vacation planning: usually book in February for August
-- Child A activities: Wednesdays
-- Child B activities: Fridays
+- Ada's activities: Wednesdays
+- Konrad's activities: Fridays
 - Monthly family dinner: usually first Sunday
 
 ## Gift Ideas (running list)
 - Partner: cooking classes, fiction novels
-- Child A: interested in science, outdoor activities
-- Child B: arts and crafts, building toys
+- Ada: interested in science, outdoor activities
+- Konrad: arts and crafts, building toys
 - Parents: experiences over things

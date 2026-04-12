@@ -5,7 +5,7 @@ tags: [family, kids, activities, school]
 
 # Kids
 
-## Child A (9)
+## Ada (9)
 
 ### School
 - Primary school, Class 4
@@ -23,7 +23,7 @@ tags: [family, kids, activities, school]
 
 ---
 
-## Child B (6)
+## Konrad (6)
 
 ### School
 - Starts primary school in September 2026

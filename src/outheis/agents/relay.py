@@ -104,12 +104,11 @@ class RelayAgent(BaseAgent):
         config = load_config()
         relay_rules = _load_user_rule("relay")
 
-        # Only user-type memory entries — feedback/preference rules are for content agents
         store = get_memory_store()
-        user_entries = store._entries.get("user", []) if hasattr(store, "_entries") else []
         store._ensure_loaded() if hasattr(store, "_ensure_loaded") else None
         user_entries = store._entries.get("user", [])
-        memory_lines = [f"- {e.content}" for e in user_entries] if user_entries else []
+        feedback_entries = store._entries.get("feedback", [])
+        context_entries = store._entries.get("context", [])
 
         parts = [
             f"You are {config.human.name}'s personal assistant. "
@@ -118,8 +117,15 @@ class RelayAgent(BaseAgent):
         ]
         if relay_rules:
             parts.append(f"# Routing rules\n\n{relay_rules}")
-        if memory_lines:
-            parts.append("# User\n\n" + "\n".join(memory_lines))
+        if user_entries:
+            lines = [f"- {e.content}" for e in user_entries]
+            parts.append("# User\n\n" + "\n".join(lines))
+        if feedback_entries:
+            lines = [f"- {e.content}" for e in feedback_entries]
+            parts.append("# Feedback\n\n" + "\n".join(lines))
+        if context_entries:
+            lines = [f"- {e.content}" for e in context_entries]
+            parts.append("# Context\n\n" + "\n".join(lines))
 
         return "\n\n".join(parts)
 

@@ -906,11 +906,11 @@ class Dispatcher:
 
         return result
 
-    def process_message(self, msg: Message) -> None:
-        """Process a single message."""
+    def process_message(self, msg: Message) -> bool:
+        """Process a single message. Returns True if dispatched, False if skipped."""
         # Skip messages not addressed to dispatcher
         if msg.to != "dispatcher":
-            return
+            return False
 
         # Handle internal task triggers (e.g. from WebUI "Run now")
         if msg.intent == "internal":
@@ -937,7 +937,7 @@ class Dispatcher:
                     self._execute_task(task_name, runner, conversation_id=msg.conversation_id)
                 else:
                     print(f"[dispatcher] unknown task: {task_name}")
-                return
+                return True
 
         # Route to appropriate agent
         target = get_dispatch_target(msg)
@@ -961,6 +961,7 @@ class Dispatcher:
                         self._handle_agent_error(msg, target, e2)
                 else:
                     self._handle_agent_error(msg, target, e)
+        return True
 
     def _handle_agent_error(self, msg: Message, agent: str, error: Exception) -> None:
         """Handle agent processing error."""
@@ -980,12 +981,12 @@ class Dispatcher:
         append(self.queue_path, error_msg)
 
     def process_pending(self) -> int:
-        """Process all pending messages. Returns count processed."""
+        """Process all pending messages. Returns count of dispatched messages."""
         count = 0
         for msg in read_from(self.queue_path, after_id=self.last_processed_id):
-            self.process_message(msg)
+            if self.process_message(msg):
+                count += 1
             self.last_processed_id = msg.id
-            count += 1
         return count
 
     def run(self) -> None:

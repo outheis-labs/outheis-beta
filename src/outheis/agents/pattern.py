@@ -55,11 +55,9 @@ class PatternAgent(BaseAgent):
     name: str = "pattern"
     
     @property
-    def meta_memory_path(self) -> Path:
-        """Path to Pattern agent's own memory (strategies, learnings)."""
-        path = get_human_dir() / "memory" / "pattern"
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+    def meta_memory_file(self) -> Path:
+        """Path to Pattern agent's own memory file."""
+        return get_human_dir() / "memory" / "patterns.md"
     
     def get_system_prompt(self) -> str:
         from outheis.core.memory import get_memory_context
@@ -84,17 +82,22 @@ class PatternAgent(BaseAgent):
         return "\n\n---\n\n".join(parts)
     
     def _load_meta_memory(self) -> str:
-        """Load Pattern agent's own memory about extraction strategies."""
-        strategies_file = self.meta_memory_path / "strategies.md"
-        if strategies_file.exists():
-            return strategies_file.read_text(encoding="utf-8")
+        """Load Pattern agent's own memory."""
+        f = self.meta_memory_file
+        if f.exists():
+            return f.read_text(encoding="utf-8")
         return ""
-    
+
+    _META_HEADER = "<!-- Maintained by the pattern agent (rumi). Do not edit manually. -->\n\n"
+
     def _save_meta_memory(self, content: str) -> None:
-        """Save to Pattern agent's own memory."""
-        strategies_file = self.meta_memory_path / "strategies.md"
-        strategies_file.write_text(content, encoding="utf-8")
-    
+        """Save Pattern agent's own memory."""
+        f = self.meta_memory_file
+        f.parent.mkdir(parents=True, exist_ok=True)
+        if not content.startswith("<!--"):
+            content = self._META_HEADER + content
+        f.write_text(content, encoding="utf-8")
+
     def _append_meta_insight(self, insight: str) -> None:
         """Append an insight to Pattern agent's memory."""
         current = self._load_meta_memory()

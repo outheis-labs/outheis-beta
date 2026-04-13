@@ -1,9 +1,16 @@
-/* outheis Web UI — Lexend Deca only */
+/* outheis Web UI */
 
 @font-face {
-  font-family: 'Lexend Deca';
-  src: url('/assets/fonts/lexendgx.woff2') format('woff2'),
-       url('/assets/fonts/lexendgx.ttf') format('truetype');
+  font-family: 'IBM Plex Sans';
+  src: url('/assets/fonts/IBMPlexSans-Variable.woff2') format('woff2');
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/assets/fonts/InterVariable.woff2') format('woff2');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -59,8 +66,8 @@
 
 html, body {
   height: 100%;
-  font-family: 'Lexend Deca', sans-serif;
-  font-size: 13px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 14px;
   font-weight: 400;
   line-height: 1.5;
   color: var(--text-primary);
@@ -92,7 +99,7 @@ html, body {
 
 .logo {
   margin: 0;
-  font-family: 'Lexend Deca', sans-serif;
+  font-family: 'Inter', sans-serif;
   font-weight: 700;
   font-size: 20px;
   letter-spacing: -0.02em;
@@ -112,7 +119,7 @@ html, body {
   align-items: center;
   gap: 6px;
   margin-top: 6px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
 }
 
@@ -133,7 +140,7 @@ html, body {
 
 .nav-group {
   padding: 16px 20px 8px;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-tertiary);
   letter-spacing: 1.2px;
   text-transform: uppercase;
@@ -162,7 +169,7 @@ html, body {
   padding-left: 18px;
 }
 
-.badge { font-size: 11px; color: var(--text-tertiary); }
+.badge { font-size: 12px; color: var(--text-tertiary); }
 
 /* Main */
 .main {
@@ -187,7 +194,7 @@ html, body {
 
 .topbar-left { display: flex; align-items: center; gap: 12px; }
 .topbar-title { font-size: 14px; font-weight: 500; }
-.topbar-path { font-size: 11px; color: var(--text-tertiary); }
+.topbar-path { font-size: 12px; color: var(--text-tertiary); }
 .topbar-actions { display: flex; gap: 8px; }
 
 /* Tabs */
@@ -202,7 +209,7 @@ html, body {
 
 .tab {
   padding: 12px 20px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -224,7 +231,7 @@ html, body {
   justify-content: space-between;
   padding: 8px 20px;
   gap: 20px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   background: var(--bg-primary);
   border-top: 0.5px solid var(--border-primary);
@@ -266,7 +273,7 @@ html, body {
   background: var(--bg-secondary, #1e1e2e);
   border: 0.5px solid var(--border-primary, #333);
   color: var(--text-primary, #cdd6f4);
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 7px;
   border-radius: 4px;
   pointer-events: none;
@@ -282,7 +289,7 @@ html, body {
 
 .token-total {
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
 }
 
@@ -312,7 +319,7 @@ html, body {
   justify-content: center;
   padding: 8px 16px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: var(--text-primary);
   background: transparent;
@@ -349,7 +356,7 @@ html, body {
   justify-content: center;
   padding: 7px 16px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   color: #fff;
   background: #000;
@@ -364,7 +371,7 @@ html, body {
 /* Forms */
 .form-row { display: flex; align-items: center; margin-bottom: 14px; }
 .form-row:last-child { margin-bottom: 0; }
-.form-label { width: 140px; font-size: 12px; color: var(--text-secondary); }
+.form-label { width: 140px; font-size: 13px; color: var(--text-secondary); }
 .form-value { flex: 1; display: flex; gap: 8px; align-items: center; }
 
 input[type="text"],
@@ -375,7 +382,7 @@ textarea {
   width: 100%;
   padding: 10px 12px;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-primary);
   background: var(--bg-primary);
   border: 0.5px solid var(--border-primary);
@@ -397,7 +404,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   padding: 20px;
 }
 
-.metric-label { font-size: 11px; color: var(--text-tertiary); margin-bottom: 6px; }
+.metric-label { font-size: 12px; color: var(--text-tertiary); margin-bottom: 6px; }
 .metric-value { font-size: 20px; font-weight: 500; }
 .metric-value.success { color: var(--accent-success); }
 
@@ -410,12 +417,12 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 
 .msg-item:last-child { border-bottom: none; }
 .msg-header { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.msg-time { font-size: 11px; font-family: ui-monospace, monospace; color: var(--text-tertiary); }
+.msg-time { font-size: 12px; font-family: ui-monospace, monospace; color: var(--text-tertiary); }
 
 .msg-agent {
   display: inline-block;
   padding: 3px 10px;
-  font-size: 11px;
+  font-size: 12px;
   border-radius: var(--radius);
 }
 
@@ -462,7 +469,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 
 .provider-field label {
   display: block;
-  font-size: 10px;
+  font-size: 13px;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.8px;
@@ -495,7 +502,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 }
 
 .model-row:last-child { border-bottom: none; }
-.model-alias { width: 90px; font-size: 12px; font-weight: 500; }
+.model-alias { width: 90px; font-size: 13px; font-weight: 500; }
 .model-provider { width: 150px; }
 .model-name { flex: 1; }
 
@@ -511,7 +518,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .sched-row:last-child { border-bottom: none; }
 .sched-type { width: 220px; flex-shrink: 0; }
 .sched-desc {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   margin-top: 5px;
   line-height: 1.4;
@@ -527,14 +534,14 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-muted);
   white-space: nowrap;
   cursor: pointer;
 }
 .sched-run-btn { width: 80px; height: 36px; }
 .sched-duration {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   white-space: nowrap;
   min-width: 40px;
@@ -558,7 +565,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 }
 
 .sched-time .remove {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
   cursor: pointer;
   transition: color 0.15s ease;
@@ -585,6 +592,16 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 /* File browser */
 .file-split { display: flex; flex: 1; overflow: hidden; }
 
+.file-list-resize {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.file-list-resize:hover,
+.file-list-resize.dragging { background: var(--border-primary); }
+
 .file-list {
   width: 200px;
   background: var(--bg-primary);
@@ -597,14 +614,14 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   align-items: center;
   gap: 6px;
   padding: 10px 20px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
   cursor: pointer;
   border-bottom: 0.5px solid var(--border-primary);
   transition: color 0.15s ease;
 }
 .file-list-create:hover { color: var(--text-primary); }
-.file-list-create-icon { font-size: 12px; line-height: 1; }
+.file-list-create-icon { font-size: 13px; line-height: 1; }
 .file-list-refresh-btn {
   margin-left: auto;
   background: none;
@@ -629,7 +646,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
   min-height: 14px;
   margin-bottom: 4px;
@@ -643,7 +660,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   border: 0.5px solid var(--border-primary);
   border-radius: 4px;
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: 13px;
   padding: 5px 8px;
   outline: none;
 }
@@ -658,7 +675,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   display: flex;
   justify-content: space-between;
   padding: 12px 20px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
   border-bottom: 0.5px solid var(--border-primary);
@@ -674,7 +691,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   padding-left: 18px;
 }
 
-.file-size { font-size: 11px; color: var(--text-tertiary); }
+.file-size { font-size: 12px; color: var(--text-tertiary); }
 .file-view { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 
 .file-header {
@@ -688,7 +705,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 
 .file-name { font-size: 13px; font-weight: 500; }
 .file-toggle { display: flex; gap: 4px; }
-.file-toggle button { padding: 6px 14px; font-size: 11px; }
+.file-toggle button { padding: 6px 14px; font-size: 12px; }
 
 .file-toggle button.active {
   color: var(--bg-primary);
@@ -700,7 +717,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 
 /* Search */
 .search-input {
-  padding: 4px 8px; font-size: 12px; width: 180px;
+  padding: 4px 8px; font-size: 13px; width: 180px;
   border: 1px solid var(--border-primary); border-radius: var(--radius);
   background: var(--bg-secondary); color: var(--text-primary);
   font-family: ui-monospace, monospace;
@@ -709,11 +726,11 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .search-results {
   border-bottom: 0.5px solid var(--border-primary);
   background: var(--bg-secondary);
-  max-height: 240px; overflow-y: auto; font-size: 12px;
+  max-height: 240px; overflow-y: auto; font-size: 13px;
 }
 .search-header {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 16px; font-size: 11px; color: var(--text-secondary);
+  padding: 6px 16px; font-size: 12px; color: var(--text-secondary);
   border-bottom: 0.5px solid var(--border-primary);
   position: sticky; top: 0; background: var(--bg-secondary);
 }
@@ -756,7 +773,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .file-md li { margin: 6px 0; }
 
 .file-md code {
-  font-size: 11px;
+  font-size: 12px;
   font-family: ui-monospace, monospace;
   background: var(--bg-secondary);
   padding: 2px 6px;
@@ -793,17 +810,17 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   font-size: 13px;
   line-height: 1.5;
 }
-.mig-cb { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; flex-shrink: 0; font-size: 12px; }
+.mig-cb { display: inline-flex; align-items: center; gap: 3px; cursor: pointer; flex-shrink: 0; font-size: 13px; }
 .mig-cb input { cursor: pointer; margin: 0; }
 .mig-accept-label span { color: var(--accent, #4caf82); }
 .mig-reject-label span { color: var(--danger, #e05252); }
 .mig-text { flex: 1; }
-.mig-type { flex-shrink: 0; font-size: 11px; color: var(--text-tertiary); font-family: ui-monospace, monospace; }
+.mig-type { flex-shrink: 0; font-size: 12px; color: var(--text-tertiary); font-family: ui-monospace, monospace; }
 
 .file-raw {
   padding: 20px;
   font-family: ui-monospace, monospace;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.6;
   white-space: pre-wrap;
   flex: 1;
@@ -860,13 +877,13 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 }
 
 .agent-key {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-tertiary);
 }
 
 .agent-role {
   flex: 1;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
 }
 
@@ -882,7 +899,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   padding: 12px 24px;
   background: var(--text-primary);
   color: var(--bg-primary);
-  font-size: 12px;
+  font-size: 13px;
   border-radius: var(--radius);
   opacity: 0;
   transition: all 0.3s ease;

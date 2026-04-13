@@ -201,19 +201,6 @@ async def delete_rule_file(filename: str):
     return {"status": "deleted"}
 
 
-@app.get("/api/patterns")
-async def get_patterns_files():
-    return list_files(HUMAN_DIR / "cache" / "patterns")
-
-
-@app.get("/api/patterns/{filename:path}")
-async def get_pattern_file(filename: str):
-    path = HUMAN_DIR / "cache" / "patterns" / filename
-    if path.exists() and path.suffix == ".md":
-        return {"name": filename, "content": path.read_text()}
-    return {"error": "File not found"}
-
-
 # Vault files
 @app.get("/api/agenda")
 async def get_agenda_files():
@@ -319,7 +306,6 @@ def _file_dirs() -> dict:
         "memory": HUMAN_DIR / "memory",
         "skills": HUMAN_DIR / "skills",
         "rules": HUMAN_DIR / "rules",
-        "patterns": HUMAN_DIR / "cache" / "patterns",
         "agenda": vault / "Agenda",
         "codebase": vault / "Codebase",
         "migration": vault / "Migration",
@@ -398,7 +384,6 @@ async def search_files(type: str, q: str):
         "memory": HUMAN_DIR / "memory",
         "skills": HUMAN_DIR / "skills",
         "rules": HUMAN_DIR / "rules",
-        "patterns": HUMAN_DIR / "cache" / "patterns",
         "agenda": get_vault_path() / "Agenda",
         "codebase": get_vault_path() / "Codebase",
         "migration": get_vault_path() / "Migration",

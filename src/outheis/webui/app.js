@@ -175,10 +175,7 @@ async function renderView() {
     case 'rules':
       await renderFileView('rules', '~/.outheis/human/rules/');
       break;
-    case 'patterns':
-      await renderFileView('patterns', '~/.outheis/human/cache/patterns/');
-      break;
-    case 'agenda':
+case 'agenda':
       await renderFileView('agenda', 'vault/Agenda/');
       break;
     case 'codebase':
@@ -1140,7 +1137,7 @@ async function renderFileView(type, pathPrefix) {
 
   viewContent.innerHTML = `
     <div class="file-split">
-      <div class="file-list">
+      <div class="file-list" id="file-list-panel">
         <div class="file-list-create" id="file-list-create-btn" onclick="activateCreateForm('${escapeHtml(type)}')"><span class="file-list-create-icon">+</span> Create new<button class="file-list-refresh-btn" title="Refresh" onclick="event.stopPropagation();refreshFileList('${escapeHtml(type)}', this)">↻</button></div>
         <div class="file-list-create-form" id="file-list-create-form" style="display:none">
           <div class="create-path-breadcrumb" id="create-path-breadcrumb"></div>
@@ -1151,6 +1148,7 @@ async function renderFileView(type, pathPrefix) {
         </div>
         ${fileList.map((f) => `<div class="file-item ${f.name === currentFile ? 'active' : ''}" data-filename="${escapeHtml(f.name)}" onclick="openFileEl(this, '${escapeHtml(type)}')"><span>${escapeHtml(f.name)}</span><span class="file-size">${formatSize(f.size)}</span></div>`).join('')}
       </div>
+      <div class="file-list-resize" id="file-list-resize"></div>
       <div class="file-view">
         <div class="file-header">
           <span class="file-name">${currentFile}</span>
@@ -1174,6 +1172,43 @@ async function renderFileView(type, pathPrefix) {
   await loadFile(type, currentFile);
   startFileRefresh(type, currentFile);
   startFileListRefresh(type);
+  initFileListResize();
+}
+
+function initFileListResize() {
+  const handle = document.getElementById('file-list-resize');
+  const panel  = document.getElementById('file-list-panel');
+  if (!handle || !panel) return;
+
+  const saved = localStorage.getItem('fileListWidth');
+  if (saved) panel.style.width = saved + 'px';
+
+  let startX, startW;
+
+  handle.addEventListener('mousedown', (e) => {
+    startX = e.clientX;
+    startW = panel.offsetWidth;
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    function onMove(e) {
+      const w = Math.max(120, Math.min(480, startW + e.clientX - startX));
+      panel.style.width = w + 'px';
+    }
+
+    function onUp() {
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('fileListWidth', panel.offsetWidth);
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 async function deleteMemoryEntry(index) {
@@ -1874,9 +1909,12 @@ async function renderVaultFiles() {
 
   viewContent.innerHTML = `
     <div class="file-split">
-      <div class="file-list" id="vault-tree" style="overflow-y:auto;">
-        ${vaults.map((v) => renderVaultTreeNode(v, 0)).join('')}
+      <div class="file-list" id="file-list-panel" style="overflow-y:auto;">
+        <div id="vault-tree">
+          ${vaults.map((v) => renderVaultTreeNode(v, 0)).join('')}
+        </div>
       </div>
+      <div class="file-list-resize" id="file-list-resize"></div>
       <div class="file-view">
         <div class="file-header">
           <span class="file-name" id="vault-filename">—</span>
@@ -1890,6 +1928,8 @@ async function renderVaultFiles() {
       </div>
     </div>
   `;
+
+  initFileListResize();
 
   document.getElementById('vault-tree').addEventListener('click', (e) => {
     const fileEl = e.target.closest('.vault-file');
@@ -2042,15 +2082,13 @@ async function init() {
   const memory = await fetchAPI('/api/memory');
   const skills = await fetchAPI('/api/skills');
   const rules = await fetchAPI('/api/rules');
-  const patterns = await fetchAPI('/api/patterns');
-  const agenda = await fetchAPI('/api/agenda');
+const agenda = await fetchAPI('/api/agenda');
   const tagsData = await fetchAPI('/api/tags');
 
   document.getElementById('memory-count').textContent = String(memory.length || 0);
   document.getElementById('skills-count').textContent = String(skills.length || 0);
   document.getElementById('rules-count').textContent = String(rules.length || 0);
-  document.getElementById('patterns-count').textContent = String(patterns.length || 0);
-  document.getElementById('agenda-count').textContent = String(agenda.length || 0);
+document.getElementById('agenda-count').textContent = String(agenda.length || 0);
   document.getElementById('tags-count').textContent = String((tagsData.tags || []).length);
 
   await renderTokenChart();

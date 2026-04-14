@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
-from outheis.core.config import load_config, get_human_dir
+from outheis.core.config import load_config, get_human_dir, AgentConfig
 from outheis.core.index import SearchIndex, create_index
 from outheis.core.message import Message
 from outheis.core.tools import tool_error, tool_read_file, tool_write_file_path, tool_append_file_path, tool_load_skill
@@ -631,7 +631,11 @@ class DataAgent(BaseAgent):
 
         files_to_process = {**new_files, **changed_files}
 
-        if not files_to_process and not deleted_names:
+        retention_days = (config.agents.get("agenda") or AgentConfig("cato")).retention
+        sections_changed = bool(files_to_process or deleted_names)
+
+        # Always load sections when retention cleanup may be needed
+        if not sections_changed and retention_days is None:
             return 0
 
         sections = self._parse_shadow_sections(shadow_path)
@@ -652,7 +656,42 @@ class DataAgent(BaseAgent):
             except Exception as e:
                 print(f"Shadow scan: error processing {name}: {e}")
 
-        self._write_shadow(shadow_path, sections)
+        # Remove expired #done-* entries across all sections
+        if retention_days is not None:
+            from datetime import date as _date, timedelta as _td
+            import re as _re
+            cutoff = _date.today() - _td(days=retention_days)
+            _done_re = _re.compile(r"^#done-(\d{4}-\d{2}-\d{2})")
+            pruned = 0
+            for name in list(sections):
+                lines = sections[name].splitlines()
+                kept: list[str] = []
+                i = 0
+                while i < len(lines):
+                    m = _done_re.match(lines[i].strip())
+                    if m:
+                        try:
+                            done_date = _date.fromisoformat(m.group(1))
+                            if done_date < cutoff:
+                                # Skip tag line + description line + optional blank
+                                i += 1  # skip tag line
+                                if i < len(lines) and lines[i].strip():
+                                    i += 1  # skip description line
+                                if i < len(lines) and not lines[i].strip():
+                                    i += 1  # skip blank separator
+                                pruned += 1
+                                continue
+                        except ValueError:
+                            pass
+                    kept.append(lines[i])
+                    i += 1
+                sections[name] = "\n".join(kept)
+            if pruned:
+                print(f"Shadow scan: pruned {pruned} expired #done-* entries")
+                sections_changed = True
+
+        if sections_changed:
+            self._write_shadow(shadow_path, sections)
         self._save_shadow_cache(cache_path, current_hashes)
 
         return processed
@@ -757,6 +796,7 @@ class DataAgent(BaseAgent):
             "2. It answers 'what needs to happen?' — not just 'when was this noted?'\n"
             "3. It is self-contained: someone reading only this line understands what to do\n\n"
             "SKIP these patterns:\n"
+            "- Lines or items tagged with #done-YYYY-MM-DD — already completed, do not re-extract\n"
             "- A follow-up/reminder date without an associated task — these are scheduling markers, not entries\n"
             "- Entries where the description is just a reformatted version of the date\n"
             "- System/tool artifacts (next /today-run, last updated, sync status, etc.)\n"

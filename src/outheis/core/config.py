@@ -170,6 +170,7 @@ class AgentConfig:
     name: str  # Display name (e.g. "ou", "zeno")
     model: str = "capable"  # Model alias
     enabled: bool = True
+    retention: int | None = None  # days to keep #done-YYYY-MM-DD entries in Shadow.md (None = forever)
 
 
 @dataclass
@@ -279,6 +280,7 @@ def _parse_agents(data: dict) -> dict[str, AgentConfig]:
                 name=cfg.get("name", role),
                 model=cfg.get("model", "capable"),
                 enabled=cfg.get("enabled", True),
+                retention=cfg.get("retention"),
             )
     return result
 

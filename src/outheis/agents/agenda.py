@@ -163,7 +163,7 @@ class AgendaAgent(BaseAgent):
             "- Agenda.md = the single daily file: ⛅ header, 🧘 Personal, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
             "- 📅 Today and 🗓️ This Week are filled from Shadow.md — only what is actually there, nothing invented.",
             "  Every genuinely open item must appear — do not omit real tasks or reminders.",
-            "  Filter out (not open items): completed (✓), pure log entries, single-day public holidays (these go in 📅 Today as bold header per rules), duplicates.",
+            "  Filter out (not open items): completed (✓), `#done-*` entries, pure log entries, single-day public holidays (these go in 📅 Today as bold header per rules), duplicates.",
             "  Multi-day school holidays are NOT filtered — show as an info line in 📅 Today (e.g. 'Easter holidays until 10.04.') and in 🗓️ This Week if the period overlaps.",
             "  **Priority order when filling 📅 Today (most urgent first):**",
             "  1. Overdue items (date before today)",
@@ -173,6 +173,11 @@ class AgendaAgent(BaseAgent):
             "  5. Remaining open items by relevance",
             "- When the user wants to read the agenda: call get_daily() and return the result",
             "  **character-exact and unchanged** — no rephrasing, no shortening, no additions.",
+            "- For write/update/add requests: the current Agenda.md is already in your system prompt above.",
+            "  Read it from there, apply the change, call write_file with the complete updated content.",
+            "  **NEVER call get_daily() for write requests** — it bypasses the write and returns read-only content.",
+            "  **Preserve all existing `>` annotation lines exactly as they are.** Do not process, remove,",
+            "  or act on annotations during a simple add/write request — they are handled by the review cycle.",
             "- Section headers in the language from config.",
             "- 🧘 Personal section: `- [ ]` checkboxes only. 📅/🗓️ sections: plain lines, no dashes, no checkboxes.",
             "- Adopt the user's structure, don't impose one.",
@@ -198,18 +203,40 @@ class AgendaAgent(BaseAgent):
             "",
             "**1. Completion** — the item is done, no longer relevant.",
             f"   Keywords: {completion_kws}.",
-            "   Action: remove the item AND the `>` line entirely from Agenda.md.",
+            "   Action:",
+            "   a) Remove the item AND the `>` line entirely from Agenda.md.",
+            "   b) In Shadow.md, find the matching entry and prepend `#done-YYYY-MM-DD` (today's date)",
+            "      to its tag line (first line of the two-line entry). Write the updated Shadow.md via",
+            "      write_file(file='shadow', content='...'). This prevents the item from reappearing",
+            "      in the next review while preserving a traceable completion record.",
+            "      Example: `#date-2026-04-10 #action-required` → `#done-2026-04-14 #date-2026-04-10 #action-required`",
+            "      The Shadow.md entry's source file is identifiable from its `<!-- BEGIN: filename.md -->`",
+            "      section marker. Note it — you'll need it for step c.",
+            "   c) Call ask_zeno: 'Mark this item as done in vault file [filename]: [item description].",
+            "      Find the line in that file and prepend #done-YYYY-MM-DD to it.'",
+            "      Skip step c if the item has no traceable source file in Shadow.md.",
             "   Note: a `>` completion annotation IS the explicit user consent required by the 'never remove'",
             "   rule. It is not automatic removal — the user requested it. Remove without hesitation.",
             "",
             "**2. Postpone** — the item should leave the current view until a future date.",
-            f"   Keywords: {postpone_kws}, [any future time reference].",
+            f"   Keywords: {postpone_kws}, [any future time reference in any form or language].",
             "   Action:",
             "   a) Remove the item from Agenda.md. Remove the `>` line.",
-            "   b) Calculate the target date from the annotation (e.g. 'next week' → next Monday ISO date; 'May' → first day of that month).",
-            "   c) Find the item in Shadow.md and update its date to the calculated target date.",
-            "      Write the updated Shadow.md via write_file(file='shadow', content='...').",
-            "      Items have dates in their text or as a leading `YYYY-MM-DD` — update that date in place.",
+            f"   b) Calculate the target date as an ISO date (YYYY-MM-DD). Today is {date.today().isoformat()}.",
+            "      The annotation may use any natural language form in any language.",
+            "      Examples: 'next week' → next Monday, 'in May' → first of that month,",
+            "      'end of May' → last day of that month, 'Thursday' → next Thursday,",
+            "      'in two weeks' → today + 14 days, 'mid-April' → 15th of that month.",
+            "      Always resolve to a concrete ISO date — never leave it as a relative expression.",
+            "   c) Find the item's entry in Shadow.md (match by description text).",
+            "      In the tag line (the line starting with `#date-` or `#action-required`),",
+            "      replace the existing `#date-YYYY-MM-DD` tag with `#date-[target date ISO]`.",
+            "      If there is no `#date-` tag, prepend `#date-[target date ISO]` to the tag line.",
+            "      Write the complete updated Shadow.md via write_file(file='shadow', content='...').",
+            "      Note the source file from the `<!-- BEGIN: filename.md -->` section marker.",
+            "   d) Call ask_zeno: 'Update the date of this item in vault file [filename]: [item description].",
+            "      Change its #date-YYYY-MM-DD tag (or date in text) to [target date ISO].'",
+            "      This prevents shadow_scan from restoring the old date on the next vault re-read.",
             "",
             "**3. Correction / clarification** — the user is correcting wording, facts, or context.",
             "   Identified by: explanation, question, contradiction, or alternative phrasing.",
@@ -234,6 +261,18 @@ class AgendaAgent(BaseAgent):
             "- Apply the change (check off, remove, move) via write_file.",
             "- Confirm briefly what was done.",
             "Do NOT call get_daily() for these requests. Apply the change directly.",
+            "",
+            "## Placement rules for new items (add/write/note requests)",
+            "When adding a new item, determine placement strictly as follows:",
+            "- **NEVER place in the Personal section (🧘)** unless the user explicitly names it.",
+            "  Personal is for recurring habits only — not for tasks or reminders.",
+            "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
+            "- **Date = today** → add plain line to Today (📅) AND a tagged entry (`#date-YYYY-MM-DD`) to Shadow.md.",
+            "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry (`#date-YYYY-MM-DD`) to Shadow.md.",
+            "- **Date = beyond this week** → add tagged entry (`#date-YYYY-MM-DD`) to Shadow.md only.",
+            "  The item will appear in Agenda.md automatically when due.",
+            "- **Weekday named without year context** → resolve to the next occurrence from today",
+            "  and apply the rule above.",
             "",
             "## Memory proposals from annotations",
             "After processing a `>` annotation, call propose_memory if the annotation reveals",
@@ -492,6 +531,7 @@ class AgendaAgent(BaseAgent):
                     if rescued:
                         content = content.rstrip() + "\n\n" + "\n".join(rescued) + "\n"
             path.write_text(content, encoding="utf-8")
+            self._write_happened = True
             return f"✓ {path.name} written"
         except Exception as e:
             return f"Error: {e}"
@@ -579,39 +619,39 @@ class AgendaAgent(BaseAgent):
         return f"Section '{topic}' not found."
     
 
-    def _heute_needs_refill(self, agenda_dir: Path, agenda_text: str) -> bool:
+    def _today_needs_refill(self, agenda_dir: Path, agenda_text: str) -> bool:
         """
-        Return True if Heute is below capacity AND Shadow has items that may qualify.
+        Return True if Today is below capacity AND Shadow has items that may qualify.
 
         Structural check only — counts lines and scans date tags.
         The LLM decides which Shadow items to actually add (semantic).
         """
         import re
-        HEUTE_RE = re.compile(r'^##\s+📅')
+        TODAY_RE = re.compile(r'^##\s+📅')
         SECTION_RE = re.compile(r'^(##|---)')
         DATE_RE = re.compile(r'#date-(\d{4}-\d{2}-\d{2})')
         today = date.today()
 
-        # Count non-empty, non-completed items in Heute section
-        in_heute = False
-        heute_count = 0
+        # Count non-empty, non-completed items in Today section
+        in_today = False
+        today_count = 0
         for line in agenda_text.splitlines():
-            if HEUTE_RE.match(line):
-                in_heute = True
+            if TODAY_RE.match(line):
+                in_today = True
                 continue
-            if in_heute:
+            if in_today:
                 if SECTION_RE.match(line):
                     break
                 stripped = line.strip()
                 if stripped and not stripped.startswith("*") and "✓" not in stripped:
                     # Only count tagged items — untagged items will be processed/moved by cato
                     if "#date-" in stripped or "#action-required" in stripped:
-                        heute_count += 1
+                        today_count += 1
 
-        if heute_count >= 5:
+        if today_count >= 5:
             return False  # already at capacity
 
-        # Check Shadow.md for any items that qualify for Heute
+        # Check Shadow.md for any items that qualify for Today
         # Matches priority 1 + 2 from the query rule: overdue, due today,
         # #action-required, or within ~10 days (near deadline).
         shadow_path = agenda_dir / "Shadow.md"
@@ -837,7 +877,15 @@ class AgendaAgent(BaseAgent):
                 reply_to=msg.id,
             )
 
-        prior = self._load_passthrough(identity) if identity else None
+        from outheis.core.i18n import AGENDA_WRITE_STEMS
+        try:
+            _lang = load_config().human.language[:2].lower()
+        except Exception:
+            _lang = "en"
+        _write_stems = AGENDA_WRITE_STEMS.get(_lang, []) + AGENDA_WRITE_STEMS.get("en", [])
+        _is_write = any(s in query.lower() for s in _write_stems)
+
+        prior = self._load_passthrough(identity) if (identity and not _is_write) else None
         self._passthrough_content = None  # reset; _tool_get_daily sets if called
         try:
             answer = self._process_with_tools(query, verbose, prior_content=prior)
@@ -865,11 +913,12 @@ class AgendaAgent(BaseAgent):
         # write_file is actually called.
         from outheis.core.i18n import (
             AGENDA_MODIFY_STEMS,
+            AGENDA_WRITE_STEMS,
             ANNOTATION_COMPLETION_KEYWORDS,
             ANNOTATION_POSTPONE_KEYWORDS,
         )
         q = query.lower().strip()
-        # Base English write verbs + all language modify/completion/postpone stems.
+        # Base English write verbs + all language modify/write/completion/postpone stems.
         _base_write = {
             "update", "write", "create", "add", "change", "modify", "refresh",
             "process", "review", "check", "daily review",
@@ -878,6 +927,8 @@ class AgendaAgent(BaseAgent):
         }
         _i18n_stems: set[str] = set()
         for stems in AGENDA_MODIFY_STEMS.values():
+            _i18n_stems.update(stems)
+        for stems in AGENDA_WRITE_STEMS.values():
             _i18n_stems.update(stems)
         for kws in ANNOTATION_COMPLETION_KEYWORDS.values():
             _i18n_stems.update(kws)
@@ -890,11 +941,21 @@ class AgendaAgent(BaseAgent):
                 return content
 
         self._passthrough_content = None
+        self._write_happened = False
         result = self._process_with_tools(query)
         if result == "No response.":
             content = self._tool_get_daily()
             if content and not content.startswith("("):
                 return content
+        # Guard: LLM confirmed write but never called write_file — retry once with explicit instruction
+        if not self._write_happened and any(kw in q for kw in _write_keywords):
+            self._write_happened = False
+            retry_query = (
+                f"{query}\n\n"
+                "[System: You must call write_file to complete this request. "
+                "Do not respond until write_file has been called and returned successfully.]"
+            )
+            result = self._process_with_tools(retry_query)
         return result
 
     def _process_with_tools(self, query: str, verbose: bool = False,
@@ -1001,8 +1062,8 @@ class AgendaAgent(BaseAgent):
                     or any(line.startswith(">") for line in exchange_text.splitlines())
                 )
                 if not has_comments:
-                    # Still run if Heute is below capacity and Shadow has qualifying items
-                    if not self._heute_needs_refill(agenda_dir, daily_text):
+                    # Still run if Today is below capacity and Shadow has qualifying items
+                    if not self._today_needs_refill(agenda_dir, daily_text):
                         print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
                         return
                 else:
@@ -1018,15 +1079,15 @@ class AgendaAgent(BaseAgent):
             context = "Scheduled review."
         elif comment_trigger:
             context = "User comments detected in Agenda.md — please process."
-        elif self._heute_needs_refill(agenda_dir, daily_text):
+        elif self._today_needs_refill(agenda_dir, daily_text):
             context = (
-                "Heute is below capacity and Shadow has qualifying items. "
-                "Add candidates from Shadow.md to fill available slots in Heute."
+                "Today is below capacity and Shadow has qualifying items. "
+                "Add candidates from Shadow.md to fill available slots in Today."
             )
         else:
             context = (
                 "Changes detected in agenda files. "
-                "Items may have been completed or deferred — check if 'Heute' has capacity "
+                "Items may have been completed or deferred — check if 'Today' has capacity "
                 "and pull additional candidates from Shadow.md to fill any freed slots."
             )
         
@@ -1075,8 +1136,11 @@ class AgendaAgent(BaseAgent):
             "   - Remove the resolved item from Exchange.md (rewrite via write_file for exchange, keeping unresolved items).\n"
             "   A `>` reply like 'Show all open Shadow items for qualification' means:\n"
             "   include ALL open Shadow.md items (without ✓) in Today regardless of date — this is a one-time qualification pass.\n"
-            "1. 📅 Today — plain lines, no dashes, no checkboxes. Max 5 items.\n"
-            "   For each existing Today item, decide: does it belong here NOW?\n"
+            "1. 📅 Today — plain lines, no dashes, no checkboxes.\n"
+            "   CRITICAL — carry-over rule: Every item currently in Today that has #action-required OR\n"
+            "   an overdue date (date < today) MUST appear in the new Today, no exceptions.\n"
+            "   These items are unfinished work — dropping them silently is data loss.\n"
+            "   Only remove a Today item if it is explicitly marked done (✓ or #done-*) or has a `>` deferral annotation.\n"
             "   For items without a date or tag: it is YOUR responsibility to assign date, tags, and\n"
             "   correct placement based on the text. Read the item semantically:\n"
             "     - explicit day/date reference → assign the corresponding #date, place accordingly.\n"
@@ -1088,7 +1152,7 @@ class AgendaAgent(BaseAgent):
             "   MOVE to Shadow.md if: far future — item is preserved, reappears when due.\n"
             "   Note: moving between sections or to Shadow is structural maintenance, NOT deleting.\n"
             "   The 'never remove' rule applies only to items going permanently lost — not to correct placement.\n"
-            "   Then fill remaining slots from Shadow.md (up to max 5 total).\n"
+            "   Then add items from Shadow.md not already shown:\n"
             "   Priority 1 — must include: overdue (date < today), due today, #action-required.\n"
             "   Priority 2 — fill remaining slots with: items due within ~10 days, items that unblock\n"
             "   something else, or items that have been open for a long time without progress.\n"

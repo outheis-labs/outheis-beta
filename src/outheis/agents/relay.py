@@ -192,9 +192,23 @@ class RelayAgent(BaseAgent):
             and _has_read_intent
             and not any(kw in text_lower for kw in _write_keywords)
         )
+        _is_agenda_write = (
+            _has_agenda_kw
+            and any(kw in text_lower for kw in _write_keywords)
+            and not _is_agenda_read
+        )
+
+        # Check for @ prefix: "@ ..." means "write this to the agenda"
+        _at_prefix = text.lstrip().startswith("@ ")
+        _at_text = text.lstrip()[2:].strip() if _at_prefix else text
 
         response_source = "relay"
-        if "@zeno" in text_lower:
+        if _at_prefix:
+            if verbose:
+                print(f"[@ prefix → agenda]", file=sys.stderr)
+            response_text = self._handle_with_agenda_agent(f"add to agenda: {_at_text}", msg)
+            response_source = "cato"
+        elif "@zeno" in text_lower:
             if verbose:
                 print("[explicit @zeno → data]", file=sys.stderr)
             response_text = self._handle_with_data_agent(text, msg)
@@ -212,6 +226,11 @@ class RelayAgent(BaseAgent):
         elif _is_agenda_read:
             if verbose:
                 print(f"[fast-route agenda-read → agenda]", file=sys.stderr)
+            response_text = self._handle_with_agenda_agent(text, msg)
+            response_source = "cato"
+        elif _is_agenda_write:
+            if verbose:
+                print(f"[fast-route agenda-write → agenda]", file=sys.stderr)
             response_text = self._handle_with_agenda_agent(text, msg)
             response_source = "cato"
         else:

@@ -50,7 +50,7 @@ Clarify open budget items
 
 class TestExchangeDetection:
 
-    def _captured_query(self, agent, agenda_text: str, exchange_text: str) -> str | None:
+    def _captured_query(self, agent, agenda_text: str, exchange_text: str):
         """Run run_review and capture the query passed to _process_with_tools."""
         captured = []
 

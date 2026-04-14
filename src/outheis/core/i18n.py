@@ -87,7 +87,7 @@ ANNOTATION_BEHAVIORAL_KEYWORDS: dict[str, list[str]] = {
 
 # Verb stems indicating a read/display intent (relay fast-route detection)
 AGENDA_READ_INTENT_STEMS: dict[str, list[str]] = {
-    "de": ["zeig", "anzeig", "was steht", "heute"],
+    "de": ["zeig", "anzeig", "was steht"],
     "en": ["show", "get", "fetch", "display", "read", "what"],
     "fr": ["montr", "affich", "qu'est"],
     "es": ["muest", "mostr"],
@@ -106,7 +106,7 @@ AGENDA_MODIFY_STEMS: dict[str, list[str]] = {
 
 # Routing verb stems for relay agenda-write path detection
 AGENDA_WRITE_STEMS: dict[str, list[str]] = {
-    "de": ["aktualisier", "erstell", "änder", "hinzufüg", "ergänz", "neu generier"],
+    "de": ["aktualisier", "erstell", "änder", "hinzufüg", "ergänz", "neu generier", "schreib", "trag ein", "notier"],
     "en": ["update", "creat", "chang", "add", "append", "regenerat"],
     "fr": ["mettr", "créer", "modifier", "ajouter", "compléter", "régénérer"],
     "es": ["actualiz", "crear", "cambiar", "añadir", "completar", "regenerar"],

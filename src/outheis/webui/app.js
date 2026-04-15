@@ -390,7 +390,7 @@ function renderConfigProviders() {
           <div class="providers">
             ${renderProviderCard('anthropic', config.llm?.providers?.anthropic)}
             ${renderProviderCard('openai', config.llm?.providers?.openai)}
-            ${renderProviderCard('ollama', config.llm?.providers?.ollama)}
+            ${renderOllamaGroup(config.llm?.providers?.ollama)}
           </div>
         </div>
       </div>
@@ -399,50 +399,88 @@ function renderConfigProviders() {
 }
 
 function renderProviderCard(name, providerConfig) {
-  const isActive = providerConfig?.api_key || (name === 'ollama' && providerConfig?.base_url);
+  const isActive = !!providerConfig?.api_key;
   const displayName = name.charAt(0).toUpperCase() + name.slice(1);
-
   return `
     <div class="provider">
       <div class="provider-header">
         <span class="provider-name">${displayName}</span>
         <span class="provider-dot ${isActive ? 'active' : ''}"></span>
       </div>
-      ${name !== 'ollama' ? `
-        <div class="provider-field">
-          <div class="provider-field-label-row">
-            <label>API key</label>
-            <button class="btn-show-key" onclick="toggleKeyVisibility('cfg-${name}-key', this)">show</button>
-          </div>
-          <input type="password" id="cfg-${name}-key" value="${providerConfig?.api_key || ''}" placeholder="sk-...">
+      <div class="provider-field">
+        <div class="provider-field-label-row">
+          <label>API key</label>
+          <button class="btn-show-key" onclick="toggleKeyVisibility('cfg-${name}-key', this)">show</button>
         </div>
-      ` : ''}
+        <input type="password" id="cfg-${name}-key" value="${providerConfig?.api_key || ''}" placeholder="sk-...">
+      </div>
       <div class="provider-field">
         <label>Base URL</label>
         <input type="text" id="cfg-${name}-url" value="${providerConfig?.base_url || getDefaultUrl(name)}">
       </div>
-      ${name === 'ollama' ? `
-        <div class="provider-field">
-          <label>Environment variables <span style="font-weight:400;opacity:.6">(set on Ollama server)</span></label>
-          <div id="cfg-ollama-envvars">
-            ${Object.entries(providerConfig?.env_vars || {}).map(([k, v]) =>
-              `<div class="form-row">
-                <input type="text" class="ollama-env-key" value="${k}" placeholder="VARIABLE">
-                <input type="text" class="ollama-env-val" value="${v}" placeholder="value">
-                <button class="btn btn-sm" onclick="this.closest('.form-row').remove()">×</button>
-              </div>`
-            ).join('')}
+    </div>
+  `;
+}
+
+function renderOllamaGroup(ollamaConfig) {
+  const local = ollamaConfig?.local || {};
+  const cloud = ollamaConfig?.cloud || {};
+  const localActive = !!local.base_url;
+  const cloudActive = !!cloud.api_key;
+  return `
+    <div class="provider">
+      <div class="provider-header">
+        <span class="provider-name">Ollama</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="border:1px solid var(--border);border-radius:6px;padding:12px;">
+          <div class="provider-header" style="margin-bottom:8px;">
+            <span class="provider-name" style="font-size:12px;opacity:.7">local</span>
+            <span class="provider-dot ${localActive ? 'active' : ''}"></span>
           </div>
-          <button class="btn btn-sm" style="margin-top:4px" onclick="addOllamaEnvVar()">+ Add variable</button>
+          <div class="provider-field">
+            <label>Base URL</label>
+            <input type="text" id="cfg-ollama-local-url" value="${local.base_url || 'http://localhost:11434'}">
+          </div>
+          <div class="provider-field">
+            <label>Environment variables <span style="font-weight:400;opacity:.6">(passed to ollama serve)</span></label>
+            <div id="cfg-ollama-local-envvars">
+              ${Object.entries(local.env_vars || {}).map(([k, v]) =>
+                `<div class="form-row">
+                  <input type="text" class="ollama-env-key" value="${k}" placeholder="VARIABLE">
+                  <input type="text" class="ollama-env-val" value="${v}" placeholder="value">
+                  <button class="btn btn-sm" onclick="this.closest('.form-row').remove()">×</button>
+                </div>`
+              ).join('')}
+            </div>
+            <button class="btn btn-sm" style="margin-top:4px" onclick="addOllamaEnvVar()">+ Add variable</button>
+          </div>
         </div>
-      ` : ''}
+        <div style="border:1px solid var(--border);border-radius:6px;padding:12px;">
+          <div class="provider-header" style="margin-bottom:8px;">
+            <span class="provider-name" style="font-size:12px;opacity:.7">cloud</span>
+            <span class="provider-dot ${cloudActive ? 'active' : ''}"></span>
+          </div>
+          <div class="provider-field">
+            <div class="provider-field-label-row">
+              <label>API key</label>
+              <button class="btn-show-key" onclick="toggleKeyVisibility('cfg-ollama-cloud-key', this)">show</button>
+            </div>
+            <input type="password" id="cfg-ollama-cloud-key" value="${cloud.api_key || ''}" placeholder="835a...">
+          </div>
+          <div class="provider-field">
+            <label>Base URL</label>
+            <input type="text" id="cfg-ollama-cloud-url" value="${cloud.base_url || 'https://ollama.com/v1'}">
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
 
 function renderConfigModels() {
   const models = config.llm?.models || { fast: 'claude-haiku-4-5', capable: 'claude-sonnet-4-20250514', reasoning: 'claude-opus-4-5' };
-  const localAliases = Object.entries(models).filter(([, m]) => m?.provider === 'ollama').map(([a]) => a);
+  const localAliases = Object.entries(models).filter(([, m]) => m?.provider?.startsWith('ollama')).map(([a]) => a);
   const currentFallback = config.llm?.local_fallback || '';
 
   viewContent.innerHTML = `
@@ -480,7 +518,8 @@ function renderConfigModels() {
                 <select class="model-provider-select">
                   <option value="anthropic" ${provider === 'anthropic' ? 'selected' : ''}>anthropic</option>
                   <option value="openai" ${provider === 'openai' ? 'selected' : ''}>openai</option>
-                  <option value="ollama" ${provider === 'ollama' ? 'selected' : ''}>ollama</option>
+                  <option value="ollama.local" ${provider === 'ollama.local' ? 'selected' : ''}>ollama.local</option>
+                  <option value="ollama.cloud" ${provider === 'ollama.cloud' ? 'selected' : ''}>ollama.cloud</option>
                 </select>
               </div>
               <div class="model-name">
@@ -591,7 +630,12 @@ function renderConfigSignal() {
 }
 
 function getDefaultUrl(provider) {
-  return { anthropic: 'https://api.anthropic.com', openai: 'https://api.openai.com/v1', ollama: 'http://localhost:11434' }[provider] || '';
+  return {
+    anthropic: 'https://api.anthropic.com',
+    openai: 'https://api.openai.com/v1',
+    'ollama.local': 'http://localhost:11434',
+    'ollama.cloud': 'https://ollama.com/v1',
+  }[provider] || '';
 }
 
 function toggleKeyVisibility(inputId, btn) {
@@ -603,7 +647,7 @@ function toggleKeyVisibility(inputId, btn) {
 }
 
 function addOllamaEnvVar() {
-  const container = document.getElementById('cfg-ollama-envvars');
+  const container = document.getElementById('cfg-ollama-local-envvars');
   if (!container) return;
   const row = document.createElement('div');
   row.className = 'form-row';
@@ -636,7 +680,8 @@ function addModel() {
       <select class="model-provider-select">
         <option value="anthropic">anthropic</option>
         <option value="openai">openai</option>
-        <option value="ollama">ollama</option>
+        <option value="ollama.local">ollama.local</option>
+        <option value="ollama.cloud">ollama.cloud</option>
       </select>
     </div>
     <div class="model-name">
@@ -691,21 +736,29 @@ async function saveConfig() {
   const anthropicKey = document.getElementById('cfg-anthropic-key');
   if (anthropicKey) {
     updatedConfig.llm = updatedConfig.llm || {};
+    const ollamaLocalEnvVars = (() => {
+      const rows = document.querySelectorAll('#cfg-ollama-local-envvars .form-row');
+      const vars = {};
+      rows.forEach(row => {
+        const k = row.querySelector('.ollama-env-key')?.value?.trim();
+        const v = row.querySelector('.ollama-env-val')?.value?.trim();
+        if (k) vars[k] = v || '';
+      });
+      return vars;
+    })();
     updatedConfig.llm.providers = {
       anthropic: { api_key: anthropicKey.value, base_url: document.getElementById('cfg-anthropic-url')?.value },
       openai: { api_key: document.getElementById('cfg-openai-key')?.value, base_url: document.getElementById('cfg-openai-url')?.value },
       ollama: {
-        base_url: document.getElementById('cfg-ollama-url')?.value,
-        env_vars: (() => {
-          const rows = document.querySelectorAll('#cfg-ollama-envvars .form-row');
-          const vars = {};
-          rows.forEach(row => {
-            const k = row.querySelector('.ollama-env-key')?.value?.trim();
-            const v = row.querySelector('.ollama-env-val')?.value?.trim();
-            if (k) vars[k] = v || '';
-          });
-          return vars;
-        })(),
+        local: {
+          api_key: 'ollama-local',
+          base_url: document.getElementById('cfg-ollama-local-url')?.value || 'http://localhost:11434',
+          ...(Object.keys(ollamaLocalEnvVars).length ? { env_vars: ollamaLocalEnvVars } : {}),
+        },
+        cloud: {
+          api_key: document.getElementById('cfg-ollama-cloud-key')?.value || '',
+          base_url: document.getElementById('cfg-ollama-cloud-url')?.value || 'https://ollama.com/v1',
+        },
       },
     };
   }

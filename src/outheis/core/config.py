@@ -135,7 +135,7 @@ class ProviderConfig:
 @dataclass
 class ModelConfig:
     """Configuration for a single model alias."""
-    provider: str  # "anthropic", "ollama", "openai"
+    provider: str  # "anthropic", "openai", "ollama.local", "ollama.cloud", …
     name: str  # e.g. "claude-sonnet-4-20250514", "llama3.2:3b"
     run_mode: str = "on-demand"  # "on-demand", "persistent"
 
@@ -243,18 +243,35 @@ class Config:
 # LOAD / SAVE
 # =============================================================================
 
+_PROVIDER_KEYS = {"api_key", "base_url", "env_vars"}
+
+
 def _parse_providers(data: dict) -> dict[str, ProviderConfig]:
-    """Parse providers from config data."""
+    """Parse providers from config data.
+
+    Supports nested sub-providers (e.g. ollama > local/cloud):
+      "ollama": {"local": {...}, "cloud": {...}}
+    becomes internal keys "ollama.local" and "ollama.cloud".
+    """
     result = {}
     for name, cfg in data.items():
-        if isinstance(cfg, dict):
+        if not isinstance(cfg, dict):
+            result[name] = ProviderConfig()
+            continue
+        # Nested sub-providers: no provider keys at top level, all values are dicts
+        if not _PROVIDER_KEYS.intersection(cfg) and all(isinstance(v, dict) for v in cfg.values()):
+            for subname, subcfg in cfg.items():
+                result[f"{name}.{subname}"] = ProviderConfig(
+                    api_key=subcfg.get("api_key"),
+                    base_url=subcfg.get("base_url"),
+                    env_vars=subcfg.get("env_vars") or {},
+                )
+        else:
             result[name] = ProviderConfig(
                 api_key=cfg.get("api_key"),
                 base_url=cfg.get("base_url"),
                 env_vars=cfg.get("env_vars") or {},
             )
-        else:
-            result[name] = ProviderConfig()
     return result
 
 
@@ -454,6 +471,21 @@ def _serialize_schedule(schedule: ScheduleConfig) -> dict:
     }
 
 
+def _serialize_providers(providers: dict[str, ProviderConfig]) -> dict:
+    """Serialize providers, reconstructing nested structure for dot-notation keys."""
+    out: dict = {}
+    for key, p in providers.items():
+        entry = {k: v for k, v in [("api_key", p.api_key), ("base_url", p.base_url)] if v is not None}
+        if p.env_vars:
+            entry["env_vars"] = p.env_vars
+        if "." in key:
+            parent, child = key.split(".", 1)
+            out.setdefault(parent, {})[child] = entry
+        else:
+            out[key] = entry
+    return out
+
+
 def save_config(config: Config) -> None:
     """Save configuration to file."""
     path = get_config_path()
@@ -467,15 +499,7 @@ def save_config(config: Config) -> None:
             "vault": config.human.vault,
         },
         "llm": {
-            "providers": {
-                name: {
-                    k: v for k, v in [
-                        ("api_key", p.api_key),
-                        ("base_url", p.base_url),
-                    ] if v is not None
-                }
-                for name, p in config.llm.providers.items()
-            },
+            "providers": _serialize_providers(config.llm.providers),
             "models": {
                 alias: {
                     "provider": m.provider,

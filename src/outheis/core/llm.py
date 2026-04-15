@@ -3,7 +3,8 @@ LLM client abstraction.
 
 Supports multiple providers per config:
 - Anthropic (Claude)
-- Ollama (local models, OpenAI-compatible API)
+- Ollama local (ollama.local — OpenAI-compatible, localhost)
+- Ollama cloud (ollama.cloud — OpenAI-compatible, https://ollama.com/v1)
 - OpenAI
 
 All providers expose the same Anthropic-style response interface to callers.
@@ -93,25 +94,27 @@ def get_client(provider_name: str) -> Any:
             kwargs["base_url"] = provider.base_url
         _clients[provider_name] = anthropic.Anthropic(**kwargs)
 
-    elif provider_name in ("ollama", "openai"):
+    elif provider_name == "openai" or provider_name.startswith("ollama"):
         try:
             import openai
         except ImportError:
             raise ImportError("openai package not installed — run: pip install openai")
         kwargs = {}
-        if provider_name == "ollama":
-            # Apply provider env_vars to current process environment
-            if provider.env_vars:
-                import os
-                for k, v in provider.env_vars.items():
-                    os.environ.setdefault(k, str(v))
+        if provider_name.startswith("ollama"):
+            api_key = provider.api_key or "ollama-local"
             base_url = (provider.base_url or "http://localhost:11434").rstrip("/")
             if not base_url.endswith("/v1"):
                 base_url += "/v1"
             kwargs["base_url"] = base_url
-            kwargs["api_key"] = "ollama"
-            kwargs["timeout"] = 120.0  # 2 min max per Ollama call
-        else:
+            kwargs["api_key"] = api_key
+            kwargs["timeout"] = 120.0
+            if provider_name == "ollama.local":
+                import os
+                if provider.env_vars:
+                    for k, v in provider.env_vars.items():
+                        os.environ.setdefault(k, str(v))
+                os.environ["OLLAMA_API_KEY"] = api_key
+        else:  # openai
             if provider.api_key:
                 kwargs["api_key"] = provider.api_key
             if provider.base_url:
@@ -319,7 +322,7 @@ def call_llm(
         }
         if oai_tools:
             kwargs["tools"] = oai_tools
-        if model_config.provider == "ollama":
+        if model_config.provider == "ollama.local":
             # keep_alive=-1: keep model in memory indefinitely
             # keep_alive=0: unload immediately after call
             kwargs["extra_body"] = {

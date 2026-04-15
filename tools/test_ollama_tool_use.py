@@ -185,6 +185,7 @@ def main():
     parser = argparse.ArgumentParser(description="Test Ollama models for tool-use capability")
     parser.add_argument("--models", nargs="*", help="Models to test (default: all available)")
     parser.add_argument("--url", default="http://localhost:11434", help="Ollama base URL")
+    parser.add_argument("--api-key", default="ollama", help="API key (required for cloud)")
     parser.add_argument("--src", default=None, help="Source root to use in prompts")
     parser.add_argument("--full", action="store_true", help="Run full tool loop (not just first call)")
     parser.add_argument("--timeout", type=int, default=60, help="Per-model timeout in seconds")
@@ -197,7 +198,7 @@ def main():
         print("ERROR: openai package not installed. Run: pip install openai")
         return
 
-    client = OpenAI(base_url=f"{args.url}/v1", api_key="ollama")
+    client = OpenAI(base_url=f"{args.url}/v1", api_key=args.api_key)
 
     src_root = args.src or os.path.expanduser("~/outheis-beta/src/outheis")
     question = f"How many Python files are in {src_root}/agents/?"

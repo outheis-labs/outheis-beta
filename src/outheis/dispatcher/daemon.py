@@ -471,7 +471,7 @@ class Dispatcher:
                 continue
             try:
                 mc = resolve_model(agent_cfg.model)
-                if mc.provider != "ollama":
+                if not mc.provider.startswith("ollama"):
                     cloud_aliases.add(agent_cfg.model)
             except Exception:
                 pass
@@ -614,7 +614,7 @@ class Dispatcher:
         }
 
         for alias, model_cfg in self.config.llm.models.items():
-            if model_cfg.provider == "ollama" and model_cfg.run_mode == "persistent":
+            if model_cfg.provider == "ollama.local" and model_cfg.run_mode == "persistent":
                 try:
                     from outheis.core.llm import call_llm
                     call_llm(
@@ -630,6 +630,23 @@ class Dispatcher:
                         print(f"\n\033[31mStartup aborted:\033[0m model '{alias}' is required by an active agent but could not be loaded.", file=sys.stderr)
                         print(f"Fix: run 'ollama pull {model_cfg.name}' or disable the agent using this model.", file=sys.stderr)
                         sys.exit(1)
+
+    def _ensure_ollama(self) -> None:
+        """Start Ollama server if ollama.local is configured and not yet running."""
+        provider = self.config.llm.providers.get("ollama.local")
+        if provider is None:
+            return
+        from outheis.core.ollama_server import get_server
+        server = get_server()
+        if server.is_responsive():
+            print("[ollama] server already running", file=sys.stderr)
+            return
+        print("[ollama] starting server...", file=sys.stderr)
+        ready = server.ensure_running(env_vars=provider.env_vars or {})
+        if ready:
+            print("[ollama] server ready", file=sys.stderr)
+        else:
+            print("[ollama] server failed to start — local models unavailable", file=sys.stderr)
 
     def _run_archive_rotation(self) -> None:
         """Rotate old messages to archive."""
@@ -1009,6 +1026,9 @@ class Dispatcher:
         # Initialize LLM with config (once, at startup)
         init_llm(self.config.llm)
 
+        # Ensure Ollama server is running (if ollama.local provider is configured)
+        self._ensure_ollama()
+
         # Warmup persistent local models
         self._warmup_persistent_models()
 
@@ -1131,13 +1151,20 @@ class Dispatcher:
         finally:
             watcher.stop()
             lock_manager.stop()
-            
+
+            # Stop Ollama if we started it
+            from outheis.core.ollama_server import get_server
+            ollama = get_server()
+            if ollama.owns_process():
+                print("[ollama] stopping server", file=sys.stderr)
+                ollama.stop()
+
             # Close wakeup pipe
             if self._wakeup_read:
                 os.close(self._wakeup_read)
             if self._wakeup_write:
                 os.close(self._wakeup_write)
-                
+
             remove_pid()
             print("Dispatcher stopped")
 
@@ -1396,8 +1423,8 @@ def _validate_api_keys(config: Config) -> list[str]:
                 except Exception as e:
                     errors.append(f"API key validation failed: {e}")
         
-        elif provider_name == "ollama":
-            # Ollama doesn't need API key, just check if reachable
+        elif provider_name == "ollama.local":
+            # Check if local Ollama is reachable
             base_url = provider_cfg.base_url or "http://localhost:11434"
             try:
                 import urllib.request

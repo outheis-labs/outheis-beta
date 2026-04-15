@@ -10,6 +10,15 @@ verbatim agenda instead of writing.
 
 from unittest.mock import MagicMock, patch
 
+from tests.fixtures.agenda_write_inputs import (
+    DE_HINZUFUEG,
+    DE_NOTIER,
+    DE_RELAY_FORMAT,
+    DE_SCHREIB,
+    DE_TRAG_EIN,
+    DE_ZEIG_AGENDA,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -58,25 +67,19 @@ class TestHandleDirectWriteRouting:
     def test_de_schreib(self):
         """'schreib' (German) must route to _process_with_tools."""
         agent = make_agent()
-        self._assert_routes_to_process(
-            agent,
-            "bitte schreib in die agenda unter 'heute': Schauen, ob Signal-Message da ist"
-        )
+        self._assert_routes_to_process(agent, DE_SCHREIB)
 
     def test_de_trag_ein(self):
         agent = make_agent()
-        self._assert_routes_to_process(
-            agent,
-            "trag ein unter heute: Termin mit Dr. Müller"
-        )
+        self._assert_routes_to_process(agent, DE_TRAG_EIN)
 
     def test_de_notier(self):
         agent = make_agent()
-        self._assert_routes_to_process(agent, "notier: Anruf heute abend")
+        self._assert_routes_to_process(agent, DE_NOTIER)
 
     def test_de_hinzufug(self):
         agent = make_agent()
-        self._assert_routes_to_process(agent, "hinzufüg unter diese Woche: Steuererklärung")
+        self._assert_routes_to_process(agent, DE_HINZUFUEG)
 
     def test_en_add(self):
         agent = make_agent()
@@ -89,10 +92,7 @@ class TestHandleDirectWriteRouting:
     def test_relay_dispatched_format(self):
         """Format relay sends after fast-route: 'Add to Agenda.md in section X: Y'."""
         agent = make_agent()
-        self._assert_routes_to_process(
-            agent,
-            "Add to Agenda.md in section '📅 Heute': Prüfen, ob Signal-Message eingetragen ist"
-        )
+        self._assert_routes_to_process(agent, DE_RELAY_FORMAT)
 
     def test_relay_dispatched_format_no_section(self):
         agent = make_agent()
@@ -125,7 +125,7 @@ class TestHandleDirectReadFastPath:
 
     def test_de_zeig_agenda(self):
         agent = make_agent()
-        self._assert_fast_path(agent, "zeig mir die agenda")
+        self._assert_fast_path(agent, DE_ZEIG_AGENDA)
 
     def test_en_show_agenda(self):
         agent = make_agent()

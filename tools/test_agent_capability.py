@@ -659,6 +659,7 @@ def main():
     parser.add_argument("--agents", nargs="*", choices=["relay", "data", "agenda"],
                         help="Agent types to test (default: all)")
     parser.add_argument("--url", default="http://localhost:11434", help="Ollama base URL")
+    parser.add_argument("--api-key", default="ollama", help="API key (required for cloud)")
     parser.add_argument("--timeout", type=int, default=90, help="Per-call timeout in seconds")
     parser.add_argument("--verbose", action="store_true", help="Show tool call details")
     args = parser.parse_args()
@@ -669,7 +670,7 @@ def main():
         print("ERROR: openai package not installed. Run: pip install openai")
         return
 
-    client = OpenAI(base_url=f"{args.url}/v1", api_key="ollama")
+    client = OpenAI(base_url=f"{args.url}/v1", api_key=args.api_key)
 
     models = args.models or get_available_models(client)
     if not models:

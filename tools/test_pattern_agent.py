@@ -27,6 +27,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 BASE_URL = "http://localhost:11434/v1"
+API_KEY = "ollama"
 TIMEOUT = 300
 
 
@@ -41,7 +42,7 @@ def call_model(model: str, system: str, user: str, *, temperature: float = 0.2) 
         print("ERROR: openai package not installed. Run: pip3 install openai")
         sys.exit(1)
 
-    client = OpenAI(base_url=BASE_URL, api_key="ollama")
+    client = OpenAI(base_url=BASE_URL, api_key=API_KEY)
     resp = client.chat.completions.create(
         model=model,
         messages=[
@@ -675,13 +676,16 @@ def available_models() -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pattern agent capability test")
     parser.add_argument("--models", nargs="*", help="Models to test (default: all local)")
-    parser.add_argument("--url", default=None, help="Ollama API URL")
+    parser.add_argument("--url", default=None, help="Ollama API URL (full, including /v1)")
+    parser.add_argument("--api-key", default=None, help="API key (required for cloud)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
-    global BASE_URL
+    global BASE_URL, API_KEY
     if args.url:
         BASE_URL = args.url
+    if args.api_key:
+        API_KEY = args.api_key
 
     models = args.models or available_models()
     if not models:

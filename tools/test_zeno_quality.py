@@ -353,6 +353,7 @@ def main():
     parser.add_argument("--local", default="gemma4:26b", help="Local Ollama model")
     parser.add_argument("--cloud", default="claude-haiku-4-5-20251001", help="Cloud model (Anthropic)")
     parser.add_argument("--ollama-url", default="http://localhost:11434", help="Ollama base URL")
+    parser.add_argument("--api-key", default="ollama", help="API key (required for cloud)")
     parser.add_argument("--timeout", type=int, default=120, help="Per-query timeout (seconds)")
     parser.add_argument("--no-cloud", action="store_true", help="Skip cloud model")
     parser.add_argument("--no-local", action="store_true", help="Skip local model")
@@ -364,7 +365,7 @@ def main():
         print("ERROR: pip install openai anthropic")
         sys.exit(1)
 
-    ollama_client = OpenAI(base_url=f"{args.ollama_url}/v1", api_key="ollama")
+    ollama_client = OpenAI(base_url=f"{args.ollama_url}/v1", api_key=args.api_key)
 
     all_results = {}
 

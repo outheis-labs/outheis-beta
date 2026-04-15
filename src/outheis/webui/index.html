@@ -12,8 +12,9 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+  <div id="sidebar-overlay" class="sidebar-overlay"></div>
   <div class="shell">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <header class="sidebar-header">
         <div class="logo">οὐθείς</div>
         <span class="status-dot" id="status"></span>
@@ -41,6 +42,7 @@
     <main class="main">
       <header class="topbar">
         <div class="topbar-left">
+          <button class="hamburger" id="hamburger" aria-label="Menu">&#9776;</button>
           <h1 class="topbar-title" id="view-title">Overview</h1>
           <span class="topbar-path" id="view-path"></span>
         </div>

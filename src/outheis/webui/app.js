@@ -2,6 +2,23 @@
  * outheis Web UI
  */
 
+// Mobile sidebar toggle
+function _initSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  const hamburger = document.getElementById('hamburger');
+  if (!sidebar || !overlay || !hamburger) return;
+
+  function openSidebar() { sidebar.classList.add('open'); overlay.classList.add('open'); }
+  function closeSidebar() { sidebar.classList.remove('open'); overlay.classList.remove('open'); }
+
+  hamburger.addEventListener('click', openSidebar);
+  overlay.addEventListener('click', closeSidebar);
+  sidebar.querySelectorAll('.nav-item').forEach(el => el.addEventListener('click', closeSidebar));
+}
+
+document.addEventListener('DOMContentLoaded', _initSidebar);
+
 let currentView = 'overview';
 let currentTab = 'general';
 let currentFile = null;
@@ -142,6 +159,7 @@ document.getElementById('nav').addEventListener('click', (e) => {
   item.classList.add('active');
   currentView = item.dataset.view;
   currentTab = 'general';
+  location.hash = currentView;
   renderView();
 });
 
@@ -1184,7 +1202,10 @@ async function renderFileView(type, pathPrefix) {
   const countEl = document.getElementById(`${type}-count`);
   if (countEl) countEl.textContent = String(fileList.length);
 
-  const keepFile = currentFile && fileList.some((f) => f.name === currentFile) ? currentFile : fileList[0].name;
+  const savedFile = localStorage.getItem(`lastFile_${type}`);
+  const keepFile = (currentFile && fileList.some((f) => f.name === currentFile)) ? currentFile
+    : (savedFile && fileList.some((f) => f.name === savedFile)) ? savedFile
+    : fileList[0].name;
   currentFile = keepFile;
   fileMode = 'rendered';
 
@@ -1204,6 +1225,7 @@ async function renderFileView(type, pathPrefix) {
       <div class="file-list-resize" id="file-list-resize"></div>
       <div class="file-view">
         <div class="file-header">
+          <button class="file-list-toggle" id="file-list-toggle" onclick="toggleFileList()">&#8249;</button>
           <span class="file-name">${currentFile}</span>
           <div class="file-toggle">
             <input type="text" id="search-input" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchFiles('${type}')">
@@ -1228,6 +1250,15 @@ async function renderFileView(type, pathPrefix) {
   initFileListResize();
 }
 
+function toggleFileList() {
+  const panel = document.getElementById('file-list-panel');
+  const btn = document.getElementById('file-list-toggle');
+  if (!panel || !btn) return;
+  const collapsed = panel.classList.toggle('collapsed');
+  btn.innerHTML = collapsed ? '&#8250;' : '&#8249;';
+  localStorage.setItem('fileListCollapsed', collapsed ? '1' : '0');
+}
+
 function initFileListResize() {
   const handle = document.getElementById('file-list-resize');
   const panel  = document.getElementById('file-list-panel');
@@ -1235,6 +1266,14 @@ function initFileListResize() {
 
   const saved = localStorage.getItem('fileListWidth');
   if (saved) panel.style.width = saved + 'px';
+
+  const btn = document.getElementById('file-list-toggle');
+  if (localStorage.getItem('fileListCollapsed') === '1') {
+    panel.style.transition = 'none';
+    panel.classList.add('collapsed');
+    if (btn) btn.innerHTML = '&#8250;';
+    requestAnimationFrame(() => { panel.style.transition = ''; });
+  }
 
   let startX, startW;
 
@@ -1288,6 +1327,7 @@ async function openFile(type, filename, el) {
   document.querySelectorAll('.file-item').forEach((e) => e.classList.remove('active'));
   if (el) el.classList.add('active');
   currentFile = filename;
+  localStorage.setItem(`lastFile_${type}`, filename);
   document.querySelector('.file-name').textContent = filename;
   await loadFile(type, filename);
   startFileRefresh(type, filename);
@@ -1970,6 +2010,7 @@ async function renderVaultFiles() {
       <div class="file-list-resize" id="file-list-resize"></div>
       <div class="file-view">
         <div class="file-header">
+          <button class="file-list-toggle" id="file-list-toggle" onclick="toggleFileList()">&#8249;</button>
           <span class="file-name" id="vault-filename">—</span>
           <div class="file-toggle">
             <button class="btn btn-primary" onclick="saveVaultFile()">Save</button>
@@ -2129,6 +2170,15 @@ async function renderTokenChart() {
 
 // Init
 async function init() {
+  const hash = location.hash.slice(1);
+  if (hash) {
+    const item = document.querySelector(`.nav-item[data-view="${hash}"]`);
+    if (item) {
+      document.querySelectorAll('.nav-item').forEach((el) => el.classList.remove('active'));
+      item.classList.add('active');
+      currentView = hash;
+    }
+  }
   await renderView();
   connectWebSocket();
 

@@ -1176,6 +1176,8 @@ class AgendaAgent(BaseAgent):
             "   CRITICAL — carry-over rule: Every item currently in Today that has #action-required OR\n"
             "   an overdue date (date < today) MUST appear in the new Today, no exceptions.\n"
             "   These items are unfinished work — dropping them silently is data loss.\n"
+            "   TODAY IS NEVER CAPPED OR CURATED: do not select a 'top N' subset, do not prioritize\n"
+            "   and drop the rest. ALL qualifying items must be shown. If Today has 20 items, show 20.\n"
             "   Only remove a Today item if it is explicitly marked done (✓ or #done-*) or has a `>` deferral annotation.\n"
             "   For items without a date or tag: it is YOUR responsibility to assign date, tags, and\n"
             "   correct placement based on the text. Read the item semantically:\n"

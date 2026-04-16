@@ -696,16 +696,19 @@ class DataAgent(BaseAgent):
 
         return processed
 
+    # Vault subdirectories excluded from shadow scan.
+    # - Agenda/    : Shadow.md lives here; scanning it would create circular references
+    # - Codebase/  : Technical development proposals and code notes — not personal tasks
+    # - Migration/  : One-time migration artefacts — not personal tasks
+    _SHADOW_SCAN_EXCLUDE = {"Agenda", "Codebase", "Migration"}
+
     def _get_vault_files(self, vault: Path) -> dict[str, Path]:
-        """All .md files in vault, excluding the Agenda/ directory itself."""
-        agenda_dir = vault / "Agenda"
+        """All .md files in vault, excluding system and non-personal directories."""
+        exclude_dirs = {vault / d for d in self._SHADOW_SCAN_EXCLUDE}
         files: dict[str, Path] = {}
         for path in vault.rglob("*.md"):
-            try:
-                path.relative_to(agenda_dir)
-                continue  # skip anything inside Agenda/
-            except ValueError:
-                pass
+            if any(path.is_relative_to(d) for d in exclude_dirs):
+                continue
             if any(part.startswith(".") for part in path.parts):
                 continue
             files[str(path.relative_to(vault))] = path

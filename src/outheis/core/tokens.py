@@ -133,7 +133,7 @@ def get_usage_summary(days: int = 7, date: str | None = None) -> str:
         label = target.strftime("%d.%m.%Y")
         no_data_label = f"am {label}"
     else:
-        cutoff_low  = now - timedelta(days=days)
+        cutoff_low  = (now - timedelta(days=days - 1)).replace(hour=0, minute=0, second=0, microsecond=0)
         cutoff_high = now
         label = "today" if days == 1 else f"last {days} days"
         no_data_label = "today" if days == 1 else f"last {days} days"

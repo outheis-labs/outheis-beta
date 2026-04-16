@@ -471,6 +471,18 @@ class AgendaAgent(BaseAgent):
             content = inputs.get("content", "")
             if not content.strip():
                 return "Error: content is required and must not be empty."
+            # --- DONE-LOGGER BEGIN ---
+            import sys as _sys
+            if inputs.get("file", "").lower() == "shadow":
+                _has_done = "#done-" in content
+                _sys.stderr.write(
+                    f"[done-logger] write_file(shadow): #done present={_has_done}\n"
+                )
+                if _has_done:
+                    for _ln in content.splitlines():
+                        if "#done-" in _ln:
+                            _sys.stderr.write(f"[done-logger]   done-line: {_ln[:120]}\n")
+            # --- DONE-LOGGER END ---
             return self._write_file(agenda_dir / filename, content)
 
         elif name == "append_file":
@@ -488,6 +500,13 @@ class AgendaAgent(BaseAgent):
             question = inputs.get("question", "")
             if not question:
                 return "No question provided."
+            # --- DONE-LOGGER BEGIN ---
+            import sys as _sys
+            _done_related = any(w in question.lower() for w in ("done", "mark", "erledigt", "abgeschlossen"))
+            _sys.stderr.write(
+                f"[done-logger] ask_zeno: done_related={_done_related} q={question[:120]}\n"
+            )
+            # --- DONE-LOGGER END ---
             if self._dispatcher is None:
                 return "Data agent not available (no dispatcher)."
             import uuid
@@ -1105,6 +1124,23 @@ class AgendaAgent(BaseAgent):
         except Exception as e:
             print(f"[{timestamp}] Agenda scaffold error: {e}", file=sys.stderr)
             scaffold = ""
+
+        # --- DONE-LOGGER BEGIN ---
+        _annotation_lines = [
+            (i + 1, ln)
+            for i, ln in enumerate(pre_scaffold_content.splitlines())
+            if ln.startswith(">")
+        ]
+        if _annotation_lines:
+            print(
+                f"[done-logger] pre-review annotations in Agenda.md ({len(_annotation_lines)}):",
+                file=sys.stderr,
+            )
+            for _lno, _ln in _annotation_lines:
+                print(f"[done-logger]   line {_lno}: {_ln[:120]}", file=sys.stderr)
+        else:
+            print("[done-logger] pre-review: no '>' annotations in Agenda.md", file=sys.stderr)
+        # --- DONE-LOGGER END ---
 
         # Step 2 — LLM fills content from Shadow.md and processes Exchange/comments.
         has_comments = any(line.startswith(">") for line in pre_scaffold_content.splitlines())

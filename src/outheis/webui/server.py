@@ -11,8 +11,13 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse
+import hashlib
+import hmac
+import secrets
+import time
+
+from fastapi import FastAPI, File, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 
 from outheis.core.config import get_human_dir
 
@@ -21,6 +26,105 @@ ASSETS_DIR = WEBUI_DIR / "assets"
 HUMAN_DIR = get_human_dir()
 CONFIG_PATH = HUMAN_DIR / "config.json"
 MESSAGES_PATH = HUMAN_DIR / "messages.jsonl"
+WEBUI_STATE_DIR = HUMAN_DIR / "webui"
+SECRET_PATH = WEBUI_STATE_DIR / "secret"
+_SESSION_COOKIE = "outheis_session"
+
+
+def _get_secret() -> str:
+    """Return the signing secret, generating it on first call."""
+    WEBUI_STATE_DIR.mkdir(parents=True, exist_ok=True)
+    if not SECRET_PATH.exists():
+        SECRET_PATH.write_text(secrets.token_hex(32))
+        SECRET_PATH.chmod(0o600)
+    return SECRET_PATH.read_text().strip()
+
+
+def _get_password() -> str:
+    """Read webui.password from config. Returns empty string if not set."""
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text())
+        return cfg.get("webui", {}).get("password", "")
+    except Exception:
+        return ""
+
+
+def _get_session_hours() -> int:
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text())
+        return int(cfg.get("webui", {}).get("session_hours", 4))
+    except Exception:
+        return 4
+
+
+def _make_session_cookie(session_hours: int) -> str:
+    """Return a signed session token: '{expiry}:{hmac}'."""
+    expiry = int(time.time()) + session_hours * 3600
+    secret = _get_secret()
+    sig = hmac.new(secret.encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
+    return f"{expiry}:{sig}"
+
+
+def _verify_session_cookie(value: str) -> bool:
+    """Return True if the session cookie is valid and not expired."""
+    try:
+        expiry_str, sig = value.split(":", 1)
+        expiry = int(expiry_str)
+    except (ValueError, AttributeError):
+        return False
+    if time.time() > expiry:
+        return False
+    secret = _get_secret()
+    expected = hmac.new(secret.encode(), expiry_str.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(sig, expected)
+
+
+def _auth_required() -> bool:
+    return bool(_get_password())
+
+
+def _is_authenticated(request: Request) -> bool:
+    cookie = request.cookies.get(_SESSION_COOKIE, "")
+    return _verify_session_cookie(cookie)
+
+
+_LOGIN_PAGE = """<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>outheis — login</title>
+<style>
+  body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;
+       background:#0f0f0f;font-family:system-ui,sans-serif;color:#e0e0e0}
+  .box{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:32px 40px;
+       width:320px;display:flex;flex-direction:column;gap:16px}
+  h1{margin:0;font-size:18px;font-weight:600;color:#fff}
+  input{background:#111;border:1px solid #333;border-radius:6px;color:#e0e0e0;
+        padding:10px 12px;font-size:14px;outline:none;width:100%;box-sizing:border-box}
+  input:focus{border-color:#555}
+  button{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:10px;
+         font-size:14px;cursor:pointer;font-weight:500}
+  button:hover{background:#1d4ed8}
+  .err{color:#f87171;font-size:13px;display:none}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1>outheis</h1>
+  <input id="pw" type="password" placeholder="Password" autofocus>
+  <button onclick="login()">Sign in</button>
+  <div class="err" id="err">Invalid password</div>
+</div>
+<script>
+document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+async function login() {
+  const pw = document.getElementById('pw').value;
+  const r = await fetch('/api/login', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+  if (r.ok) { location.href = '/'; }
+  else { document.getElementById('err').style.display = 'block'; }
+}
+</script>
+</body></html>
+"""
 
 
 def get_vault_path() -> Path:
@@ -34,6 +138,46 @@ def get_vault_path() -> Path:
 
 
 app = FastAPI(title="outheis", docs_url=None, redoc_url=None)
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    # Static assets are always public
+    if path in ("/style.css", "/app.js", "/editor.js") or path.startswith("/assets/"):
+        return await call_next(request)
+    # Login endpoint is always public
+    if path == "/api/login":
+        return await call_next(request)
+    # Auth not configured → open access
+    if not _auth_required():
+        return await call_next(request)
+    # Authenticated → proceed
+    if _is_authenticated(request):
+        return await call_next(request)
+    # Unauthenticated browser request → login page
+    if path == "/" or not path.startswith("/api"):
+        return HTMLResponse(_LOGIN_PAGE)
+    # Unauthenticated API/WS request → 401
+    return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+
+@app.post("/api/login")
+async def login(body: dict):
+    password = _get_password()
+    if not password or body.get("password") != password:
+        return JSONResponse({"error": "Invalid password"}, status_code=401)
+    hours = _get_session_hours()
+    cookie_value = _make_session_cookie(hours)
+    response = JSONResponse({"status": "ok"})
+    response.set_cookie(
+        _SESSION_COOKIE,
+        cookie_value,
+        max_age=hours * 3600,
+        httponly=True,
+        samesite="strict",
+    )
+    return response
 
 
 # Static files
@@ -884,6 +1028,9 @@ manager = ConnectionManager()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
+    if _auth_required() and not _verify_session_cookie(websocket.cookies.get(_SESSION_COOKIE, "")):
+        await websocket.close(code=1008)
+        return
     await manager.connect(websocket)
     last_size = MESSAGES_PATH.stat().st_size if MESSAGES_PATH.exists() else 0
     ping_counter = 0

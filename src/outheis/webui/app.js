@@ -406,6 +406,20 @@ function renderConfigGeneral() {
               <span class="form-hint">Requires daemon restart to take effect.</span>
             </div>
           </div>
+          <div class="form-row">
+            <label class="form-label">Password</label>
+            <div class="form-value">
+              <input type="password" id="cfg-webui-password" value="${config.webui?.password || ''}" placeholder="Leave empty to disable auth">
+              <span class="form-hint">If set, the Web UI requires login. Leave empty for open access.</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">Session hours</label>
+            <div class="form-value">
+              <input type="number" id="cfg-webui-session-hours" value="${config.webui?.session_hours ?? 4}" min="1" max="720">
+              <span class="form-hint">How long a login session stays valid before re-authentication is required.</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -751,7 +765,12 @@ async function saveConfig() {
     };
     const webuiPort = document.getElementById('cfg-webui-port');
     if (webuiPort) {
-      updatedConfig.webui = { ...updatedConfig.webui, port: parseInt(webuiPort.value, 10) || 8080 };
+      updatedConfig.webui = {
+        ...updatedConfig.webui,
+        port: parseInt(webuiPort.value, 10) || 8080,
+        password: document.getElementById('cfg-webui-password')?.value ?? '',
+        session_hours: parseInt(document.getElementById('cfg-webui-session-hours')?.value, 10) || 4,
+      };
     }
   }
 
@@ -1944,6 +1963,10 @@ async function restartDaemon() {
 async function fetchAPI(url, options = {}) {
   try {
     const response = await fetch(url, options);
+    if (response.status === 401) {
+      location.reload(); // session expired — server will show login page
+      return {};
+    }
     return await response.json();
   } catch (error) {
     console.error('API error:', error);

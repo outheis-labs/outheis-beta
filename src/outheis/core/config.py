@@ -178,6 +178,8 @@ class WebuiConfig:
     enabled: bool = True
     host: str = "127.0.0.1"
     port: int = 8080
+    password: str = ""
+    session_hours: int = 4
 
 
 @dataclass
@@ -435,6 +437,8 @@ def load_config() -> Config:
         enabled=webui_data.get("enabled", True),
         host=webui_data.get("host", "127.0.0.1"),
         port=webui_data.get("port", 8080),
+        password=webui_data.get("password", ""),
+        session_hours=webui_data.get("session_hours", 4),
     )
 
     return Config(
@@ -524,6 +528,8 @@ def save_config(config: Config) -> None:
             "enabled": config.webui.enabled,
             "host": config.webui.host,
             "port": config.webui.port,
+            "password": config.webui.password,
+            "session_hours": config.webui.session_hours,
         },
     }
 

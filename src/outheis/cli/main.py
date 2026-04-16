@@ -188,6 +188,33 @@ def init() -> None:
         typer.echo("signal-cli not found — skipping Signal setup.")
         typer.echo("Install it and re-run 'outheis init' to enable Signal.\n")
 
+    # === WEBUI SECTION ===
+    typer.echo("\n" + "─" * 50)
+    typer.echo("Web UI")
+    typer.echo("─" * 50 + "\n")
+    typer.echo("The Web UI runs on localhost by default and is accessible via browser.")
+    typer.echo("Set a password to protect it (recommended when using remote access).\n")
+
+    existing_pw = config.webui.password or ""
+    masked_pw = "****" if existing_pw else ""
+    pw_input = typer.prompt(
+        "Web UI password (leave blank for no authentication)",
+        default=masked_pw or "",
+        hide_input=True,
+    )
+    if pw_input and pw_input != masked_pw:
+        config.webui.password = pw_input
+    elif pw_input == "":
+        config.webui.password = ""
+    # else: keep existing
+
+    if config.webui.password:
+        default_hours = config.webui.session_hours or 4
+        config.webui.session_hours = typer.prompt("Session duration (hours)", default=default_hours)
+        typer.echo("✓ Password set.")
+    else:
+        typer.echo("No password — Web UI is open to anyone with access to the host.")
+
     # === SAVE CONFIG ===
     save_config(config)
     typer.echo("\n" + "─" * 50)
@@ -338,6 +365,53 @@ def _register_signal(phone: str) -> bool:
     except Exception as e:
         typer.echo(f"Error: {e}")
         return False
+
+
+@app.command()
+def update() -> None:
+    """Update outheis to the latest version."""
+    import shutil
+    import subprocess
+    import sys
+
+    typer.echo("Checking for updates...")
+
+    # Detect pipx installation: outheis executable lives inside a pipx venv
+    exe = sys.executable  # e.g. ~/.local/pipx/venvs/outheis/bin/python
+    using_pipx = "pipx" in exe and shutil.which("pipx") is not None
+
+    if not using_pipx:
+        # Double-check: ask pipx if it knows about outheis
+        pipx_bin = shutil.which("pipx")
+        if pipx_bin:
+            probe = subprocess.run(
+                [pipx_bin, "list", "--short"],
+                capture_output=True, text=True,
+            )
+            if "outheis" in probe.stdout:
+                using_pipx = True
+
+    try:
+        if using_pipx:
+            cmd = [shutil.which("pipx"), "upgrade", "outheis"]
+        else:
+            cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "outheis"]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode == 0:
+            output = result.stdout.lower()
+            if "already up-to-date" in output or "already satisfied" in output or "already latest" in output:
+                typer.echo("outheis is already up to date.")
+            else:
+                typer.echo("✓ outheis updated successfully.")
+                typer.echo("Restart the daemon to apply: outheis stop && outheis start")
+        else:
+            typer.echo(f"Update failed:\n{result.stderr or result.stdout}")
+            raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error: {e}")
+        raise typer.Exit(1)
 
 
 @app.command()

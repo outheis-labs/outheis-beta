@@ -137,7 +137,6 @@ class ModelConfig:
     """Configuration for a single model alias."""
     provider: str  # "anthropic", "openai", "ollama.local", "ollama.cloud", …
     name: str  # e.g. "claude-sonnet-4-20250514", "llama3.2:3b"
-    run_mode: str = "on-demand"  # "on-demand", "persistent"
 
 
 @dataclass
@@ -283,7 +282,6 @@ def _parse_models(data: dict) -> dict[str, ModelConfig]:
             result[alias] = ModelConfig(
                 provider=cfg.get("provider", "anthropic"),
                 name=cfg.get("name", alias),
-                run_mode=cfg.get("run_mode", "on-demand"),
             )
     return result
 
@@ -504,7 +502,7 @@ def save_config(config: Config) -> None:
                 alias: {
                     "provider": m.provider,
                     "name": m.name,
-                    "run_mode": m.run_mode,
+
                 }
                 for alias, m in config.llm.models.items()
             },

@@ -556,12 +556,6 @@ function renderConfigModels() {
               <div class="model-name">
                 <input type="text" class="model-name-input" value="${name}">
               </div>
-              <div class="model-run-mode" title="on-demand: load per call · persistent: keep in memory (local models only)">
-                <select class="model-run-mode-select">
-                  <option value="on-demand" ${runMode === 'on-demand' ? 'selected' : ''}>on-demand</option>
-                  <option value="persistent" ${runMode === 'persistent' ? 'selected' : ''}>persistent</option>
-                </select>
-              </div>
               <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
             </div>
           `;
@@ -718,12 +712,6 @@ function addModel() {
     <div class="model-name">
       <input type="text" class="model-name-input" placeholder="model-name">
     </div>
-    <div class="model-run-mode" title="on-demand: load per call · persistent: keep in memory (local models only)">
-      <select class="model-run-mode-select">
-        <option value="on-demand">on-demand</option>
-        <option value="persistent">persistent</option>
-      </select>
-    </div>
     <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
   `;
   container.appendChild(row);
@@ -812,8 +800,7 @@ async function saveConfig() {
         const alias = row.querySelector('.model-alias-input')?.value;
         const name = row.querySelector('.model-name-input')?.value;
         const provider = row.querySelector('.model-provider-select')?.value;
-        const runMode = row.querySelector('.model-run-mode-select')?.value || 'on-demand';
-        if (alias && name) updatedConfig.llm.models[alias] = { provider, name, run_mode: runMode };
+        if (alias && name) updatedConfig.llm.models[alias] = { provider, name };
       });
     }
   }

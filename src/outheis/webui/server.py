@@ -820,19 +820,22 @@ async def restart_daemon():
     if not current_pid:
         return {"status": "not_running"}
 
-    outheis_cmd = shutil.which("outheis")
-    if outheis_cmd:
-        start_cmd = repr([outheis_cmd, "start"])
-    else:
-        start_cmd = repr([sys.executable, "-m", "outheis.cli.main", "start"])
+    from outheis.core.config import get_human_dir
+    log_path = str(get_human_dir() / "dispatcher.log")
+
+    # Use the actual running executable — reliable even without PATH
+    outheis_cmd = shutil.which("outheis") or sys.argv[0]
+    start_cmd = repr([outheis_cmd, "start"])
+    env_repr = repr(dict(os.environ))
 
     script = f"""
 import os, time, signal, subprocess
 
 pid = {current_pid}
 start_cmd = {start_cmd}
+env = {env_repr}
 
-time.sleep(2)
+time.sleep(1)
 
 try:
     os.kill(pid, signal.SIGTERM)
@@ -846,8 +849,8 @@ for _ in range(20):
     except ProcessLookupError:
         break
 
-time.sleep(0.5)
-subprocess.run(start_cmd, check=False)
+time.sleep(1)
+subprocess.run(start_cmd, env=env, check=False)
 """
 
     subprocess.Popen(
@@ -856,6 +859,7 @@ subprocess.run(start_cmd, check=False)
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
+        env=dict(os.environ),
     )
 
     return {"status": "restarting"}

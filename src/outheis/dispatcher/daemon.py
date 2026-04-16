@@ -260,6 +260,44 @@ def remove_pid() -> None:
 
 
 # =============================================================================
+# CONFIG WATCHER
+# =============================================================================
+
+class ConfigWatcher:
+    """Monitors config.json for changes and notifies the daemon.
+
+    Polls mtime every 2 seconds. On change, calls on_change() in the watcher
+    thread. The callback is responsible for debouncing and reload.
+    """
+
+    def __init__(self, config_path: Path, on_change: Callable[[], None]) -> None:
+        self._path = config_path
+        self._on_change = on_change
+        self._mtime: float = config_path.stat().st_mtime if config_path.exists() else 0.0
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._run, daemon=True, name="config-watcher")
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+
+    def _run(self) -> None:
+        while not self._stop.wait(timeout=2.0):
+            try:
+                mtime = self._path.stat().st_mtime
+                if mtime != self._mtime:
+                    self._mtime = mtime
+                    self._on_change()
+            except FileNotFoundError:
+                pass
+            except Exception as e:
+                print(f"[config-watcher] error: {e}", file=sys.stderr)
+
+
+# =============================================================================
 # DISPATCHER
 # =============================================================================
 
@@ -601,35 +639,106 @@ class Dispatcher:
             results = agent.rebuild_indices()
             print(f"Index rebuild: {results}")
 
-    def _warmup_persistent_models(self) -> None:
-        """Send a minimal call to each persistent local model to load it into memory.
+    def _agent_model_map(self, config=None) -> dict[str, str]:
+        """Return {agent_name: model_alias} for all enabled agents."""
+        cfg = config or self.config
+        return {name: ac.model for name, ac in cfg.agents.items() if ac.enabled}
 
-        Raises SystemExit if a model used by an enabled agent fails to load.
+    def _active_ollama_aliases(self, config=None) -> set[str]:
+        """Return model aliases that are ollama.local AND assigned to an enabled agent."""
+        cfg = config or self.config
+        active_aliases = set(self._agent_model_map(cfg).values())
+        return {alias for alias, mc in cfg.llm.models.items()
+                if mc.provider == "ollama.local" and alias in active_aliases}
+
+    def _warmup_persistent_models(self) -> None:
+        """Send a minimal call to each ollama.local model assigned to an enabled agent.
+
+        Raises SystemExit if a required model fails to load.
         """
         import sys
 
-        # Build set of model aliases used by enabled agents
-        active_models = {
-            cfg.model for cfg in self.config.agents.values() if cfg.enabled
-        }
+        for alias in self._active_ollama_aliases():
+            model_cfg = self.config.llm.models[alias]
+            try:
+                from outheis.core.llm import call_llm
+                call_llm(
+                    model=alias,
+                    messages=[{"role": "user", "content": "hi"}],
+                    max_tokens=1,
+                    agent="warmup",
+                )
+                print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
+            except Exception as e:
+                print(f"  \033[31m✗\033[0m {alias} ({model_cfg.name}) not available: {e}", file=sys.stderr)
+                print(f"\n\033[31mStartup aborted:\033[0m model '{alias}' is required by an active agent but could not be loaded.", file=sys.stderr)
+                print(f"Fix: run 'ollama pull {model_cfg.name}' or disable the agent using this model.", file=sys.stderr)
+                sys.exit(1)
 
-        for alias, model_cfg in self.config.llm.models.items():
-            if model_cfg.provider == "ollama.local" and model_cfg.run_mode == "persistent":
-                try:
-                    from outheis.core.llm import call_llm
-                    call_llm(
-                        model=alias,
-                        messages=[{"role": "user", "content": "hi"}],
-                        max_tokens=1,
-                        agent="warmup",
-                    )
-                    print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
-                except Exception as e:
-                    print(f"  \033[31m✗\033[0m {alias} ({model_cfg.name}) not available: {e}", file=sys.stderr)
-                    if alias in active_models:
-                        print(f"\n\033[31mStartup aborted:\033[0m model '{alias}' is required by an active agent but could not be loaded.", file=sys.stderr)
-                        print(f"Fix: run 'ollama pull {model_cfg.name}' or disable the agent using this model.", file=sys.stderr)
-                        sys.exit(1)
+    def _unload_ollama_model(self, model_name: str) -> None:
+        """Tell Ollama to unload a model from memory (keep_alive=0)."""
+        import urllib.request
+        import json as _json
+        provider = self.config.llm.providers.get("ollama.local")
+        base = (provider.base_url if provider and provider.base_url else "http://localhost:11434").rstrip("/").removesuffix("/v1")
+        url = f"{base}/api/generate"
+        body = _json.dumps({"model": model_name, "keep_alive": 0}).encode()
+        req = urllib.request.Request(url, data=body, method="POST",
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=5):
+                pass
+            print(f"  \033[33m↓\033[0m {model_name} unloaded from memory", file=sys.stderr)
+        except Exception as e:
+            print(f"  [warmup] could not unload {model_name}: {e}", file=sys.stderr)
+
+    def _on_config_changed(self) -> None:
+        """Reload config.json and react to relevant changes."""
+        import time
+        time.sleep(0.3)  # debounce — wait for write to complete
+        try:
+            from outheis.core.config import load_config
+            new_config = load_config()
+        except Exception as e:
+            print(f"[config-watcher] reload failed: {e}", file=sys.stderr)
+            return
+
+        # Diff all agent model assignments
+        old_map = self._agent_model_map(self.config)
+        old_ollama = self._active_ollama_aliases(self.config)
+        old_ollama_names = {alias: self.config.llm.models[alias].name
+                            for alias in old_ollama if alias in self.config.llm.models}
+
+        self.config = new_config
+
+        new_map = self._agent_model_map(new_config)
+        new_ollama = self._active_ollama_aliases(new_config)
+
+        # Invalidate cached agent instances whose model assignment changed
+        for agent in sorted(set(old_map) | set(new_map)):
+            old_alias = old_map.get(agent)
+            new_alias = new_map.get(agent)
+            if old_alias != new_alias:
+                print(f"[config-watcher] {agent}: {old_alias or '(none)'} → {new_alias or '(none)'}", file=sys.stderr)
+                self._agents.pop(agent, None)  # force re-creation with new model on next call
+
+        # Ollama-specific: warmup newly assigned models, unload removed ones
+        to_load = new_ollama - old_ollama
+        to_unload = old_ollama - new_ollama
+        if to_load or to_unload:
+            def _refresh():
+                for alias in to_load:
+                    model_cfg = new_config.llm.models.get(alias)
+                    try:
+                        from outheis.core.llm import call_llm
+                        call_llm(model=alias, messages=[{"role": "user", "content": "hi"}],
+                                 max_tokens=1, agent="warmup")
+                        print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name if model_cfg else alias}) loaded", file=sys.stderr)
+                    except Exception as e:
+                        print(f"  \033[31m✗\033[0m {alias} failed to load: {e}", file=sys.stderr)
+                for alias in to_unload:
+                    self._unload_ollama_model(old_ollama_names.get(alias, alias))
+            threading.Thread(target=_refresh, daemon=True, name="warmup-refresh").start()
 
     def _ensure_ollama(self) -> None:
         """Start Ollama server if ollama.local is configured and not yet running."""
@@ -1126,6 +1235,14 @@ class Dispatcher:
             on_message=self._on_queue_change,
         )
         watcher.start()
+
+        # Monitor config.json for live changes (model assignments, agent settings)
+        from outheis.core.config import get_config_path
+        config_watcher = ConfigWatcher(
+            config_path=get_config_path(),
+            on_change=self._on_config_changed,
+        )
+        config_watcher.start()
 
         try:
             while self.running:

@@ -323,11 +323,8 @@ def call_llm(
         if oai_tools:
             kwargs["tools"] = oai_tools
         if model_config.provider == "ollama.local":
-            # keep_alive=-1: keep model in memory indefinitely
-            # keep_alive=0: unload immediately after call
-            kwargs["extra_body"] = {
-                "keep_alive": -1 if model_config.run_mode == "persistent" else 0
-            }
+            # keep_alive=-1: keep model loaded in memory between calls
+            kwargs["extra_body"] = {"keep_alive": -1}
         try:
             raw = client.chat.completions.create(**kwargs)
         except Exception as e:

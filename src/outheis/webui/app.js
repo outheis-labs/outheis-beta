@@ -395,6 +395,19 @@ function renderConfigGeneral() {
             .join('')}
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Web UI</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <label class="form-label">Port</label>
+            <div class="form-value">
+              <input type="number" id="cfg-webui-port" value="${config.webui?.port || 8080}" min="1024" max="65535">
+              <span class="form-hint">Requires daemon restart to take effect.</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -748,6 +761,10 @@ async function saveConfig() {
       timezone: document.getElementById('cfg-timezone')?.value,
       vault: Array.from(document.querySelectorAll('.vault-input')).map((el) => el.value).filter((v) => v),
     };
+    const webuiPort = document.getElementById('cfg-webui-port');
+    if (webuiPort) {
+      updatedConfig.webui = { ...updatedConfig.webui, port: parseInt(webuiPort.value, 10) || 8080 };
+    }
   }
 
   // Providers tab

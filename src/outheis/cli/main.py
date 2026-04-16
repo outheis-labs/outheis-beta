@@ -67,13 +67,14 @@ def init() -> None:
     signal_cli_path = shutil.which("signal-cli")
     if not signal_cli_path:
         typer.echo("─" * 50)
-        typer.echo("Prerequisite: signal-cli")
+        typer.echo("Optional: signal-cli")
         typer.echo("─" * 50)
-        typer.echo("\noutheis requires signal-cli to communicate with you.")
+        typer.echo("\nsignal-cli enables Signal Messenger integration (optional).")
+        typer.echo("Without it, outheis is fully usable via the WebUI and CLI.")
         typer.echo("\n  macOS:  brew install signal-cli")
         typer.echo("  Linux:  apt install signal-cli")
         typer.echo("  Other:  https://github.com/AsamK/signal-cli\n")
-        if not typer.confirm("Continue without signal-cli?", default=False):
+        if not typer.confirm("Continue without signal-cli?", default=True):
             raise typer.Exit(0)
         typer.echo("")
     else:

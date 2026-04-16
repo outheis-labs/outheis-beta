@@ -400,6 +400,13 @@ function renderConfigGeneral() {
         <div class="card-header"><span class="card-title">Web UI</span></div>
         <div class="card-body">
           <div class="form-row">
+            <label class="form-label">Host</label>
+            <div class="form-value">
+              <input type="text" id="cfg-webui-host" value="${config.webui?.host || '127.0.0.1'}" placeholder="127.0.0.1" oninput="updateWebuiHostWarning()">
+              <span class="form-hint" id="cfg-webui-host-hint" style="${(config.webui?.host && config.webui.host !== '127.0.0.1') ? '' : 'display:none'}; color: var(--accent-danger); opacity: 1;">Warning: binding to a non-loopback address exposes the Web UI on the network. Use at your own risk. Requires daemon restart.</span>
+            </div>
+          </div>
+          <div class="form-row">
             <label class="form-label">Port</label>
             <div class="form-value">
               <input type="number" id="cfg-webui-port" value="${config.webui?.port || 8080}" min="1024" max="65535">
@@ -410,6 +417,7 @@ function renderConfigGeneral() {
             <label class="form-label">Password</label>
             <div class="form-value">
               <input type="password" id="cfg-webui-password" value="${config.webui?.password || ''}" placeholder="Leave empty to disable auth">
+              <button type="button" class="btn-show" onclick="togglePasswordVisibility('cfg-webui-password', this)">SHOW</button>
               <span class="form-hint">If set, the Web UI requires login. Leave empty for open access.</span>
             </div>
           </div>
@@ -748,6 +756,20 @@ function removeRow(btn) {
   btn.closest('.form-row, .model-row, .whitelist-row, .sched-row').remove();
 }
 
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'HIDE' : 'SHOW';
+}
+
+function updateWebuiHostWarning() {
+  const host = document.getElementById('cfg-webui-host')?.value || '';
+  const hint = document.getElementById('cfg-webui-host-hint');
+  if (hint) hint.style.display = (host && host !== '127.0.0.1' && host !== 'localhost') ? '' : 'none';
+}
+
 async function saveConfig() {
   const updatedConfig = { ...config };
 
@@ -767,6 +789,7 @@ async function saveConfig() {
     if (webuiPort) {
       updatedConfig.webui = {
         ...updatedConfig.webui,
+        host: document.getElementById('cfg-webui-host')?.value || '127.0.0.1',
         port: parseInt(webuiPort.value, 10) || 8080,
         password: document.getElementById('cfg-webui-password')?.value ?? '',
         session_hours: parseInt(document.getElementById('cfg-webui-session-hours')?.value, 10) || 4,

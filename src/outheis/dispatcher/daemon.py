@@ -1178,7 +1178,7 @@ class Dispatcher:
                     webui_app,
                     host=self.config.webui.host,
                     port=self.config.webui.port,
-                    log_level="error",
+                    log_level="info",
                 )
                 webui_server = uvicorn.Server(webui_config)
                 webui_server.install_signal_handlers = lambda: None  # disable — main thread owns signals

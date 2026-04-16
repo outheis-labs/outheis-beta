@@ -143,6 +143,19 @@ app = FastAPI(title="outheis", docs_url=None, redoc_url=None)
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
+
+    # Handle Chromium/Brave Private Network Access preflight
+    if request.method == "OPTIONS" and request.headers.get("Access-Control-Request-Private-Network"):
+        return JSONResponse(
+            {},
+            headers={
+                "Access-Control-Allow-Origin": request.headers.get("Origin", "*"),
+                "Access-Control-Allow-Private-Network": "true",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*",
+            },
+        )
+
     # Static assets are always public
     if path in ("/style.css", "/app.js", "/editor.js") or path.startswith("/assets/"):
         return await call_next(request)
@@ -967,8 +980,11 @@ async def restart_daemon():
     from outheis.core.config import get_human_dir
     log_path = str(get_human_dir() / "dispatcher.log")
 
-    # Use the actual running executable — reliable even without PATH
-    outheis_cmd = shutil.which("outheis") or sys.argv[0]
+    # Resolve outheis executable: same bin/ dir as the running Python interpreter
+    from pathlib import Path as _Path
+    outheis_cmd = str(_Path(sys.executable).parent / "outheis")
+    if not _Path(outheis_cmd).exists():
+        outheis_cmd = shutil.which("outheis") or sys.argv[0]
     start_cmd = repr([outheis_cmd, "start"])
     env_repr = repr(dict(os.environ))
 

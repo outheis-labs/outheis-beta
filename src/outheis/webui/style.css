@@ -406,6 +406,7 @@ textarea {
 
 input:focus, select:focus, textarea:focus { border-color: var(--text-primary); }
 input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+.form-value input, .form-value select { width: 40ch; min-width: 40ch; }
 
 /* Metrics */
 .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
@@ -501,7 +502,8 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
-.btn-show-key:hover { color: var(--text-primary); }
+.btn-show-key:hover, .btn-show:hover { color: var(--text-primary); }
+.btn-show { background: none; border: none; font-size: 10px; color: var(--text-tertiary); cursor: pointer; padding: 0; text-transform: uppercase; letter-spacing: 0.5px; }
 
 .provider-field input { background: var(--bg-secondary); }
 
@@ -996,4 +998,43 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   }
 
   .metrics { grid-template-columns: 1fr; }
+
+  /* Config forms */
+  .scroll { padding: 16px; }
+  .topbar { padding: 0 16px; }
+  .card-body { padding: 16px; }
+
+  .form-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    margin-bottom: 18px;
+  }
+
+  .form-label { width: 100%; font-size: 12px; }
+
+  .form-value { width: 100%; }
+
+  .form-value input,
+  .form-value select { width: 100%; min-width: 0; }
+
+  /* Model rows */
+  .model-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .model-alias { width: auto; min-width: 80px; }
+  .model-provider { width: 100%; order: 3; }
+  .model-name { width: 100%; order: 4; }
+
+  /* Agent rows */
+  .agent-row { flex-wrap: wrap; }
+  .agent-info { width: 100%; }
+  .agent-role { width: 100%; }
+  .agent-model { width: calc(100% - 84px); }
+
+  /* Scheduler rows */
+  .sched-row { flex-wrap: wrap; }
+  .sched-type { width: 100%; }
+  .sched-times { width: 100%; }
 }

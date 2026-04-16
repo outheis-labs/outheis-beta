@@ -246,10 +246,10 @@ async function renderOverview() {
           <div class="metric-label">PID</div>
           <div class="metric-value">${status.pid || '—'}</div>
         </div>
-        ${status.running ? `
-        <div class="metric" style="grid-column: 1 / -1;">
-          <button class="btn-restart" onclick="restartDaemon()">Restart outheis</button>
-        </div>` : ''}
+        <div class="metric" style="grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap;">
+          ${status.running ? `<button class="btn-restart" onclick="restartDaemon()">Restart outheis</button>` : ''}
+          ${status.auth_required ? `<button class="btn" onclick="logout()" style="border-color: var(--text-primary)">Logout</button>` : ''}
+        </div>
       </div>
       <div class="card">
         <div class="card-header"><span class="card-title">Recent conversations</span></div>
@@ -1972,6 +1972,12 @@ function connectWebSocket() {
   };
   ws.onclose = () => { connectionStatus.textContent = 'Disconnected'; setTimeout(connectWebSocket, 3000); };
   ws.onerror = () => { connectionStatus.textContent = 'Disconnected'; };
+}
+
+// Logout
+async function logout() {
+  await fetch('/api/logout', { method: 'POST' });
+  location.reload();
 }
 
 // Restart

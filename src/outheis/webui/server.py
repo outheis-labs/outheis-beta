@@ -90,29 +90,113 @@ def _is_authenticated(request: Request) -> bool:
 
 _LOGIN_PAGE = """<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>outheis — login</title>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>outheis</title>
 <style>
-  body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh;
-       background:#0f0f0f;font-family:system-ui,sans-serif;color:#e0e0e0}
-  .box{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:32px 40px;
-       width:320px;display:flex;flex-direction:column;gap:16px}
-  h1{margin:0;font-size:18px;font-weight:600;color:#fff}
-  input{background:#111;border:1px solid #333;border-radius:6px;color:#e0e0e0;
-        padding:10px 12px;font-size:14px;outline:none;width:100%;box-sizing:border-box}
-  input:focus{border-color:#555}
-  button{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:10px;
-         font-size:14px;cursor:pointer;font-weight:500}
-  button:hover{background:#1d4ed8}
-  .err{color:#f87171;font-size:13px;display:none}
+  @font-face {
+    font-family: 'Inter';
+    src: url('/assets/fonts/InterVariable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'IBM Plex Sans';
+    src: url('/assets/fonts/IBMPlexSans-Variable.woff2') format('woff2');
+    font-weight: 100 700;
+    font-style: normal;
+  }
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    color: #1a1a1a;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { width: 280px; }
+
+  .logo {
+    font-family: 'Inter', sans-serif;
+    font-size: 40px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 40px;
+  }
+
+  label {
+    display: block;
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 6px;
+  }
+
+  input[type="password"] {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: #1a1a1a;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    outline: none;
+    margin-bottom: 12px;
+    transition: border-color 0.15s;
+  }
+
+  input[type="password"]:focus { border-color: #1a1a1a; }
+
+  button {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: #fff;
+    background: #1a1a1a;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  button:hover { background: #333; }
+
+  .err {
+    font-size: 12px;
+    color: #dc2626;
+    margin-top: 10px;
+    display: none;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #1a1a1a; color: #f0f0f0; }
+    input[type="password"] { background: #242424; border-color: #333; color: #f0f0f0; }
+    input[type="password"]:focus { border-color: #f0f0f0; }
+    button { background: #f0f0f0; color: #1a1a1a; }
+    button:hover { background: #d0d0d0; }
+    label { color: #707070; }
+  }
 </style>
 </head>
 <body>
-<div class="box">
-  <h1>outheis</h1>
-  <input id="pw" type="password" placeholder="Password" autofocus>
+<div class="wrap">
+  <div class="logo">οὐθείς</div>
+  <label for="pw">Password</label>
+  <input id="pw" type="password" autofocus>
   <button onclick="login()">Sign in</button>
-  <div class="err" id="err">Invalid password</div>
+  <div class="err" id="err">Incorrect password.</div>
 </div>
 <script>
 document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
@@ -123,7 +207,8 @@ async function login() {
   else { document.getElementById('err').style.display = 'block'; }
 }
 </script>
-</body></html>
+</body>
+</html>
 """
 
 
@@ -159,8 +244,8 @@ async def auth_middleware(request: Request, call_next):
     # Static assets are always public
     if path in ("/style.css", "/app.js", "/editor.js") or path.startswith("/assets/"):
         return await call_next(request)
-    # Login endpoint is always public
-    if path == "/api/login":
+    # Login/logout endpoints are always public
+    if path in ("/api/login", "/api/logout"):
         return await call_next(request)
     # Auth not configured → open access
     if not _auth_required():
@@ -173,6 +258,13 @@ async def auth_middleware(request: Request, call_next):
         return HTMLResponse(_LOGIN_PAGE)
     # Unauthenticated API/WS request → 401
     return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+
+@app.post("/api/logout")
+async def logout():
+    response = JSONResponse({"status": "ok"})
+    response.delete_cookie(_SESSION_COOKIE, httponly=True, samesite="strict")
+    return response
 
 
 @app.post("/api/login")
@@ -961,6 +1053,7 @@ async def get_status():
         "system_mode": system_mode,
         "fallback_reason": fallback_reason,
         "fallback_model": fallback_model,
+        "auth_required": _auth_required(),
     }
 
 

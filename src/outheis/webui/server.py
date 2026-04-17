@@ -180,7 +180,7 @@ _LOGIN_PAGE = """<!doctype html>
     display: none;
   }
 
-  @media (prefers-color-scheme: dark) {
+  @media (prefers-color-scheme: no-preference) {
     body { background: #1a1a1a; color: #f0f0f0; }
     input[type="password"] { background: #242424; border-color: #333; color: #f0f0f0; }
     input[type="password"]:focus { border-color: #f0f0f0; }

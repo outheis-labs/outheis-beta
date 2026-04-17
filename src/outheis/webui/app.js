@@ -273,9 +273,8 @@ function renderMessage(msg) {
   const to = msg.to || '';
   const text = msg.payload?.text || msg.payload?.error || JSON.stringify(msg.payload || {});
 
-  let agentClass = 'info';
-  if (from === 'cato' || from === 'agenda') agentClass = 'success';
-  else if (from === 'scheduler') agentClass = 'warning';
+  const knownAgents = ['ou', 'zeno', 'cato', 'hiro', 'rumi', 'alan', 'scheduler'];
+  const agentClass = knownAgents.includes(from) ? `agent-${from}` : 'info';
 
   const routing = to ? `${from} → ${to}` : from;
 
@@ -602,6 +601,7 @@ function renderConfigAgents() {
             const model = agentConfig.model || 'capable';
             return `
               <div class="agent-row" data-key="${agent.key}">
+                <span class="agent-color-bar agent-color-${agent.key}"></span>
                 <div class="agent-info">
                   <span class="agent-name">${agent.name}</span>
                   <span class="agent-key">${agent.key}</span>
@@ -1962,7 +1962,7 @@ function connectWebSocket() {
   const port = window.location.port ? `:${window.location.port}` : '';
   ws = new WebSocket(`${protocol}//${hostname}${port}/ws`);
 
-  ws.onopen = () => { connectionStatus.textContent = 'Connected'; };
+  ws.onopen = () => { connectionStatus.classList.add('running'); connectionStatus.title = 'Connected'; };
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'message' && currentView === 'messages') {
@@ -1970,8 +1970,8 @@ function connectWebSocket() {
       if (container) container.insertAdjacentHTML('afterbegin', renderMessage(data.data));
     }
   };
-  ws.onclose = () => { connectionStatus.textContent = 'Disconnected'; setTimeout(connectWebSocket, 3000); };
-  ws.onerror = () => { connectionStatus.textContent = 'Disconnected'; };
+  ws.onclose = () => { connectionStatus.classList.remove('running'); connectionStatus.title = 'Disconnected'; setTimeout(connectWebSocket, 3000); };
+  ws.onerror = () => { connectionStatus.classList.remove('running'); connectionStatus.title = 'Disconnected'; };
 }
 
 // Logout

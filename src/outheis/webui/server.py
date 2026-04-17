@@ -130,6 +130,8 @@ _LOGIN_PAGE = """<!doctype html>
     font-weight: 700;
     letter-spacing: -0.02em;
     margin-bottom: 40px;
+    display: inline-block;
+    transition: color 0.03s ease;
   }
 
   label {
@@ -192,13 +194,17 @@ _LOGIN_PAGE = """<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <div class="logo">οὐθείς</div>
+  <div class="logo" id="logo">οὐθείς</div>
   <label for="pw">Password</label>
   <input id="pw" type="password" autofocus>
   <button onclick="login()">Sign in</button>
   <div class="err" id="err">Incorrect password.</div>
 </div>
 <script>
+const _ci = ['#FF2E00','#FFB400','#C490D1','#97EAD2','#218380'];
+const _logo = document.getElementById('logo');
+_logo.addEventListener('mouseover', () => { _logo.style.color = _ci[Math.floor(Math.random() * _ci.length)]; });
+_logo.addEventListener('mouseout', () => { _logo.style.color = ''; });
 document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
 async function login() {
   const pw = document.getElementById('pw').value;

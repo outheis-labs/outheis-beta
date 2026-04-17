@@ -96,10 +96,10 @@ usage: rumi agent
 ---
 
 ---
-name: Indigo
-hex: "#6366F1"
-role: accent-primary
-usage: Token usage chart
+name: Wisteria
+hex: "#C490D1"
+role: accent-info, accent-primary, agent-code (alan)
+usage: Info states, token usage chart, alan agent
 ---
 
 ## Agent Color Map
@@ -127,7 +127,7 @@ usage: Token usage chart
 --border-primary:   #1A1A1A;  /* Charcoal */
 --border-secondary: #B8B4B4;  /* Silver */
 
---accent-primary: #6366F1;  /* Indigo */
+--accent-primary: #C490D1;  /* Wisteria */
 --accent-info:    #C490D1;  /* Wisteria */
 --accent-success: #218380;  /* Teal */
 --accent-warning: #FFB400;  /* Amber Flame */

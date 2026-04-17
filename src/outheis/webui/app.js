@@ -273,16 +273,26 @@ function renderMessage(msg) {
   const to = msg.to || '';
   const text = msg.payload?.text || msg.payload?.error || JSON.stringify(msg.payload || {});
 
-  const knownAgents = ['ou', 'zeno', 'cato', 'hiro', 'rumi', 'alan', 'scheduler'];
-  const agentClass = knownAgents.includes(from) ? `agent-${from}` : 'info';
+  const knownAgents = ['relay', 'data', 'agenda', 'action', 'pattern', 'code', 'scheduler', 'webui', 'dispatcher', 'transport'];
+  const grayAgents  = ['webui', 'dispatcher', 'transport'];
+  const agentTag = (id, isUser) => {
+    if (isUser) return 'agent-human';
+    if (grayAgents.includes(id)) return 'agent-gray';
+    return knownAgents.includes(id) ? `agent-${id}` : 'info';
+  };
+  const fromIsUser = !!msg.from?.user;
+  const fromClass = agentTag(from, fromIsUser);
+  const toClass   = agentTag(to, false);
 
-  const routing = to ? `${from} → ${to}` : from;
+  const routing = to
+    ? `<span class="msg-agent ${fromClass}">${from}</span><span class="msg-arrow">→</span><span class="msg-agent ${toClass}">${to}</span>`
+    : `<span class="msg-agent ${fromClass}">${from}</span>`;
 
   return `
     <div class="msg-item">
       <div class="msg-header">
         <span class="msg-time">${time}</span>
-        <span class="msg-agent ${agentClass}">${routing}</span>
+        <span class="msg-routing">${routing}</span>
       </div>
       <div class="msg-text">${escapeHtml(String(text))}</div>
     </div>
@@ -1967,7 +1977,7 @@ function connectWebSocket() {
     const data = JSON.parse(event.data);
     if (data.type === 'message' && currentView === 'messages') {
       const container = viewContent.querySelector('div');
-      if (container) container.insertAdjacentHTML('afterbegin', renderMessage(data.data));
+      if (container) { container.insertAdjacentHTML('beforeend', renderMessage(data.data)); container.lastElementChild?.scrollIntoView({behavior:'smooth'}); }
     }
   };
   ws.onclose = () => { connectionStatus.classList.remove('running'); connectionStatus.title = 'Disconnected'; setTimeout(connectWebSocket, 3000); };

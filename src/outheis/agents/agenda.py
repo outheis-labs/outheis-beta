@@ -231,12 +231,18 @@ class AgendaAgent(BaseAgent):
             "   c) Find the item's entry in Shadow.md (match by description text).",
             "      In the tag line (the line starting with `#date-` or `#action-required`),",
             "      replace the existing `#date-YYYY-MM-DD` tag with `#date-[target date ISO]`.",
+            "      Also remove `#action-required` from the tag line — a postponed item is no longer urgent.",
             "      If there is no `#date-` tag, prepend `#date-[target date ISO]` to the tag line.",
             "      Write the complete updated Shadow.md via write_file(file='shadow', content='...').",
             "      Note the source file from the `<!-- BEGIN: filename.md -->` section marker.",
-            "   d) Call ask_zeno: 'Update the date of this item in vault file [filename]: [item description].",
-            "      Change its #date-YYYY-MM-DD tag (or date in text) to [target date ISO].'",
-            "      This prevents shadow_scan from restoring the old date on the next vault re-read.",
+            "   d) Call ask_zeno ONCE PER ITEM (do NOT batch multiple items into one call):",
+            "      'In vault file [filename]: find the entry for [item description].",
+            "      Replace its #date-YYYY-MM-DD tag with #date-[target date ISO].",
+            "      Remove #action-required from the tag line.",
+            "      Write the updated file.'",
+            "      Use the filename from the Shadow.md `<!-- BEGIN: filename.md -->` marker.",
+            "      One ask_zeno call per item — never batch. This ensures each update is applied.",
+            "      Without this update, shadow_scan will restore the old date on the next vault re-read.",
             "",
             "**3. Correction / clarification** — the user is correcting wording, facts, or context.",
             "   Identified by: explanation, question, contradiction, or alternative phrasing.",
@@ -999,7 +1005,7 @@ class AgendaAgent(BaseAgent):
         tools = tools_override if tools_override is not None else self._get_tools()
         system = system_override if system_override is not None else self.get_system_prompt()
 
-        max_iterations = 7
+        max_iterations = 20
         for iteration in range(max_iterations):
             response = call_llm(
                 model=self.model_alias,
@@ -1191,9 +1197,11 @@ class AgendaAgent(BaseAgent):
             "   Note: moving between sections or to Shadow is structural maintenance, NOT deleting.\n"
             "   The 'never remove' rule applies only to items going permanently lost — not to correct placement.\n"
             "   Then add items from Shadow.md not already shown:\n"
-            "   Priority 1 — must include: overdue (date < today), due today, #action-required.\n"
-            "   SECTION RULE: ANY item tagged #action-required belongs in Today (📅) — never in This Week,\n"
-            "   regardless of whether it also has a #date- tag. #action-required means act now.\n"
+            "   Priority 1 — must include: overdue date (date < today), due today, #action-required WITHOUT a future date.\n"
+            "   SECTION RULE for #action-required:\n"
+            "     - #action-required with NO date, or overdue date → belongs in Today (📅), mandatory.\n"
+            "     - #action-required with a FUTURE date → treat like any future item. Do NOT force into Today.\n"
+            "       Include in Today only if Today is underfull (fewer than ~5 items) after Priority 1 items are placed.\n"
             "   Priority 2 — fill remaining slots with: items due within ~10 days, items that unblock\n"
             "   something else, or items that have been open for a long time without progress.\n"
             "   Do not add items further out unless they meet priority 1 or 2.\n"
@@ -1208,16 +1216,18 @@ class AgendaAgent(BaseAgent):
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"
             "6. Future items the user entered directly into Agenda.md: if an item has a date beyond this week or is clearly a future appointment, add it to Shadow.md (as a new dated item) and remove it from Agenda.md. It will reappear via Shadow.md when due.\n"
-            "7. Process `>` annotations — MANDATORY SEQUENCE (complete ALL steps before writing Agenda.md):\n"
-            "   For EACH `>` annotation found, execute the full sequence defined in the system prompt.\n"
-            "   CRITICAL: Shadow.md MUST be updated via write_file(file='shadow') for every annotation:\n"
-            "   - Completion → prepend #done-YYYY-MM-DD to the matching Shadow.md entry's tag line, then write Shadow.md.\n"
-            "   - Postpone → replace the #date- tag in the matching Shadow.md entry with the new date, then write Shadow.md.\n"
-            "   - Correction → update the matching Shadow.md entry text, then write Shadow.md.\n"
-            "   After write_file(shadow): call ask_zeno to update the vault source file (see system prompt for exact wording).\n"
-            "   Skipping the Shadow.md update means the item will reappear in the next review — do not skip it.\n"
+            "7. Process `>` annotations — BATCH EXECUTION in ONE step:\n"
+            "   Identify ALL annotations. Then emit all tool calls in a single response:\n"
+            "   a) ONE write_file(file='shadow') with ALL Shadow.md changes at once:\n"
+            "      - Completion: prepend #done-YYYY-MM-DD to the matching entry's tag line.\n"
+            "      - Postpone: replace #date- tag with new date, remove #action-required.\n"
+            "      - Correction: update the entry text.\n"
+            "   b) ONE ask_zeno per postponed item (in the same response as a and c):\n"
+            "      'In vault file [filename]: find [item]. Replace #date tag with #date-[ISO]. Remove #action-required. Write the file.'\n"
+            "      Use the filename from the Shadow.md <!-- BEGIN: filename.md --> marker.\n"
+            "   c) ONE write_file(file='agenda') with the final Agenda.md — also in the same response.\n"
+            "   Do NOT spread these across multiple rounds. All of a), b), c) in one response.\n"
             "   No `>` lines must remain in Agenda.md after this step.\n\n"
-            "Call write_file(file='agenda', content='...') AFTER all Shadow.md updates are complete. "
             "Reply briefly with what changed."
         )
 

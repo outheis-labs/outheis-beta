@@ -385,6 +385,16 @@ class Dispatcher:
                     self._original_models[role] = agent_cfg.model
                     agent_cfg.model = fallback
                     self._agents.pop(role, None)
+
+            # Prewarm the fallback model so the first request doesn't stall
+            mc = self.config.llm.models.get(fallback)
+            if mc and mc.provider == "ollama.local" and mc.name:
+                threading.Thread(
+                    target=lambda: self._warmup_alias(fallback, required=False),
+                    daemon=True,
+                    name="warmup-fallback",
+                ).start()
+
             text = (
                 f"API credit balance exhausted. "
                 f"Switched to local fallback model '{fallback}'. "
@@ -694,29 +704,51 @@ class Dispatcher:
         return {alias for alias, mc in cfg.llm.models.items()
                 if mc.provider == "ollama.local" and alias in active_aliases}
 
-    def _warmup_persistent_models(self) -> None:
-        """Send a minimal call to each ollama.local model assigned to an enabled agent.
+    def _warmup_alias(self, alias: str, *, required: bool = True) -> bool:
+        """Warm up a single ollama.local model alias. Returns True on success.
 
-        Raises SystemExit if a required model fails to load.
+        If required=True, aborts the process on failure (used at startup for
+        directly assigned agents). If required=False, logs a warning only
+        (used for local_fallback which is optional).
         """
         import sys
-
-        for alias in self._active_ollama_aliases():
-            model_cfg = self.config.llm.models[alias]
-            try:
-                from outheis.core.llm import call_llm
-                call_llm(
-                    model=alias,
-                    messages=[{"role": "user", "content": "hi"}],
-                    max_tokens=1,
-                    agent="warmup",
-                )
-                print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
-            except Exception as e:
-                print(f"  \033[31m✗\033[0m {alias} ({model_cfg.name}) not available: {e}", file=sys.stderr)
+        model_cfg = self.config.llm.models.get(alias)
+        if model_cfg is None:
+            return False
+        try:
+            from outheis.core.llm import call_llm
+            call_llm(
+                model=alias,
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=1,
+                agent="warmup",
+            )
+            print(f"  \033[32m✓\033[0m {alias} ({model_cfg.name}) loaded into memory", file=sys.stderr)
+            return True
+        except Exception as e:
+            print(f"  \033[31m✗\033[0m {alias} ({model_cfg.name}) not available: {e}", file=sys.stderr)
+            if required:
                 print(f"\n\033[31mStartup aborted:\033[0m model '{alias}' is required by an active agent but could not be loaded.", file=sys.stderr)
                 print(f"Fix: run 'ollama pull {model_cfg.name}' or disable the agent using this model.", file=sys.stderr)
                 sys.exit(1)
+            return False
+
+    def _warmup_persistent_models(self) -> None:
+        """Warm up all ollama.local models at startup.
+
+        - Models directly assigned to enabled agents: required (abort on failure).
+        - local_fallback model: optional warmup (warn only, don't abort).
+        """
+        for alias in self._active_ollama_aliases():
+            self._warmup_alias(alias, required=True)
+
+        # Also prewarm the local_fallback model if it's an ollama.local model
+        # and not already covered above (it's not directly assigned to an agent).
+        fallback = self.config.llm.local_fallback
+        if fallback and fallback not in self._active_ollama_aliases():
+            mc = self.config.llm.models.get(fallback)
+            if mc and mc.provider == "ollama.local" and mc.name:
+                self._warmup_alias(fallback, required=False)
 
     def _unload_ollama_model(self, model_name: str) -> None:
         """Tell Ollama to unload a model from memory (keep_alive=0)."""

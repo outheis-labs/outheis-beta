@@ -311,7 +311,7 @@ async function renderConfig() {
     .join('');
 
   config = await fetchAPI('/api/config');
-  renderConfigTab();
+  await renderConfigTab();
 }
 
 function switchConfigTab(tab) {
@@ -322,7 +322,7 @@ function switchConfigTab(tab) {
   renderConfigTab();
 }
 
-function renderConfigTab() {
+async function renderConfigTab() {
   switch (currentTab) {
     case 'general':
       renderConfigGeneral();

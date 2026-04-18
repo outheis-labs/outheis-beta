@@ -2262,6 +2262,39 @@ document.getElementById('agenda-count').textContent = String(agenda.length || 0)
 
   await renderTokenChart();
   setInterval(renderTokenChart, 60000);
+
+  checkForUpdate();
+}
+
+async function checkForUpdate() {
+  const data = await fetchAPI('/api/version');
+
+  // Populate version in sidebar regardless of update availability
+  const verEl = document.getElementById('sidebar-version');
+  if (verEl && data?.current) verEl.textContent = `v${data.current}`;
+
+  if (!data?.update_available) return;
+
+  const notice = document.getElementById('update-notice');
+  if (!notice) return;
+
+  notice.style.display = 'flex';
+  notice.innerHTML = `
+    <button class="btn btn-update" onclick="triggerUpdate()">Update ${data.latest}</button>
+    <div class="update-info-wrap">
+      <span class="update-info-icon" tabindex="0">&#9432;</span>
+      <div class="update-tooltip">${escapeHtml(data.description || 'No release notes available.')}</div>
+    </div>
+  `;
+}
+
+// Update is always user-initiated via the button — never called automatically
+async function triggerUpdate() {
+  await fetchAPI('/api/update', { method: 'POST' });
+}
+
+function escapeHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 init();

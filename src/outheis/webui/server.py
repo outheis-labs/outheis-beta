@@ -1063,6 +1063,43 @@ async def get_status():
     }
 
 
+_version_cache: dict = {"ts": 0.0, "data": None}
+_VERSION_CACHE_TTL = 3600  # seconds
+
+
+@app.get("/api/version")
+async def get_version():
+    import time
+    from outheis import __version__
+
+    now = time.time()
+    if _version_cache["data"] and now - _version_cache["ts"] < _VERSION_CACHE_TTL:
+        return _version_cache["data"]
+
+    result: dict = {"current": __version__, "latest": None, "update_available": False, "description": None}
+
+    try:
+        import httpx
+        resp = httpx.get("https://pypi.org/pypi/outheis/json", timeout=5.0)
+        if resp.status_code == 200:
+            data = resp.json()
+            latest = data["info"]["version"]
+            result["latest"] = latest
+            result["update_available"] = latest != __version__
+            result["description"] = data["info"].get("summary") or None
+            # Try to get release description (truncated)
+            release_body = data["info"].get("description") or ""
+            if release_body:
+                # Take first 400 chars of description
+                result["description"] = release_body[:400].strip()
+    except Exception:
+        pass
+
+    _version_cache["ts"] = now
+    _version_cache["data"] = result
+    return result
+
+
 @app.post("/api/restart")
 async def restart_daemon():
     import os
@@ -1122,6 +1159,79 @@ subprocess.run(start_cmd, env=env, check=False)
     )
 
     return {"status": "restarting"}
+
+
+@app.post("/api/update")
+async def update_package():
+    import shutil
+    import subprocess
+    import sys
+
+    from outheis.dispatcher.daemon import read_pid
+    from pathlib import Path as _Path
+
+    current_pid = read_pid()
+    outheis_cmd = str(_Path(sys.executable).parent / "outheis")
+    if not _Path(outheis_cmd).exists():
+        outheis_cmd = shutil.which("outheis") or sys.argv[0]
+
+    pipx_bin = shutil.which("pipx")
+    using_pipx = pipx_bin and ("pipx" in sys.executable or (
+        pipx_bin and subprocess.run(
+            [pipx_bin, "list", "--short"], capture_output=True, text=True,
+        ).stdout.find("outheis") != -1
+    ))
+    if using_pipx:
+        upgrade_cmd = [pipx_bin, "upgrade", "outheis"]
+    else:
+        upgrade_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "outheis"]
+
+    pid_val = current_pid or 0
+    start_cmd_repr = repr([outheis_cmd, "start"])
+    upgrade_cmd_repr = repr(upgrade_cmd)
+    env_repr = repr(dict(os.environ))
+
+    script = f"""
+import os, time, signal, subprocess
+
+pid = {pid_val}
+upgrade_cmd = {upgrade_cmd_repr}
+start_cmd = {start_cmd_repr}
+env = {env_repr}
+
+time.sleep(1)
+
+if pid:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    for _ in range(20):
+        time.sleep(0.5)
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+
+subprocess.run(upgrade_cmd, env=env, check=False)
+time.sleep(1)
+subprocess.run(start_cmd, env=env, check=False)
+"""
+
+    subprocess.Popen(
+        [sys.executable, "-c", script],
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env=dict(os.environ),
+    )
+
+    # Invalidate version cache so next check reflects new version
+    _version_cache["ts"] = 0.0
+    _version_cache["data"] = None
+
+    return {"status": "updating"}
 
 
 # WebSocket

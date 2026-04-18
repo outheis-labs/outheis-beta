@@ -1173,26 +1173,43 @@ class Dispatcher:
                 import uvicorn
                 from outheis.webui.server import app as webui_app
 
-                # Check if port is already in use before starting
-                _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-                _s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-                try:
-                    _bind_host = "127.0.0.1" if self.config.webui.host == "0.0.0.0" else self.config.webui.host
-                    _s.bind((_bind_host, self.config.webui.port))
-                    _s.close()
-                except OSError:
-                    _s.close()
-                    print(
-                        f"[webui] Port {self.config.webui.port} is already in use — "
-                        f"run 'lsof -i :{self.config.webui.port}' to find what is using it."
-                    )
-                    raise RuntimeError(f"port {self.config.webui.port} already in use")
-
                 # Safety: never expose on all interfaces unless explicitly configured.
                 # Empty or unset host defaults to loopback — never to 0.0.0.0.
                 _host = self.config.webui.host or "127.0.0.1"
                 if _host in ("", "localhost"):
                     _host = "127.0.0.1"
+
+                # Check if port is already in use — abort daemon startup if so.
+                # Bind to the actual configured host (incl. 0.0.0.0) to catch all conflicts.
+                _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                try:
+                    _s.bind((_host, self.config.webui.port))
+                    _s.close()
+                except OSError:
+                    _s.close()
+                    _port = self.config.webui.port
+                    # Identify who is using the port
+                    _owner = None
+                    try:
+                        import subprocess as _sp
+                        _r = _sp.run(
+                            ["lsof", "-i", f":{_port}", "-sTCP:LISTEN", "-Fp"],
+                            capture_output=True, text=True, timeout=3,
+                        )
+                        _pids = [l[1:] for l in _r.stdout.splitlines() if l.startswith("p")]
+                        if _pids:
+                            _pr = _sp.run(
+                                ["ps", "-p", ",".join(_pids), "-o", "pid=,user=,comm="],
+                                capture_output=True, text=True, timeout=3,
+                            )
+                            _owner = _pr.stdout.strip()
+                    except Exception:
+                        pass
+                    print(f"[webui] Port {_port} is already in use.")
+                    if _owner:
+                        print(f"        Used by: {_owner}")
+                    print(f"        Fix: kill the process above, or change webui.port in your config.")
+                    sys.exit(1)  # abort: parent sees no PID file → reports failure
 
                 # uvicorn.run() in a non-main thread tries to install signal handlers
                 # and raises ValueError. Use Config+Server instead, which skips that.
@@ -1415,22 +1432,39 @@ def start_daemon(foreground: bool = False) -> bool:
             print(f"  {GREEN}✓{RESET} Dispatcher started (PID {child_pid})")
             print(f"  {GREEN}✓{RESET} Log: {log_path}")
             if config.webui.enabled:
-                import socket as _socket
-                host = "127.0.0.1"
+                import urllib.request as _urllib
+                configured_host = config.webui.host or "127.0.0.1"
                 port = config.webui.port
+                probe_url = f"http://127.0.0.1:{port}/api/status"
                 webui_ready = False
                 for _ in range(40):  # up to 20s
                     time.sleep(0.5)
                     try:
-                        with _socket.create_connection((host, port), timeout=0.5):
-                            webui_ready = True
-                            break
+                        with _urllib.urlopen(probe_url, timeout=0.5) as r:
+                            if r.status == 200:
+                                webui_ready = True
+                                break
+                    except Exception:
+                        pass
+                suffix = "" if webui_ready else " (still starting — retry in a moment)"
+                if configured_host in ("0.0.0.0", "::", ""):
+                    # Enumerate all non-loopback IPs plus loopback
+                    addrs = []
+                    try:
+                        for iface_addrs in _socket.getaddrinfo(
+                            _socket.gethostname(), None, _socket.AF_INET
+                        ):
+                            ip = iface_addrs[4][0]
+                            if ip not in addrs:
+                                addrs.append(ip)
                     except OSError:
                         pass
-                if webui_ready:
-                    print(f"  {GREEN}✓{RESET} Web UI: http://{host}:{port}")
+                    if "127.0.0.1" not in addrs:
+                        addrs.insert(0, "127.0.0.1")
+                    for ip in addrs:
+                        print(f"  {GREEN}✓{RESET} Web UI: http://{ip}:{port}{suffix}")
                 else:
-                    print(f"  {GREEN}✓{RESET} Web UI: http://{host}:{port} (still starting — retry in a moment)")
+                    print(f"  {GREEN}✓{RESET} Web UI: http://{configured_host}:{port}{suffix}")
             if config.signal.enabled:
                 print(f"  {GREEN}✓{RESET} Signal transport enabled (bot: {config.signal.bot_phone})")
                 try:

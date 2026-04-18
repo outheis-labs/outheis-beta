@@ -463,9 +463,28 @@ class Dispatcher:
         except Exception as e:
             print(f"[fallback] Could not append recovery broadcast: {e}", flush=True)
 
+    def _cloud_api_key_available(self) -> bool:
+        """Return True if at least one cloud provider has an API key (config or env)."""
+        import os as _os
+        for name, provider in self.config.llm.providers.items():
+            if name.startswith("ollama"):
+                continue
+            key = provider.api_key
+            if not key and name == "anthropic":
+                key = _os.environ.get("ANTHROPIC_API_KEY")
+            if not key and name == "openai":
+                key = _os.environ.get("OPENAI_API_KEY")
+            if key:
+                return True
+        return False
+
     def _probe_billing(self) -> bool:
         """Make a minimal cloud API call. Return True if billing is now available."""
         from outheis.core.llm import call_llm, BillingError, resolve_model
+
+        # Skip probe if no API key is available — key won't appear on its own
+        if not self._cloud_api_key_available():
+            return False
 
         # Find a cloud alias from original models (or current config if no originals saved)
         aliases = list(self._original_models.values()) or [
@@ -473,7 +492,8 @@ class Dispatcher:
             if cfg.enabled
         ]
         test_alias = next(
-            (a for a in aliases if not a.startswith("local-")),
+            (a for a in aliases
+             if not a.startswith("local-") and a != "local"),
             None,
         )
         if not test_alias:
@@ -519,6 +539,15 @@ class Dispatcher:
 
         if not cloud_aliases:
             return  # All agents already on local models
+
+        # No API key configured — enter fallback immediately without a network call
+        if not self._cloud_api_key_available():
+            if self.config.llm.local_fallback:
+                print(f"[startup] No cloud API key configured — switching to local model immediately.")
+                self._enter_fallback_mode("No cloud API key configured.", conversation_id=None)
+            else:
+                print(f"[startup] No cloud API key configured and no local fallback set — requests will fail.")
+            return
 
         # Test with the cheapest available alias
         test_alias = next(iter(cloud_aliases))

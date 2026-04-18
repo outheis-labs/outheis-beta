@@ -977,7 +977,7 @@ async function renderMessages() {
         <button class="btn btn-primary" onclick="sendPrompt()" style="align-self: flex-end;">Send</button>
       </div>
       <div id="msg-list" style="overflow-y: auto; flex: 1;">
-        ${messages.length ? [...messages].reverse().map((msg) => renderMessage(msg)).join('') : '<div class="msg-item"><div class="msg-text" style="color: var(--text-tertiary);">No messages yet</div></div>'}
+        ${messages.length ? messages.map((msg) => renderMessage(msg)).join('') : '<div class="msg-item"><div class="msg-text" style="color: var(--text-tertiary);">No messages yet</div></div>'}
       </div>
     </div>
   `;

@@ -2019,6 +2019,7 @@ function cancelActivePolls() {
 }
 
 // WebSocket
+let _wsFailCount = 0;
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   // Force IPv4 loopback — localhost resolves to ::1 first on macOS, but uvicorn binds 127.0.0.1 only
@@ -2026,7 +2027,12 @@ function connectWebSocket() {
   const port = window.location.port ? `:${window.location.port}` : '';
   ws = new WebSocket(`${protocol}//${hostname}${port}/ws`);
 
-  ws.onopen = () => { connectionStatus.classList.add('running'); connectionStatus.title = 'Connected'; };
+  ws.onopen = () => {
+    connectionStatus.classList.add('running');
+    connectionStatus.title = 'Connected';
+    _wsFailCount = 0;
+    document.getElementById('offline-banner')?.remove();
+  };
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'message' && currentView === 'messages') {
@@ -2034,7 +2040,18 @@ function connectWebSocket() {
       if (container) { container.insertAdjacentHTML('beforeend', renderMessage(data.data)); container.lastElementChild?.scrollIntoView({behavior:'smooth'}); }
     }
   };
-  ws.onclose = () => { connectionStatus.classList.remove('running'); connectionStatus.title = 'Disconnected'; setTimeout(connectWebSocket, 3000); };
+  ws.onclose = () => {
+    connectionStatus.classList.remove('running');
+    connectionStatus.title = 'Disconnected';
+    _wsFailCount++;
+    if (_wsFailCount >= 3 && !document.getElementById('offline-banner')) {
+      const banner = document.createElement('div');
+      banner.id = 'offline-banner';
+      banner.innerHTML = `<strong>Dispatcher offline.</strong> Run <code>outheis start</code> in the terminal to restart.`;
+      document.body.appendChild(banner);
+    }
+    setTimeout(connectWebSocket, 3000);
+  };
   ws.onerror = () => { connectionStatus.classList.remove('running'); connectionStatus.title = 'Disconnected'; };
 }
 

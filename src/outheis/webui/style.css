@@ -1154,3 +1154,22 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   .file-toggle .btn { flex: 1; min-width: 60px; font-size: 12px; padding: 6px 8px; }
   .search-input { width: 100% !important; }
 }
+
+/* Offline banner — shown after repeated WebSocket disconnect */
+#offline-banner {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: #1a1a1a;
+  color: #e0e0e0;
+  text-align: center;
+  padding: 12px 20px;
+  font-size: 14px;
+  z-index: 9999;
+  border-top: 2px solid #ff4444;
+}
+#offline-banner code {
+  background: #333;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: monospace;
+}

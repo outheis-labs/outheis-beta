@@ -401,7 +401,6 @@ def update(
         try:
             import urllib.request as _urllib
             import json as _json
-            from packaging.version import Version as _V
             with _urllib.urlopen("https://pypi.org/pypi/outheis/json", timeout=5) as r:
                 data = _json.loads(r.read())
             latest_version = data["info"]["version"]
@@ -409,16 +408,21 @@ def update(
             if releases:
                 upload_time = releases[0].get("upload_time", "")
                 release_date = upload_time[:10] if upload_time else None
-            # Collect all versions between current (exclusive) and latest (exclusive)
-            current_v = _V(__version__)
-            latest_v = _V(latest_version)
+            # Collect intermediate versions using simple tuple comparison (no packaging needed)
+            def _ver_tuple(v: str) -> tuple[int, ...]:
+                try:
+                    return tuple(int(x) for x in v.split(".") if x.isdigit())
+                except Exception:
+                    return (0,)
+            current_t = _ver_tuple(__version__)
+            latest_t = _ver_tuple(latest_version)
             all_versions = sorted(
-                (v for v in data.get("releases", {}) if not _V(v).is_prerelease),
-                key=_V,
+                (v for v in data.get("releases", {})),
+                key=_ver_tuple,
             )
             skipped_versions = [
                 v for v in all_versions
-                if current_v < _V(v) < latest_v
+                if current_t < _ver_tuple(v) < latest_t
             ]
         except Exception:
             pass
@@ -433,7 +437,7 @@ def update(
         if skipped_versions:
             typer.echo(f"  {len(skipped_versions)} intermediate release(s) skipped: {', '.join(skipped_versions)}")
     else:
-        typer.echo(f"Checking for updates (current: {__version__})...")
+        typer.echo(f"Updating outheis {__version__} → latest...")
 
     if was_running:
         typer.echo("Stopping daemon...")
@@ -471,14 +475,17 @@ def update(
         typer.echo(f"outheis {__version__} is already the latest release.")
         raise typer.Exit()
 
-    # Read the actually installed version after the update
-    try:
-        import importlib.metadata as _meta
-        installed_version = _meta.version("outheis")
-    except Exception:
-        installed_version = latest_version or "unknown"
+    # Determine the actually installed version from pip output or PyPI data.
+    # importlib.metadata reads the running process — still shows old version.
+    installed_version = latest_version  # best guess from PyPI
+    if not installed_version:
+        # Parse pip output: "Successfully installed outheis-X.Y.Z"
+        import re as _re
+        m = _re.search(r"successfully installed outheis-([^\s]+)", result.stdout, _re.IGNORECASE)
+        if m:
+            installed_version = m.group(1)
 
-    if installed_version and installed_version != __version__:
+    if installed_version:
         typer.echo(f"Updated to outheis {installed_version}.")
     else:
         typer.echo("outheis updated successfully.")

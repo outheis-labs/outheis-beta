@@ -976,8 +976,8 @@ async function renderMessages() {
         <textarea id="prompt-input" placeholder="Send a message to outheis…" rows="2" style="flex: 1; resize: none; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; color: var(--text-primary); font-family: inherit; font-size: 13px; padding: 8px 10px; outline: none;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendPrompt();}"></textarea>
         <button class="btn btn-primary" onclick="sendPrompt()" style="align-self: flex-end;">Send</button>
       </div>
-      <div style="overflow-y: auto; flex: 1;">
-        ${messages.length ? messages.map((msg) => renderMessage(msg)).join('') : '<div class="msg-item"><div class="msg-text" style="color: var(--text-tertiary);">No messages yet</div></div>'}
+      <div id="msg-list" style="overflow-y: auto; flex: 1;">
+        ${messages.length ? [...messages].reverse().map((msg) => renderMessage(msg)).join('') : '<div class="msg-item"><div class="msg-text" style="color: var(--text-tertiary);">No messages yet</div></div>'}
       </div>
     </div>
   `;
@@ -2040,8 +2040,8 @@ function connectWebSocket() {
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
     if (data.type === 'message' && currentView === 'messages') {
-      const container = viewContent.querySelector('div');
-      if (container) { container.insertAdjacentHTML('beforeend', renderMessage(data.data)); container.lastElementChild?.scrollIntoView({behavior:'smooth'}); }
+      const list = document.getElementById('msg-list');
+      if (list) { list.insertAdjacentHTML('afterbegin', renderMessage(data.data)); list.firstElementChild?.scrollIntoView({behavior:'smooth'}); }
     }
   };
   ws.onclose = () => {

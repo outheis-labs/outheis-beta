@@ -332,6 +332,9 @@ class Dispatcher:
     _signal_thread: threading.Thread | None = None
     _signal_transport: any = field(default=None, repr=False)
 
+    # WebUI server (stored so finally block can shut it down explicitly)
+    _webui_server: any = field(default=None, repr=False)
+
     # Fallback mode — activated when cloud billing fails
     _fallback_mode: bool = False
     _original_models: dict = field(default_factory=dict)  # saved before fallback override
@@ -1221,6 +1224,7 @@ class Dispatcher:
                 )
                 webui_server = uvicorn.Server(webui_config)
                 webui_server.install_signal_handlers = lambda: None  # disable — main thread owns signals
+                self._webui_server = webui_server
 
                 webui_thread = threading.Thread(
                     target=webui_server.run,
@@ -1307,6 +1311,10 @@ class Dispatcher:
         finally:
             watcher.stop()
             lock_manager.stop()
+
+            # Stop WebUI explicitly so the port is released before the process exits
+            if self._webui_server is not None:
+                self._webui_server.should_exit = True
 
             # Stop Ollama if we started it
             from outheis.core.ollama_server import get_server
@@ -1621,11 +1629,13 @@ def stop_daemon() -> bool:
     Returns:
         True if stopped successfully.
     """
+    GREEN = "\033[32m"
+    RED   = "\033[31m"
     BOLD  = "\033[1m"
     DIM   = "\033[2m"
     RESET = "\033[0m"
+    GRAY  = "\033[38;5;250m"
 
-    GRAY = "\033[38;5;250m"
     print(f"\n{GRAY}𝐎{RESET}{BOLD}  οὐθείς{RESET}")  # noqa: i18n — brand name in Greek
     print(f"{DIM}outheis — nobody who refuses to be captured.{RESET}")
     print("─" * 50)
@@ -1635,6 +1645,12 @@ def stop_daemon() -> bool:
         print("Dispatcher not running")
         return False
 
+    # Read config so we know which services are running
+    try:
+        config = load_config()
+    except Exception:
+        config = None
+
     try:
         os.kill(pid, signal.SIGTERM)
         # Wait for process to exit
@@ -1643,18 +1659,24 @@ def stop_daemon() -> bool:
             try:
                 os.kill(pid, 0)
             except OSError:
-                # Process exited
+                # Process exited — report what was stopped
                 remove_pid()
-                print("Dispatcher stopped")
+                if config and config.signal.enabled:
+                    print(f"  {GREEN}✓{RESET} Signal transport stopped")
+                if config and config.webui.enabled:
+                    host = config.webui.host or "127.0.0.1"
+                    port = config.webui.port
+                    print(f"  {GREEN}✓{RESET} Web UI stopped (http://{host}:{port})")
+                print(f"  {GREEN}✓{RESET} Dispatcher stopped")
                 return True
 
         # Force kill
         os.kill(pid, signal.SIGKILL)
         remove_pid()
-        print("Dispatcher killed")
+        print(f"  {RED}!{RESET} Dispatcher force-killed (did not exit cleanly)")
         return True
     except OSError as e:
-        print(f"Error stopping dispatcher: {e}")
+        print(f"  {RED}✗{RESET} Error stopping dispatcher: {e}")
         remove_pid()
         return False
 

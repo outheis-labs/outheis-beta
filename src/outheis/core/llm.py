@@ -18,7 +18,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from outheis.core.config import LLMConfig, ModelConfig
+from outheis.core.config import LLMConfig, ModelConfig, ModelResolutionError
 
 
 # =============================================================================
@@ -272,9 +272,18 @@ def _wrap_openai_response(response: Any) -> _FakeResponse:
 # =============================================================================
 
 def resolve_model(alias: str) -> ModelConfig:
-    """Resolve model alias to ModelConfig."""
-    config = get_llm_config()
-    return config.get_model(alias)
+    """Resolve model alias to a complete ModelConfig.
+
+    Uses local_fallback if the primary alias is incomplete.
+    Raises ModelResolutionError if neither is usable.
+    Logs a warning when the fallback is used.
+    """
+    import logging
+    llm_config = get_llm_config()
+    model_config, warning = llm_config.resolve_model(alias)
+    if warning:
+        logging.getLogger(__name__).warning(warning)
+    return model_config
 
 
 def call_llm(

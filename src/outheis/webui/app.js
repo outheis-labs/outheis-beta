@@ -882,12 +882,20 @@ async function saveConfig() {
     }
     if (modelRows.length > 0) {
       updatedConfig.llm.models = {};
+      const incompleteAliases = [];
       modelRows.forEach((row) => {
-        const alias = row.querySelector('.model-alias-input')?.value;
-        const name = row.querySelector('.model-name-input')?.value;
+        const alias = row.querySelector('.model-alias-input')?.value?.trim();
+        const name = row.querySelector('.model-name-input')?.value?.trim();
         const provider = row.querySelector('.model-provider-select')?.value;
-        if (alias && name) updatedConfig.llm.models[alias] = { provider, name };
+        if (!alias) return;
+        updatedConfig.llm.models[alias] = { provider: provider || '', name: name || '' };
+        if (!provider || !name) incompleteAliases.push(alias);
+        // Visual feedback on the row
+        row.style.outline = (!provider || !name) ? '1px solid var(--accent-warning)' : '';
       });
+      if (incompleteAliases.length > 0) {
+        showToast(`Warning: incomplete alias${incompleteAliases.length > 1 ? 'es' : ''}: ${incompleteAliases.join(', ')} — fallback will be used if configured`, 5000);
+      }
     }
   }
 
@@ -2071,7 +2079,7 @@ function formatSize(bytes) {
   return Math.round(bytes / (1024 * 1024)) + 'MB';
 }
 
-function showToast(message) {
+function showToast(message, duration = 2000) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
 
@@ -2081,7 +2089,7 @@ function showToast(message) {
   document.body.appendChild(toast);
 
   setTimeout(() => toast.classList.add('show'), 10);
-  setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2000);
+  setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, duration);
 }
 
 // Token chart tooltip

@@ -138,6 +138,23 @@ class ModelConfig:
     provider: str  # "anthropic", "openai", "ollama.local", "ollama.cloud", …
     name: str  # e.g. "claude-sonnet-4-20250514", "llama3.2:3b"
 
+    def is_complete(self) -> bool:
+        """Return True if both provider and model name are set."""
+        return bool(self.provider and self.name)
+
+    def missing_fields(self) -> list[str]:
+        """Return list of field names that are empty."""
+        missing = []
+        if not self.provider:
+            missing.append("provider")
+        if not self.name:
+            missing.append("model name")
+        return missing
+
+
+class ModelResolutionError(Exception):
+    """Raised when a model alias cannot be resolved to a complete configuration."""
+
 
 @dataclass
 class LLMConfig:
@@ -152,12 +169,55 @@ class LLMConfig:
     local_fallback: str | None = None  # Model alias to use when cloud billing fails
 
     def get_model(self, alias: str) -> ModelConfig:
-        """Get model config for alias. Raises KeyError if not found."""
+        """Get model config for alias. Returns a default if not found."""
         if alias in self.models:
             return self.models[alias]
-        # Allow direct model name as fallback
         return ModelConfig(provider="anthropic", name=alias)
-    
+
+    def resolve_model(self, alias: str) -> tuple[ModelConfig, str | None]:
+        """Resolve alias to a complete ModelConfig, using local_fallback if needed.
+
+        Returns (model_config, warning) where warning is non-None if the fallback
+        was used. Raises ModelResolutionError if neither alias nor fallback is complete.
+        """
+        model = self.models.get(alias)
+
+        if model is None:
+            # Unknown alias — treat as direct model name on anthropic (legacy behaviour)
+            return ModelConfig(provider="anthropic", name=alias), None
+
+        if model.is_complete():
+            return model, None
+
+        # Primary alias is incomplete — try local_fallback
+        missing = model.missing_fields()
+        primary_problem = f"alias '{alias}' is incomplete (missing: {', '.join(missing)})"
+
+        if self.local_fallback and self.local_fallback != alias:
+            fallback_model = self.models.get(self.local_fallback)
+            if fallback_model and fallback_model.is_complete():
+                warning = f"{primary_problem} — using fallback '{self.local_fallback}'"
+                return fallback_model, warning
+            # Fallback also incomplete
+            if fallback_model:
+                fb_missing = fallback_model.missing_fields()
+                raise ModelResolutionError(
+                    f"{primary_problem}. "
+                    f"Fallback '{self.local_fallback}' is also misconfigured "
+                    f"(missing: {', '.join(fb_missing)}). "
+                    f"Fix in Configuration → Models."
+                )
+            raise ModelResolutionError(
+                f"{primary_problem}. "
+                f"Fallback alias '{self.local_fallback}' does not exist. "
+                f"Fix in Configuration → Models."
+            )
+
+        raise ModelResolutionError(
+            f"{primary_problem}. No fallback configured. "
+            f"Fix in Configuration → Models."
+        )
+
     def get_provider(self, name: str) -> ProviderConfig:
         """Get provider config. Returns empty config if not found."""
         return self.providers.get(name, ProviderConfig())

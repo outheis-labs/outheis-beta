@@ -168,7 +168,7 @@ class LLMConfig:
         "reasoning": ModelConfig(provider="anthropic", name="claude-opus-4-5"),
         "local": ModelConfig(provider="ollama.local", name=""),
     })
-    local_fallback: str | None = None  # Model alias to use when cloud billing fails
+    local_fallback: str | None = "local"  # Model alias to use when cloud billing fails
 
     def get_model(self, alias: str) -> ModelConfig:
         """Get model config for alias. Returns a default if not found."""

@@ -1432,6 +1432,7 @@ def start_daemon(foreground: bool = False) -> bool:
             print(f"  {GREEN}✓{RESET} Dispatcher started (PID {child_pid})")
             print(f"  {GREEN}✓{RESET} Log: {log_path}")
             if config.webui.enabled:
+                import socket as _socket
                 import urllib.request as _urllib
                 configured_host = config.webui.host or "127.0.0.1"
                 port = config.webui.port

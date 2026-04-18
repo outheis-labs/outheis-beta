@@ -392,11 +392,37 @@ def update(
     from outheis.dispatcher.daemon import read_pid, start_daemon, stop_daemon
 
     was_running = read_pid() is not None
+
+    # Fetch latest version info from PyPI before doing anything
+    latest_version = None
+    release_date = None
+    if not source:
+        try:
+            import urllib.request as _urllib
+            import json as _json
+            with _urllib.urlopen("https://pypi.org/pypi/outheis/json", timeout=5) as r:
+                data = _json.loads(r.read())
+            latest_version = data["info"]["version"]
+            releases = data.get("releases", {}).get(latest_version, [])
+            if releases:
+                upload_time = releases[0].get("upload_time", "")
+                release_date = upload_time[:10] if upload_time else None
+        except Exception:
+            pass
+
+    if latest_version and latest_version == __version__:
+        typer.echo(f"outheis is already up to date ({__version__}).")
+        raise typer.Exit()
+
+    if latest_version:
+        date_str = f", released {release_date}" if release_date else ""
+        typer.echo(f"Updating outheis {__version__} → {latest_version}{date_str}")
+    else:
+        typer.echo(f"Updating outheis (current: {__version__})...")
+
     if was_running:
         typer.echo("Stopping daemon...")
         stop_daemon()
-
-    typer.echo(f"Updating outheis (current: {__version__})...")
 
     if source:
         cmd = [sys.executable, "-m", "pip", "install", "--upgrade", source]
@@ -423,11 +449,7 @@ def update(
             start_daemon()
         raise typer.Exit(1)
 
-    output = result.stdout.lower()
-    if "already up-to-date" in output or "already satisfied" in output or "already latest" in output:
-        typer.echo("outheis is already up to date.")
-    else:
-        typer.echo("outheis updated successfully.")
+    typer.echo("outheis updated successfully.")
 
     if was_running:
         typer.echo("Restarting daemon...")

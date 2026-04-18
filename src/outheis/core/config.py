@@ -492,6 +492,7 @@ def save_config(config: Config) -> None:
     """Save configuration to file."""
     path = get_config_path()
     path.parent.mkdir(parents=True, exist_ok=True)
+    path.parent.chmod(0o700)
 
     data: dict[str, Any] = {
         "human": {
@@ -548,6 +549,7 @@ def save_config(config: Config) -> None:
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    path.chmod(0o600)
 
 
 # =============================================================================
@@ -569,6 +571,9 @@ def init_directories() -> None:
 
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
+
+    # Restrict human dir to owner only
+    get_human_dir().chmod(0o700)
 
     # Create vault/Agenda/ for each configured vault — agents require it on first run.
     # Other subdirs (Migration/, Codebase/) are created on demand by their agents.

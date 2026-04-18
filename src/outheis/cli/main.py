@@ -192,8 +192,17 @@ def init() -> None:
     typer.echo("\n" + "─" * 50)
     typer.echo("Web UI")
     typer.echo("─" * 50 + "\n")
-    typer.echo("The Web UI runs on localhost by default and is accessible via browser.")
-    typer.echo("Set a password to protect it (recommended when using remote access).\n")
+    typer.echo("The Web UI runs as a local HTTP server accessible via browser.")
+    typer.echo("Use 127.0.0.1 (localhost only) or 0.0.0.0 (all interfaces, e.g. for remote access).\n")
+
+    default_host = config.webui.host or "127.0.0.1"
+    config.webui.host = typer.prompt("Bind address", default=default_host)
+
+    default_port = config.webui.port or 8080
+    config.webui.port = typer.prompt("Port", default=default_port)
+
+    typer.echo()
+    typer.echo("Set a password to protect the Web UI (recommended when using remote access).\n")
 
     existing_pw = config.webui.password or ""
     masked_pw = "****" if existing_pw else ""
@@ -368,50 +377,61 @@ def _register_signal(phone: str) -> bool:
 
 
 @app.command()
-def update() -> None:
+def update(
+    source: str = typer.Option(
+        None,
+        "--from",
+        help="Install from a specific .whl path or URL instead of the default index",
+    ),
+) -> None:
     """Update outheis to the latest version."""
     import shutil
     import subprocess
     import sys
 
-    typer.echo("Checking for updates...")
+    from outheis.dispatcher.daemon import read_pid, start_daemon, stop_daemon
 
-    # Detect pipx installation: outheis executable lives inside a pipx venv
-    exe = sys.executable  # e.g. ~/.local/pipx/venvs/outheis/bin/python
-    using_pipx = "pipx" in exe and shutil.which("pipx") is not None
+    was_running = read_pid() is not None
+    if was_running:
+        typer.echo("Stopping daemon...")
+        stop_daemon()
 
-    if not using_pipx:
-        # Double-check: ask pipx if it knows about outheis
+    typer.echo(f"Updating outheis (current: {__version__})...")
+
+    if source:
+        cmd = [sys.executable, "-m", "pip", "install", "--upgrade", source]
+    else:
+        # Prefer pipx if outheis was installed that way
+        exe = sys.executable
         pipx_bin = shutil.which("pipx")
-        if pipx_bin:
-            probe = subprocess.run(
-                [pipx_bin, "list", "--short"],
-                capture_output=True, text=True,
-            )
-            if "outheis" in probe.stdout:
-                using_pipx = True
-
-    try:
+        using_pipx = pipx_bin and ("pipx" in exe or (
+            pipx_bin and subprocess.run(
+                [pipx_bin, "list", "--short"], capture_output=True, text=True,
+            ).stdout.find("outheis") != -1
+        ))
         if using_pipx:
-            cmd = [shutil.which("pipx"), "upgrade", "outheis"]
+            cmd = [pipx_bin, "upgrade", "outheis"]
         else:
             cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "outheis"]
 
-        result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
-        if result.returncode == 0:
-            output = result.stdout.lower()
-            if "already up-to-date" in output or "already satisfied" in output or "already latest" in output:
-                typer.echo("outheis is already up to date.")
-            else:
-                typer.echo("✓ outheis updated successfully.")
-                typer.echo("Restart the daemon to apply: outheis stop && outheis start")
-        else:
-            typer.echo(f"Update failed:\n{result.stderr or result.stdout}")
-            raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"Error: {e}")
+    if result.returncode != 0:
+        typer.echo(f"Update failed:\n{result.stderr or result.stdout}", err=True)
+        if was_running:
+            typer.echo("Restarting daemon with current version...")
+            start_daemon()
         raise typer.Exit(1)
+
+    output = result.stdout.lower()
+    if "already up-to-date" in output or "already satisfied" in output or "already latest" in output:
+        typer.echo("outheis is already up to date.")
+    else:
+        typer.echo("outheis updated successfully.")
+
+    if was_running:
+        typer.echo("Restarting daemon...")
+        start_daemon()
 
 
 @app.command()

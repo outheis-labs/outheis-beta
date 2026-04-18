@@ -1169,14 +1169,36 @@ class Dispatcher:
         # Start Web UI first — must be reachable before slow transports initialize
         if self.config.webui.enabled:
             try:
+                import socket as _socket
                 import uvicorn
                 from outheis.webui.server import app as webui_app
+
+                # Check if port is already in use before starting
+                _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                _s.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+                try:
+                    _bind_host = "127.0.0.1" if self.config.webui.host == "0.0.0.0" else self.config.webui.host
+                    _s.bind((_bind_host, self.config.webui.port))
+                    _s.close()
+                except OSError:
+                    _s.close()
+                    print(
+                        f"[webui] Port {self.config.webui.port} is already in use — "
+                        f"run 'lsof -i :{self.config.webui.port}' to find what is using it."
+                    )
+                    raise RuntimeError(f"port {self.config.webui.port} already in use")
+
+                # Safety: never expose on all interfaces unless explicitly configured.
+                # Empty or unset host defaults to loopback — never to 0.0.0.0.
+                _host = self.config.webui.host or "127.0.0.1"
+                if _host in ("", "localhost"):
+                    _host = "127.0.0.1"
 
                 # uvicorn.run() in a non-main thread tries to install signal handlers
                 # and raises ValueError. Use Config+Server instead, which skips that.
                 webui_config = uvicorn.Config(
                     webui_app,
-                    host=self.config.webui.host,
+                    host=_host,
                     port=self.config.webui.port,
                     log_level="info",
                 )

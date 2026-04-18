@@ -1067,6 +1067,20 @@ _version_cache: dict = {"ts": 0.0, "data": None}
 _VERSION_CACHE_TTL = 3600  # seconds
 
 
+@app.get("/api/ollama/models")
+async def get_ollama_models():
+    """Return locally available Ollama models. Always fetched live so newly pulled models appear."""
+    try:
+        import httpx
+        resp = httpx.get("http://localhost:11434/api/tags", timeout=3.0)
+        if resp.status_code == 200:
+            models = [m["name"] for m in resp.json().get("models", [])]
+            return {"available": True, "models": models}
+    except Exception:
+        pass
+    return {"available": False, "models": []}
+
+
 @app.get("/api/version")
 async def get_version():
     import time

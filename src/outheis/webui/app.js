@@ -331,7 +331,7 @@ function renderConfigTab() {
       renderConfigProviders();
       break;
     case 'models':
-      renderConfigModels();
+      await renderConfigModels();
       break;
     case 'agents':
       renderConfigAgents();
@@ -540,10 +540,20 @@ function renderOllamaGroup(ollamaConfig) {
   `;
 }
 
-function renderConfigModels() {
+async function renderConfigModels() {
   const models = config.llm?.models || { fast: 'claude-haiku-4-5', capable: 'claude-sonnet-4-20250514', reasoning: 'claude-opus-4-5' };
-  const localAliases = Object.entries(models).filter(([, m]) => m?.provider?.startsWith('ollama')).map(([a]) => a);
   const currentFallback = config.llm?.local_fallback || '';
+
+  // Check Ollama availability and inject local-fallback if missing
+  const ollamaData = await fetchAPI('/api/ollama/models');
+  const ollamaAvailable = ollamaData?.available === true;
+  const ollamaModels = ollamaData?.models || [];
+
+  if (ollamaAvailable && !('local-fallback' in models)) {
+    models['local-fallback'] = { provider: 'ollama.local', name: '' };
+  }
+
+  const localAliases = Object.entries(models).filter(([, m]) => m?.provider?.startsWith('ollama')).map(([a]) => a);
 
   viewContent.innerHTML = `
     <div class="scroll">
@@ -568,35 +578,59 @@ function renderConfigModels() {
         </div>
         <div class="card-body" style="padding: 12px 20px;" id="models-container">
           ${Object.entries(models)
-            .map(
-              ([alias, model]) => {
-                const provider = model?.provider || 'anthropic';
-                const name = model?.name || model || '';
-                const runMode = model?.run_mode || 'on-demand';
-                return `
+            .map(([alias, model]) => {
+              const provider = model?.provider || 'anthropic';
+              const name = model?.name || model || '';
+              const isOllamaLocal = provider === 'ollama.local';
+              const modelField = isOllamaLocal
+                ? `<select class="model-name-input" data-ollama-select="true" onfocus="refreshOllamaSelect(this)">
+                     <option value="">— pick a model —</option>
+                     ${ollamaModels.map(m => `<option value="${m}" ${name === m ? 'selected' : ''}>${m}</option>`).join('')}
+                   </select>`
+                : `<input type="text" class="model-name-input" value="${name}">`;
+              return `
             <div class="model-row" data-alias="${alias}">
               <input type="text" class="model-alias-input" value="${alias}" style="width: 90px; font-weight: 500;">
               <div class="model-provider">
-                <select class="model-provider-select">
+                <select class="model-provider-select" onchange="onProviderChange(this)">
                   <option value="anthropic" ${provider === 'anthropic' ? 'selected' : ''}>anthropic</option>
                   <option value="openai" ${provider === 'openai' ? 'selected' : ''}>openai</option>
                   <option value="ollama.local" ${provider === 'ollama.local' ? 'selected' : ''}>ollama.local</option>
                   <option value="ollama.cloud" ${provider === 'ollama.cloud' ? 'selected' : ''}>ollama.cloud</option>
                 </select>
               </div>
-              <div class="model-name">
-                <input type="text" class="model-name-input" value="${name}">
-              </div>
+              <div class="model-name">${modelField}</div>
               <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
             </div>
           `;
-              }
-            )
+            })
             .join('')}
         </div>
       </div>
     </div>
   `;
+}
+
+async function refreshOllamaSelect(selectEl) {
+  const current = selectEl.value;
+  const data = await fetchAPI('/api/ollama/models');
+  const models = data?.models || [];
+  selectEl.innerHTML = `<option value="">— pick a model —</option>` +
+    models.map(m => `<option value="${m}" ${current === m ? 'selected' : ''}>${m}</option>`).join('');
+}
+
+function onProviderChange(providerSelect) {
+  const row = providerSelect.closest('.model-row');
+  const nameDiv = row.querySelector('.model-name');
+  const current = nameDiv.querySelector('input, select')?.value || '';
+  if (providerSelect.value === 'ollama.local') {
+    nameDiv.innerHTML = `<select class="model-name-input" data-ollama-select="true" onfocus="refreshOllamaSelect(this)">
+      <option value="${current}">${current || '— pick a model —'}</option>
+    </select>`;
+    refreshOllamaSelect(nameDiv.querySelector('select'));
+  } else {
+    nameDiv.innerHTML = `<input type="text" class="model-name-input" value="${current}">`;
+  }
 }
 
 function renderConfigAgents() {

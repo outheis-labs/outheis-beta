@@ -594,6 +594,7 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .model-alias { width: 90px; font-size: 13px; font-weight: 500; }
 .model-provider { width: 150px; }
 .model-name { flex: 1; }
+.model-name input, .model-name select { width: 100%; }
 
 /* Scheduler */
 .sched-row {

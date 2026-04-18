@@ -545,31 +545,39 @@ class AgendaAgent(BaseAgent):
         return path.read_text(encoding="utf-8")
     
     def _write_file(self, path: Path, content: str) -> str:
-        """Write file, rescuing any lines added externally since the review started."""
+        """Write file with exclusive lock, rescuing any lines added externally since the review started."""
+        import fcntl
         try:
-            if path.name == "Agenda.md" and hasattr(self, "_agenda_snapshot"):
-                current = path.read_text(encoding="utf-8") if path.exists() else ""
-                if current != self._agenda_snapshot:
-                    # Find lines present in current file but not in the snapshot.
-                    # These were added externally while the LLM was running.
-                    snapshot_set = set(self._agenda_snapshot.splitlines())
-                    rescued = [
-                        l for l in current.splitlines()
-                        if l.strip() and l not in snapshot_set
-                    ]
-                    if rescued:
-                        content = content.rstrip() + "\n\n" + "\n".join(rescued) + "\n"
-            path.write_text(content, encoding="utf-8")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a+", encoding="utf-8") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.seek(0)
+                current = f.read()
+                if path.name == "Agenda.md" and hasattr(self, "_agenda_snapshot"):
+                    if current != self._agenda_snapshot:
+                        snapshot_set = set(self._agenda_snapshot.splitlines())
+                        rescued = [
+                            l for l in current.splitlines()
+                            if l.strip() and l not in snapshot_set
+                        ]
+                        if rescued:
+                            content = content.rstrip() + "\n\n" + "\n".join(rescued) + "\n"
+                f.seek(0)
+                f.truncate()
+                f.write(content)
             self._write_happened = True
             return f"✓ {path.name} written"
         except Exception as e:
             return f"Error: {e}"
-    
+
     def _append_file(self, path: Path, content: str) -> str:
-        """Append to file."""
+        """Append to file with exclusive lock."""
+        import fcntl
         try:
-            existing = path.read_text(encoding="utf-8") if path.exists() else ""
-            path.write_text(existing + content, encoding="utf-8")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.write(content)
             return f"✓ Appended to {path.name}"
         except Exception as e:
             return f"Error: {e}"

@@ -200,7 +200,7 @@ case 'agenda':
       await renderFileView('codebase', 'vault/Codebase/');
       break;
     case 'files':
-      await renderVaultFiles();
+      await renderFileView('files', 'vault/');
       break;
     case 'tags':
       await renderTags();
@@ -246,9 +246,10 @@ async function renderOverview() {
           <div class="metric-label">PID</div>
           <div class="metric-value">${status.pid || '—'}</div>
         </div>
-        <div class="metric" style="grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap;">
+        <div class="metric" style="grid-column: 1 / -1; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
           ${status.running ? `<button class="btn-restart" onclick="restartDaemon()">Restart outheis</button>` : ''}
           ${status.auth_required ? `<button class="btn" onclick="logout()" style="border-color: var(--text-primary)">Logout</button>` : ''}
+          <div id="overview-update-slot" style="display:flex;align-items:center;gap:8px;"></div>
         </div>
       </div>
       <div class="card">
@@ -265,6 +266,8 @@ async function renderOverview() {
     statusEl.classList.remove('running');
     statusEl.classList.remove('fallback');
   }
+
+  checkForUpdate();
 }
 
 function renderMessage(msg) {
@@ -1275,10 +1278,11 @@ async function saveSchedule() {
 async function renderFileView(type, pathPrefix) {
   viewTitle.textContent = type.charAt(0).toUpperCase() + type.slice(1);
   viewPath.textContent = pathPrefix;
-  const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate' }[type];
+  const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate', files: 'shadow_scan' }[type];
   const extraTask = type === 'agenda' ? 'backlog_generate' : null;
+  const taskLabel = { files: 'Scan' }[type] || 'Review';
   viewActions.innerHTML = taskForView
-    ? `<button class="btn sched-run-btn" data-task="${taskForView}" onclick="runTask('${taskForView}', this)">Review</button>`
+    ? `<button class="btn sched-run-btn" data-task="${taskForView}" onclick="runTask('${taskForView}', this)">${taskLabel}</button>`
       + (extraTask ? `<button class="btn sched-run-btn" data-task="${extraTask}" onclick="runTask('${extraTask}', this)" style="margin-left:6px">Get Backlog</button>` : '')
     : '';
   if (taskForView) {
@@ -2140,6 +2144,14 @@ async function renderVaultFiles() {
   viewContent.innerHTML = `
     <div class="file-split">
       <div class="file-list" id="file-list-panel" style="overflow-y:auto;">
+        <div class="file-list-create" id="file-list-create-btn" onclick="activateVaultCreateForm()"><span class="file-list-create-icon">+</span> Create new<button class="file-list-refresh-btn" title="Refresh" onclick="event.stopPropagation();renderVaultFiles()">↻</button></div>
+        <div class="file-list-create-form" id="file-list-create-form" style="display:none">
+          <div class="create-path-breadcrumb" id="create-path-breadcrumb"></div>
+          <input class="create-input" id="create-input" type="text" placeholder="vault/path/to/file.md"
+            oninput="updateCreateBreadcrumb(this.value)"
+            onkeydown="handleVaultCreateKey(event)">
+          <div class="create-hint">↵ confirm · Esc cancel</div>
+        </div>
         <div id="vault-tree">
           ${vaults.map((v) => renderVaultTreeNode(v, 0)).join('')}
         </div>
@@ -2149,10 +2161,15 @@ async function renderVaultFiles() {
         <div class="file-header">
           <button class="file-list-toggle" id="file-list-toggle" onclick="toggleFileList()">&#8249;</button>
           <span class="file-name" id="vault-filename">—</span>
-          <div class="file-toggle">
+          <div class="file-toggle" style="display:none">
+            <input type="text" id="search-input" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchVaultFiles()">
+            <button class="btn" onclick="searchVaultFiles()">Search</button>
             <button class="btn btn-primary" onclick="saveVaultFile()">Save</button>
+            <button class="btn" onclick="renameVaultFile()">Rename</button>
+            <button class="btn" style="color:var(--danger,#e05252)" onclick="deleteVaultFile()">Delete</button>
           </div>
         </div>
+        <div id="search-results" class="search-results" style="display:none"></div>
         <div class="file-body" id="file-body">
           <div class="file-md" style="color:var(--text-tertiary);font-size:13px;padding:24px;">Select a file from the tree.</div>
         </div>
@@ -2220,14 +2237,100 @@ async function openVaultFile(path, el) {
     body.innerHTML = `<div class="file-md" style="color:var(--text-tertiary);font-size:13px;padding:24px;">Binary file · ${formatSize(data.size)}</div>`;
   } else {
     toggle.style.display = '';
-    viewActions.innerHTML = `<button class="btn" style="color:var(--danger,#e05252);" onclick="deleteVaultFile()">Delete</button>`;
+    viewActions.innerHTML = '';
     currentVaultWikilinks = data.wikilinks || {};
     currentFileContent = data.content || '';
     fileMode = 'rendered';
-    document.querySelectorAll('.file-toggle button').forEach((b) => b.classList.remove('active'));
-    toggle.querySelector('button')?.classList.add('active');
     renderFileContent(currentFileContent);
   }
+}
+
+function activateVaultCreateForm() {
+  document.getElementById('file-list-create-btn').style.display = 'none';
+  const form = document.getElementById('file-list-create-form');
+  form.style.display = 'block';
+  const input = document.getElementById('create-input');
+  input.value = '';
+  updateCreateBreadcrumb('');
+  input.focus();
+}
+
+async function handleVaultCreateKey(event) {
+  if (event.key === 'Escape') { deactivateCreateForm(); return; }
+  if (event.key !== 'Enter') return;
+  const path = event.target.value.trim();
+  if (!path) return;
+  const res = await fetchAPI('/api/vault/file', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, content: '' }),
+  });
+  if (res.error) { showToast(res.error); return; }
+  currentVaultPath = path;
+  await renderVaultFiles();
+}
+
+async function renameVaultFile() {
+  if (!currentVaultPath) return;
+  const name = currentVaultPath.split('/').pop();
+  const newName = prompt('New filename:', name);
+  if (!newName || newName === name) return;
+  const dir = currentVaultPath.slice(0, currentVaultPath.lastIndexOf('/') + 1);
+  const newPath = dir + newName;
+  const res = await fetchAPI('/api/vault/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: currentVaultPath, to: newPath }),
+  });
+  if (res.error) { showToast(res.error); return; }
+  currentVaultPath = newPath;
+  document.getElementById('vault-filename').textContent = newName;
+  showToast('Renamed');
+  await renderVaultFiles();
+}
+
+async function searchVaultFiles() {
+  const input = document.getElementById('search-input');
+  const panel = document.getElementById('search-results');
+  if (!input || !panel) return;
+  const q = input.value.trim();
+  if (!q) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  panel.innerHTML = '<div class="search-loading">Searching…</div>';
+  const data = await fetchAPI(`/api/search?type=vault&q=${encodeURIComponent(q)}`);
+  if (data.error) {
+    panel.innerHTML = `<div class="search-error">${escapeHtml(data.error)} <button class="search-close" onclick="closeSearch()">✕</button></div>`;
+    return;
+  }
+  const { results, total } = data;
+  if (!results?.length) {
+    panel.innerHTML = `<div class="search-empty">No matches <button class="search-close" onclick="closeSearch()">✕</button></div>`;
+    return;
+  }
+  const rows = results.map(({ file, matches }) => {
+    const matchRows = matches.map(({ line, content }) =>
+      `<div class="search-match" data-path="${escapeHtml(file)}" title=":${line}">
+        <span class="search-line">:${line}</span><span class="search-content">${escapeHtml(content)}</span>
+      </div>`
+    ).join('');
+    return `<div class="search-group">
+      <div class="search-file" data-path="${escapeHtml(file)}">${escapeHtml(file.split('/').pop())} <span class="badge">${matches.length}</span></div>
+      ${matchRows}
+    </div>`;
+  }).join('');
+  panel.innerHTML = `
+    <div class="search-header">
+      <span>${total} match${total !== 1 ? 'es' : ''} in ${results.length} file${results.length !== 1 ? 's' : ''}</span>
+      <button class="search-close" onclick="closeSearch()">✕</button>
+    </div>
+    <div class="search-list">${rows}</div>`;
+  panel.querySelector('.search-list').addEventListener('click', (e) => {
+    const el = e.target.closest('[data-path]');
+    if (!el) return;
+    const path = el.dataset.path;
+    const fileEl = document.querySelector(`.vault-file[data-path="${CSS.escape(path)}"]`);
+    if (fileEl) openVaultFile(path, fileEl);
+  });
 }
 
 async function saveVaultFile() {
@@ -2346,15 +2449,15 @@ async function checkForUpdate() {
 
   if (!data?.update_available) return;
 
-  const notice = document.getElementById('update-notice');
+  const notice = document.getElementById('overview-update-slot');
   if (!notice) return;
 
-  notice.style.display = 'flex';
+  const date = data.release_date ? `<br>${escapeHtml(data.release_date)}` : '';
   notice.innerHTML = `
-    <button class="btn btn-update" onclick="triggerUpdate()">Update ${data.latest}</button>
+    <button class="btn btn-update" onclick="triggerUpdate()">Update</button>
     <div class="update-info-wrap">
       <span class="update-info-icon" tabindex="0">&#9432;</span>
-      <div class="update-tooltip">${escapeHtml(data.description || 'No release notes available.')}</div>
+      <div class="update-tooltip">v${escapeHtml(data.latest)}${date}</div>
     </div>
   `;
 }

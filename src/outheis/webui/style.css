@@ -144,12 +144,14 @@ html, body {
 .sidebar-footer {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   flex-shrink: 0;
+  height: 62px;
   border-top: 0.5px solid var(--border-primary);
 }
 
 .sidebar-version {
-  padding: 10px 20px 4px;
+  padding: 6px 20px 2px;
   font-size: 11px;
   color: var(--text-tertiary);
 }
@@ -401,8 +403,6 @@ html, body {
   background: var(--accent-success);
   border-color: var(--accent-success);
   color: #fff;
-  padding: 4px 10px;
-  font-size: 11px;
 }
 .btn-update:hover { opacity: 0.85; }
 
@@ -426,8 +426,9 @@ html, body {
   display: none;
   position: absolute;
   bottom: calc(100% + 8px);
-  right: 0;
+  left: 0;
   width: 280px;
+  max-width: calc(100vw - 40px);
   background: var(--bg-primary);
   border: 0.5px solid var(--border-secondary);
   border-radius: 4px;

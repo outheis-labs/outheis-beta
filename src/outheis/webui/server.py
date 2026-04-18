@@ -500,6 +500,36 @@ async def get_codebase_file(filename: str):
     return {"error": "File not found"}
 
 
+@app.get("/api/files")
+async def get_vault_files_flat():
+    return list_files(get_vault_path())
+
+
+@app.get("/api/files/{filename:path}")
+async def get_vault_file_flat(filename: str):
+    path = get_vault_path() / filename
+    if path.exists() and path.suffix == ".md":
+        return {"name": filename, "content": path.read_text(encoding="utf-8")}
+    return {"error": "File not found"}
+
+
+@app.put("/api/files/{filename:path}")
+async def save_vault_file_flat(filename: str, data: dict):
+    path = get_vault_path() / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(data.get("content", ""), encoding="utf-8")
+    return {"status": "saved"}
+
+
+@app.delete("/api/files/{filename:path}")
+async def delete_vault_file_flat(filename: str):
+    path = get_vault_path() / filename
+    if not path.exists():
+        return {"error": "File not found"}
+    path.unlink()
+    return {"status": "deleted"}
+
+
 @app.get("/api/migration")
 async def get_migration_files():
     migration_dir = get_vault_path() / "Migration"
@@ -564,6 +594,7 @@ def _file_dirs() -> dict:
         "agenda": vault / "Agenda",
         "codebase": vault / "Codebase",
         "migration": vault / "Migration",
+        "files": vault,
     }
 
 
@@ -1090,7 +1121,7 @@ async def get_version():
     if _version_cache["data"] and now - _version_cache["ts"] < _VERSION_CACHE_TTL:
         return _version_cache["data"]
 
-    result: dict = {"current": __version__, "latest": None, "update_available": False, "description": None}
+    result: dict = {"current": __version__, "latest": None, "update_available": False, "release_date": None}
 
     try:
         import httpx
@@ -1099,13 +1130,14 @@ async def get_version():
             data = resp.json()
             latest = data["info"]["version"]
             result["latest"] = latest
-            result["update_available"] = latest != __version__
-            result["description"] = data["info"].get("summary") or None
-            # Try to get release description (truncated)
-            release_body = data["info"].get("description") or ""
-            if release_body:
-                # Take first 400 chars of description
-                result["description"] = release_body[:400].strip()
+            from packaging.version import Version
+            result["update_available"] = Version(latest) > Version(__version__)
+            # Release date from the first wheel/sdist upload time
+            artifacts = data.get("releases", {}).get(latest, [])
+            if artifacts:
+                upload_time = artifacts[0].get("upload_time", "")
+                if upload_time:
+                    result["release_date"] = upload_time[:16].replace("T", " ")  # YYYY-MM-DD HH:MM
     except Exception:
         pass
 

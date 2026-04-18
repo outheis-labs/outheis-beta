@@ -356,16 +356,17 @@ class Dispatcher:
         os.set_blocking(self._wakeup_read, False)
         os.set_blocking(self._wakeup_write, False)
 
-    def _enter_fallback_mode(self, reason: str, conversation_id: str | None = None) -> None:
+    def _enter_fallback_mode(self, reason: str, conversation_id: str | None = None, *, silent: bool = False) -> None:
         """Switch to local fallback models when cloud billing fails.
 
         - Always notifies user on all channels, regardless of fallback availability.
         - If local_fallback is configured: overrides agent models to fallback alias.
         - Writes system_status.json so WebUI can show the yellow flag.
         - Starts periodic billing probe to detect when credits are restored.
+        - silent=True: update models and state but don't broadcast (used on restart when already known).
         """
         import time as _time
-        from outheis.core.config import get_status_path
+        from outheis.core.config import get_status_path, get_human_dir
         from outheis.core.message import create_agent_message
         from outheis.core.queue import append
 
@@ -373,6 +374,12 @@ class Dispatcher:
             return  # Already in fallback — don't repeat
 
         self._fallback_mode = True
+        # Persist state so the next restart knows we were already in fallback
+        try:
+            _fallback_flag = get_human_dir() / ".fallback_active"
+            _fallback_flag.write_text(reason, encoding="utf-8")
+        except Exception:
+            pass
         print(f"[fallback] Entering fallback mode: {reason}", flush=True)
 
         fallback = self.config.llm.local_fallback
@@ -421,6 +428,10 @@ class Dispatcher:
         except Exception as e:
             print(f"[fallback] Could not write status file: {e}", flush=True)
 
+        if silent:
+            print(f"[fallback] Restored fallback mode silently (already known).", flush=True)
+            return
+
         # Broadcast notification to all transports
         notif = create_agent_message(
             from_agent="relay",
@@ -438,7 +449,7 @@ class Dispatcher:
     def _exit_fallback_mode(self) -> None:
         """Restore cloud models after billing is confirmed available again."""
         import time as _time
-        from outheis.core.config import get_status_path
+        from outheis.core.config import get_status_path, get_human_dir
         from outheis.core.message import create_agent_message
         from outheis.core.queue import append
 
@@ -446,6 +457,12 @@ class Dispatcher:
             return
 
         self._fallback_mode = False
+        # Clear persistent flag so the next restart won't silently restore fallback
+        try:
+            _fallback_flag = get_human_dir() / ".fallback_active"
+            _fallback_flag.unlink(missing_ok=True)
+        except Exception:
+            pass
         print(f"[fallback] Exiting fallback mode — cloud billing restored.", flush=True)
 
         # Restore original model aliases
@@ -545,6 +562,11 @@ class Dispatcher:
     def _check_billing_at_startup(self) -> None:
         """Probe cloud providers at startup. Enter fallback mode if billing fails."""
         from outheis.core.llm import call_llm, BillingError, resolve_model
+        from outheis.core.config import get_human_dir
+
+        # Was fallback active before this restart?
+        _fallback_flag = get_human_dir() / ".fallback_active"
+        _already_known = _fallback_flag.exists()
 
         # Collect unique cloud providers used by enabled agents
         cloud_aliases: set[str] = set()
@@ -565,7 +587,7 @@ class Dispatcher:
         if not self._cloud_api_key_available():
             if self.config.llm.local_fallback:
                 print(f"[startup] No cloud API key configured — switching to local model immediately.")
-                self._enter_fallback_mode("No cloud API key configured.", conversation_id=None)
+                self._enter_fallback_mode("No cloud API key configured.", conversation_id=None, silent=_already_known)
             else:
                 print(f"[startup] No cloud API key configured and no local fallback set — requests will fail.")
             return
@@ -582,7 +604,7 @@ class Dispatcher:
             print(f"[startup] Cloud provider OK (tested alias: {test_alias})")
         except BillingError as e:
             print(f"[startup] Billing error detected: {e}")
-            self._enter_fallback_mode(str(e), conversation_id=None)
+            self._enter_fallback_mode(str(e), conversation_id=None, silent=_already_known)
         except Exception as e:
             # Other errors (network, timeout) — don't enter fallback, log only
             print(f"[startup] Cloud probe warning (non-billing): {e}")
@@ -1211,21 +1233,12 @@ class Dispatcher:
         # Initialize LLM with config (once, at startup)
         init_llm(self.config.llm)
 
-        # Ensure Ollama server is running (if ollama.local provider is configured)
-        self._ensure_ollama()
-
-        # Warmup persistent local models
-        self._warmup_persistent_models()
-
         # Set up scheduled tasks
         self._setup_scheduled_tasks()
 
         print(f"Dispatcher started (PID {os.getpid()})")
         print(f"Watching: {self.queue_path}")
         print(f"Scheduled tasks: {[t.name for t in self.scheduler.tasks]}")
-
-        # Startup billing check — detect exhausted credits before first user message
-        self._check_billing_at_startup()
 
         # Recover any pending messages from crashed processes
         recovered = recover_pending(self.queue_path)
@@ -1324,6 +1337,13 @@ class Dispatcher:
                 print(f"Web UI started at http://{self.config.webui.host}:{self.config.webui.port}")
             except Exception as e:
                 print(f"Web UI failed to start: {e}")
+
+        # Ollama warmup and billing check run in background so WebUI is immediately reachable
+        def _background_init():
+            self._ensure_ollama()
+            self._warmup_persistent_models()
+            self._check_billing_at_startup()
+        threading.Thread(target=_background_init, daemon=True, name="init").start()
 
         # Start Signal transport if enabled (Whisper model loads inside run() thread)
         signal_transport = None
@@ -1530,19 +1550,17 @@ def start_daemon(foreground: bool = False) -> bool:
             print(f"  {GREEN}✓{RESET} Log: {log_path}")
             if config.webui.enabled:
                 import socket as _socket
-                import urllib.request as _urllib
                 configured_host = config.webui.host or "127.0.0.1"
                 port = config.webui.port
-                probe_url = f"http://127.0.0.1:{port}/api/status"
                 webui_ready = False
-                for _ in range(40):  # up to 20s
+                for _ in range(60):  # up to 30s
                     time.sleep(0.5)
                     try:
-                        with _urllib.urlopen(probe_url, timeout=0.5) as r:
-                            if r.status == 200:
-                                webui_ready = True
-                                break
-                    except Exception:
+                        _s = _socket.create_connection(("127.0.0.1", port), timeout=1)
+                        _s.close()
+                        webui_ready = True
+                        break
+                    except OSError:
                         pass
                 suffix = "" if webui_ready else " (still starting — retry in a moment)"
                 if configured_host in ("0.0.0.0", "::", ""):

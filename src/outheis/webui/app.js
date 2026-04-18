@@ -923,6 +923,18 @@ async function saveConfig() {
   await fetchAPI('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatedConfig) });
   config = updatedConfig;
   showToast('Configuration saved');
+
+  // Refresh fallback alias dropdown so newly added aliases appear immediately
+  if (currentTab === 'models') {
+    const fallbackSelect = document.getElementById('cfg-local-fallback');
+    if (fallbackSelect) {
+      const models = config.llm?.models || {};
+      const localAliases = Object.entries(models).filter(([, m]) => m?.provider?.startsWith('ollama')).map(([a]) => a);
+      const current = config.llm?.local_fallback || '';
+      fallbackSelect.innerHTML = `<option value="">— none —</option>` +
+        localAliases.map(a => `<option value="${a}" ${current === a ? 'selected' : ''}>${a}</option>`).join('');
+    }
+  }
 }
 
 // Messages

@@ -468,31 +468,31 @@ def update(
             start_daemon()
         raise typer.Exit(1)
 
-    output = result.stdout.lower()
-
-    # Detect "nothing changed" from pip output — applies regardless of PyPI check result
-    already_current = any(
-        phrase in output
-        for phrase in ("already up-to-date", "already satisfied", "already latest", "requirement already satisfied")
-    )
-    if already_current:
-        typer.echo(f"outheis {__version__} — no update available.")
-        raise typer.Exit()
-
-    # Determine the actually installed version from pip output or PyPI data.
+    # Determine the actually installed version by querying pip directly.
     # importlib.metadata reads the running process — still shows old version.
-    installed_version = latest_version  # best guess from PyPI
-    if not installed_version:
-        # Parse pip output: "Successfully installed outheis-X.Y.Z"
+    installed_version: str | None = None
+    try:
+        show = subprocess.run(
+            [sys.executable, "-m", "pip", "show", "outheis"],
+            capture_output=True, text=True,
+        )
         import re as _re
-        m = _re.search(r"successfully installed outheis-([^\s]+)", result.stdout, _re.IGNORECASE)
+        m = _re.search(r"^Version:\s*(\S+)", show.stdout, _re.MULTILINE)
         if m:
             installed_version = m.group(1)
+    except Exception:
+        pass
+
+    if installed_version and installed_version == __version__:
+        typer.echo(f"outheis {__version__} — already up to date.")
+        raise typer.Exit()
 
     if installed_version:
         typer.echo(f"Updated to outheis {installed_version}.")
+    elif latest_version:
+        typer.echo(f"Updated to outheis {latest_version}.")
     else:
-        typer.echo(f"outheis {__version__} updated.")
+        typer.echo("outheis updated.")
 
     if was_running:
         typer.echo("Restarting daemon...")

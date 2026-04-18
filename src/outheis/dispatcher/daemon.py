@@ -335,6 +335,9 @@ class Dispatcher:
     # WebUI server (stored so finally block can shut it down explicitly)
     _webui_server: any = field(default=None, repr=False)
 
+    # Cached cloud key check — None = not yet evaluated, invalidated on config write
+    _cloud_key_available: bool | None = field(default=None, repr=False)
+
     # Fallback mode — activated when cloud billing fails
     _fallback_mode: bool = False
     _original_models: dict = field(default_factory=dict)  # saved before fallback override
@@ -464,8 +467,14 @@ class Dispatcher:
             print(f"[fallback] Could not append recovery broadcast: {e}", flush=True)
 
     def _cloud_api_key_available(self) -> bool:
-        """Return True if at least one cloud provider has an API key (config or env)."""
+        """Return True if at least one cloud provider has an API key (config or env).
+
+        Result is cached until the config file changes (ConfigWatcher invalidates it).
+        """
+        if self._cloud_key_available is not None:
+            return self._cloud_key_available
         import os as _os
+        result = False
         for name, provider in self.config.llm.providers.items():
             if name.startswith("ollama"):
                 continue
@@ -475,8 +484,10 @@ class Dispatcher:
             if not key and name == "openai":
                 key = _os.environ.get("OPENAI_API_KEY")
             if key:
-                return True
-        return False
+                result = True
+                break
+        self._cloud_key_available = result
+        return result
 
     def _probe_billing(self) -> bool:
         """Make a minimal cloud API call. Return True if billing is now available."""
@@ -742,6 +753,7 @@ class Dispatcher:
                             for alias in old_ollama if alias in self.config.llm.models}
 
         self.config = new_config
+        self._cloud_key_available = None  # invalidate cache — re-evaluated on next check
 
         new_map = self._agent_model_map(new_config)
         new_ollama = self._active_ollama_aliases(new_config)

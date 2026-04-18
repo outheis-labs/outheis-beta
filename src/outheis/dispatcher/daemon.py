@@ -1272,27 +1272,36 @@ class Dispatcher:
                         time.sleep(0.5)
 
                 if not _port_free:
-                    _owner = None
+                    # Port still busy — kill whatever holds it and retry.
                     try:
                         import subprocess as _sp
+                        import signal as _signal
                         _r = _sp.run(
                             ["lsof", "-i", f":{_port}", "-sTCP:LISTEN", "-Fp"],
                             capture_output=True, text=True, timeout=3,
                         )
-                        _pids = [l[1:] for l in _r.stdout.splitlines() if l.startswith("p")]
-                        if _pids:
-                            _pr = _sp.run(
-                                ["ps", "-p", ",".join(_pids), "-o", "pid=,user=,comm="],
-                                capture_output=True, text=True, timeout=3,
-                            )
-                            _owner = _pr.stdout.strip()
+                        _pids = [int(l[1:]) for l in _r.stdout.splitlines() if l.startswith("p")]
+                        for _pid in _pids:
+                            try:
+                                os.kill(_pid, _signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
                     except Exception:
                         pass
-                    print(f"[webui] Port {_port} is already in use.")
-                    if _owner:
-                        print(f"        Used by: {_owner}")
-                    print(f"        Fix: kill the process above, or change webui.port in your config.")
-                    sys.exit(1)  # abort: parent sees no PID file → reports failure
+                    # Wait up to 2s for port to free after kill
+                    for _attempt in range(4):
+                        time.sleep(0.5)
+                        _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                        try:
+                            _s.bind((_host, _port))
+                            _s.close()
+                            _port_free = True
+                            break
+                        except OSError:
+                            _s.close()
+                    if not _port_free:
+                        print(f"[webui] Port {_port} could not be freed. Change webui.port in your config.")
+                        sys.exit(1)
 
                 # uvicorn.run() in a non-main thread tries to install signal handlers
                 # and raises ValueError. Use Config+Server instead, which skips that.

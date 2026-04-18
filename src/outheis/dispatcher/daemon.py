@@ -1224,15 +1224,22 @@ class Dispatcher:
                     _host = "127.0.0.1"
 
                 # Check if port is already in use — abort daemon startup if so.
-                # Bind to the actual configured host (incl. 0.0.0.0) to catch all conflicts.
-                _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
-                try:
-                    _s.bind((_host, self.config.webui.port))
-                    _s.close()
-                except OSError:
-                    _s.close()
-                    _port = self.config.webui.port
-                    # Identify who is using the port
+                # Retries up to 3s to handle the case where the previous daemon just
+                # released the port (TIME_WAIT or late socket close after SIGTERM).
+                _port = self.config.webui.port
+                _port_free = False
+                for _attempt in range(6):  # up to ~3s
+                    _s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+                    try:
+                        _s.bind((_host, _port))
+                        _s.close()
+                        _port_free = True
+                        break
+                    except OSError:
+                        _s.close()
+                        time.sleep(0.5)
+
+                if not _port_free:
                     _owner = None
                     try:
                         import subprocess as _sp

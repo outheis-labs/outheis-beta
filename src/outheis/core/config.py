@@ -165,6 +165,8 @@ class LLMConfig:
     models: dict[str, ModelConfig] = field(default_factory=lambda: {
         "fast": ModelConfig(provider="anthropic", name="claude-haiku-4-5"),
         "capable": ModelConfig(provider="anthropic", name="claude-sonnet-4-20250514"),
+        "reasoning": ModelConfig(provider="anthropic", name="claude-opus-4-5"),
+        "local": ModelConfig(provider="ollama.local", name=""),
     })
     local_fallback: str | None = None  # Model alias to use when cloud billing fails
 
@@ -465,6 +467,8 @@ def load_config() -> Config:
         llm.models = {
             "fast": ModelConfig(provider="anthropic", name="claude-haiku-4-5"),
             "capable": ModelConfig(provider="anthropic", name="claude-sonnet-4-20250514"),
+            "reasoning": ModelConfig(provider="anthropic", name="claude-opus-4-5"),
+            "local": ModelConfig(provider="ollama.local", name=""),
         }
 
     # Agents

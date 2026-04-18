@@ -42,6 +42,10 @@
         "provider": "anthropic",
         "name": "claude-opus-4-5",
         "run_mode": "on-demand"
+      },
+      "local": {
+        "provider": "ollama.local",
+        "name": ""
       }
     }
   },

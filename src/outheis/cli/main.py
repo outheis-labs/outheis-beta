@@ -411,14 +411,14 @@ def update(
             pass
 
     if latest_version and latest_version == __version__:
-        typer.echo(f"outheis is already up to date ({__version__}).")
+        typer.echo(f"outheis {__version__} is already the latest release.")
         raise typer.Exit()
 
     if latest_version:
         date_str = f", released {release_date}" if release_date else ""
         typer.echo(f"Updating outheis {__version__} → {latest_version}{date_str}")
     else:
-        typer.echo(f"Updating outheis (current: {__version__})...")
+        typer.echo(f"Checking for updates (current: {__version__})...")
 
     if was_running:
         typer.echo("Stopping daemon...")
@@ -448,6 +448,12 @@ def update(
             typer.echo("Restarting daemon with current version...")
             start_daemon()
         raise typer.Exit(1)
+
+    # Fallback: if PyPI check was unavailable, detect "already up to date" from pip output
+    output = result.stdout.lower()
+    if not latest_version and ("already up-to-date" in output or "already satisfied" in output or "already latest" in output):
+        typer.echo(f"outheis {__version__} is already the latest release.")
+        raise typer.Exit()
 
     typer.echo("outheis updated successfully.")
 

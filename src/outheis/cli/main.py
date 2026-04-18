@@ -393,13 +393,15 @@ def update(
 
     was_running = read_pid() is not None
 
-    # Fetch latest version info from PyPI before doing anything
+    # Fetch version info from PyPI before doing anything
     latest_version = None
     release_date = None
+    skipped_versions: list[str] = []
     if not source:
         try:
             import urllib.request as _urllib
             import json as _json
+            from packaging.version import Version as _V
             with _urllib.urlopen("https://pypi.org/pypi/outheis/json", timeout=5) as r:
                 data = _json.loads(r.read())
             latest_version = data["info"]["version"]
@@ -407,6 +409,17 @@ def update(
             if releases:
                 upload_time = releases[0].get("upload_time", "")
                 release_date = upload_time[:10] if upload_time else None
+            # Collect all versions between current (exclusive) and latest (exclusive)
+            current_v = _V(__version__)
+            latest_v = _V(latest_version)
+            all_versions = sorted(
+                (v for v in data.get("releases", {}) if not _V(v).is_prerelease),
+                key=_V,
+            )
+            skipped_versions = [
+                v for v in all_versions
+                if current_v < _V(v) < latest_v
+            ]
         except Exception:
             pass
 
@@ -417,6 +430,8 @@ def update(
     if latest_version:
         date_str = f", released {release_date}" if release_date else ""
         typer.echo(f"Updating outheis {__version__} → {latest_version}{date_str}")
+        if skipped_versions:
+            typer.echo(f"  {len(skipped_versions)} intermediate release(s) skipped: {', '.join(skipped_versions)}")
     else:
         typer.echo(f"Checking for updates (current: {__version__})...")
 
@@ -449,13 +464,24 @@ def update(
             start_daemon()
         raise typer.Exit(1)
 
-    # Fallback: if PyPI check was unavailable, detect "already up to date" from pip output
     output = result.stdout.lower()
+
+    # Fallback: if PyPI check was unavailable, detect "already up to date" from pip output
     if not latest_version and ("already up-to-date" in output or "already satisfied" in output or "already latest" in output):
         typer.echo(f"outheis {__version__} is already the latest release.")
         raise typer.Exit()
 
-    typer.echo("outheis updated successfully.")
+    # Read the actually installed version after the update
+    try:
+        import importlib.metadata as _meta
+        installed_version = _meta.version("outheis")
+    except Exception:
+        installed_version = latest_version or "unknown"
+
+    if installed_version and installed_version != __version__:
+        typer.echo(f"Updated to outheis {installed_version}.")
+    else:
+        typer.echo("outheis updated successfully.")
 
     if was_running:
         typer.echo("Restarting daemon...")

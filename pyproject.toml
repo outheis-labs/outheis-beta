@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "outheis"
-version = "0.2.14"
+version = "0.2.15"
 description = "Multi-agent personal assistant"
 readme = "README.md"
 license = "AGPL-3.0-or-later"

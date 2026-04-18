@@ -470,9 +470,13 @@ def update(
 
     output = result.stdout.lower()
 
-    # Fallback: if PyPI check was unavailable, detect "already up to date" from pip output
-    if not latest_version and ("already up-to-date" in output or "already satisfied" in output or "already latest" in output):
-        typer.echo(f"outheis {__version__} is already the latest release.")
+    # Detect "nothing changed" from pip output — applies regardless of PyPI check result
+    already_current = any(
+        phrase in output
+        for phrase in ("already up-to-date", "already satisfied", "already latest", "requirement already satisfied")
+    )
+    if already_current:
+        typer.echo(f"outheis {__version__} — no update available.")
         raise typer.Exit()
 
     # Determine the actually installed version from pip output or PyPI data.
@@ -488,7 +492,7 @@ def update(
     if installed_version:
         typer.echo(f"Updated to outheis {installed_version}.")
     else:
-        typer.echo("outheis updated successfully.")
+        typer.echo(f"outheis {__version__} updated.")
 
     if was_running:
         typer.echo("Restarting daemon...")

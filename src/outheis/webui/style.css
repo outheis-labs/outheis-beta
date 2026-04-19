@@ -403,8 +403,6 @@ html, body {
   background: var(--accent-success);
   border-color: var(--accent-success);
   color: #fff;
-  padding: 4px 10px;
-  font-size: 11px;
 }
 .btn-update:hover { opacity: 0.85; }
 

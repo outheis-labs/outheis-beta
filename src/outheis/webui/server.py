@@ -500,6 +500,36 @@ async def get_codebase_file(filename: str):
     return {"error": "File not found"}
 
 
+@app.get("/api/files")
+async def get_vault_files_flat():
+    return list_files(get_vault_path())
+
+
+@app.get("/api/files/{filename:path}")
+async def get_vault_file_flat(filename: str):
+    path = get_vault_path() / filename
+    if path.exists() and path.suffix == ".md":
+        return {"name": filename, "content": path.read_text(encoding="utf-8")}
+    return {"error": "File not found"}
+
+
+@app.put("/api/files/{filename:path}")
+async def save_vault_file_flat(filename: str, data: dict):
+    path = get_vault_path() / filename
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(data.get("content", ""), encoding="utf-8")
+    return {"status": "saved"}
+
+
+@app.delete("/api/files/{filename:path}")
+async def delete_vault_file_flat(filename: str):
+    path = get_vault_path() / filename
+    if not path.exists():
+        return {"error": "File not found"}
+    path.unlink()
+    return {"status": "deleted"}
+
+
 @app.get("/api/migration")
 async def get_migration_files():
     migration_dir = get_vault_path() / "Migration"
@@ -564,6 +594,7 @@ def _file_dirs() -> dict:
         "agenda": vault / "Agenda",
         "codebase": vault / "Codebase",
         "migration": vault / "Migration",
+        "files": vault,
     }
 
 

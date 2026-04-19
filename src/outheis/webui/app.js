@@ -200,7 +200,7 @@ case 'agenda':
       await renderFileView('codebase', 'vault/Codebase/');
       break;
     case 'files':
-      await renderVaultFiles();
+      await renderFileView('files', 'vault/');
       break;
     case 'tags':
       await renderTags();
@@ -1278,10 +1278,11 @@ async function saveSchedule() {
 async function renderFileView(type, pathPrefix) {
   viewTitle.textContent = type.charAt(0).toUpperCase() + type.slice(1);
   viewPath.textContent = pathPrefix;
-  const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate' }[type];
+  const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate', files: 'shadow_scan' }[type];
   const extraTask = type === 'agenda' ? 'backlog_generate' : null;
+  const taskLabel = { files: 'Scan' }[type] || 'Review';
   viewActions.innerHTML = taskForView
-    ? `<button class="btn sched-run-btn" data-task="${taskForView}" onclick="runTask('${taskForView}', this)">Review</button>`
+    ? `<button class="btn sched-run-btn" data-task="${taskForView}" onclick="runTask('${taskForView}', this)">${taskLabel}</button>`
       + (extraTask ? `<button class="btn sched-run-btn" data-task="${extraTask}" onclick="runTask('${extraTask}', this)" style="margin-left:6px">Get Backlog</button>` : '')
     : '';
   if (taskForView) {
@@ -2435,6 +2436,8 @@ document.getElementById('agenda-count').textContent = String(agenda.length || 0)
 
   await renderTokenChart();
   setInterval(renderTokenChart, 60000);
+
+  checkForUpdate();
 }
 
 async function checkForUpdate() {

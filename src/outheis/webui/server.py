@@ -1136,7 +1136,7 @@ async def get_version():
             if artifacts:
                 upload_time = artifacts[0].get("upload_time", "")
                 if upload_time:
-                    result["release_date"] = upload_time[:10]  # YYYY-MM-DD
+                    result["release_date"] = upload_time[:16].replace("T", " ")  # YYYY-MM-DD HH:MM
     except Exception:
         pass
 

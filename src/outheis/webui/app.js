@@ -2452,12 +2452,12 @@ async function checkForUpdate() {
   const notice = document.getElementById('overview-update-slot');
   if (!notice) return;
 
-  const desc = data.description ? escapeHtml(data.description) : 'No release notes available.';
+  const date = data.release_date ? `<br>${escapeHtml(data.release_date)}` : '';
   notice.innerHTML = `
     <button class="btn btn-update" onclick="triggerUpdate()">Update</button>
     <div class="update-info-wrap">
       <span class="update-info-icon" tabindex="0">&#9432;</span>
-      <div class="update-tooltip"><strong>v${escapeHtml(data.latest)}</strong><br>${desc}</div>
+      <div class="update-tooltip">v${escapeHtml(data.latest)}${date}</div>
     </div>
   `;
 }

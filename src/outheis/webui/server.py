@@ -1121,7 +1121,7 @@ async def get_version():
     if _version_cache["data"] and now - _version_cache["ts"] < _VERSION_CACHE_TTL:
         return _version_cache["data"]
 
-    result: dict = {"current": __version__, "latest": None, "update_available": False, "description": None}
+    result: dict = {"current": __version__, "latest": None, "update_available": False, "release_date": None}
 
     try:
         import httpx
@@ -1131,12 +1131,12 @@ async def get_version():
             latest = data["info"]["version"]
             result["latest"] = latest
             result["update_available"] = latest != __version__
-            result["description"] = data["info"].get("summary") or None
-            # Try to get release description (truncated)
-            release_body = data["info"].get("description") or ""
-            if release_body:
-                # Take first 400 chars of description
-                result["description"] = release_body[:400].strip()
+            # Release date from the first wheel/sdist upload time
+            artifacts = data.get("releases", {}).get(latest, [])
+            if artifacts:
+                upload_time = artifacts[0].get("upload_time", "")
+                if upload_time:
+                    result["release_date"] = upload_time[:10]  # YYYY-MM-DD
     except Exception:
         pass
 

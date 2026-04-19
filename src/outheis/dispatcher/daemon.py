@@ -1528,19 +1528,17 @@ def start_daemon(foreground: bool = False) -> bool:
             print(f"  {GREEN}✓{RESET} Log: {log_path}")
             if config.webui.enabled:
                 import socket as _socket
-                import urllib.request as _urllib
                 configured_host = config.webui.host or "127.0.0.1"
                 port = config.webui.port
-                probe_url = f"http://127.0.0.1:{port}/api/status"
                 webui_ready = False
-                for _ in range(40):  # up to 20s
+                for _ in range(60):  # up to 30s
                     time.sleep(0.5)
                     try:
-                        with _urllib.urlopen(probe_url, timeout=0.5) as r:
-                            if r.status == 200:
-                                webui_ready = True
-                                break
-                    except Exception:
+                        _s = _socket.create_connection(("127.0.0.1", port), timeout=1)
+                        _s.close()
+                        webui_ready = True
+                        break
+                    except OSError:
                         pass
                 suffix = "" if webui_ready else " (still starting — retry in a moment)"
                 if configured_host in ("0.0.0.0", "::", ""):

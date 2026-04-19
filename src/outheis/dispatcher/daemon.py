@@ -1211,21 +1211,12 @@ class Dispatcher:
         # Initialize LLM with config (once, at startup)
         init_llm(self.config.llm)
 
-        # Ensure Ollama server is running (if ollama.local provider is configured)
-        self._ensure_ollama()
-
-        # Warmup persistent local models
-        self._warmup_persistent_models()
-
         # Set up scheduled tasks
         self._setup_scheduled_tasks()
 
         print(f"Dispatcher started (PID {os.getpid()})")
         print(f"Watching: {self.queue_path}")
         print(f"Scheduled tasks: {[t.name for t in self.scheduler.tasks]}")
-
-        # Startup billing check — detect exhausted credits before first user message
-        self._check_billing_at_startup()
 
         # Recover any pending messages from crashed processes
         recovered = recover_pending(self.queue_path)
@@ -1324,6 +1315,13 @@ class Dispatcher:
                 print(f"Web UI started at http://{self.config.webui.host}:{self.config.webui.port}")
             except Exception as e:
                 print(f"Web UI failed to start: {e}")
+
+        # Ollama warmup and billing check run in background so WebUI is immediately reachable
+        def _background_init():
+            self._ensure_ollama()
+            self._warmup_persistent_models()
+            self._check_billing_at_startup()
+        threading.Thread(target=_background_init, daemon=True, name="init").start()
 
         # Start Signal transport if enabled (Whisper model loads inside run() thread)
         signal_transport = None

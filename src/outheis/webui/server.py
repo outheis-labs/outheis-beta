@@ -1130,7 +1130,8 @@ async def get_version():
             data = resp.json()
             latest = data["info"]["version"]
             result["latest"] = latest
-            result["update_available"] = latest != __version__
+            from packaging.version import Version
+            result["update_available"] = Version(latest) > Version(__version__)
             # Release date from the first wheel/sdist upload time
             artifacts = data.get("releases", {}).get(latest, [])
             if artifacts:

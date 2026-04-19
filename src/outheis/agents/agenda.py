@@ -274,6 +274,8 @@ class AgendaAgent(BaseAgent):
             "",
             "## Placement rules for new items (add/write/note requests)",
             "When adding a new item, determine placement strictly as follows:",
+            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 🧘 Persönlich, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",
+            "  If a request mentions a non-existent section (e.g. 'Aufgaben', 'Recurring'), ignore the section name and use the correct placement rule below.",
             "- **NEVER place in the Personal section (🧘)** unless the user explicitly names it.",
             "  Personal is for recurring habits only — not for tasks or reminders.",
             "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
@@ -283,6 +285,12 @@ class AgendaAgent(BaseAgent):
             "  The item will appear in Agenda.md automatically when due.",
             "- **Weekday named without year context** → resolve to the next occurrence from today",
             "  and apply the rule above.",
+            "- **Recurring items** (e.g. 'every Wednesday', 'weekly', 'jeden Mittwoch'):",
+            "  → add a `#recurring-[day]` entry to Shadow.md only. Do NOT add to Agenda.md.",
+            "  → The item will appear in Today automatically on the relevant weekday.",
+            "  → day codes: mo=Montag, di=Dienstag, mi=Mittwoch, do=Donnerstag, fr=Freitag, sa=Samstag, so=Sonntag.",
+            "  → Example: 'Leichtathletik jeden Mittwoch 16:00' → Shadow.md entry: `#recurring-mi` / `Leichtathletik 16:00`",
+            "  → Do NOT add a checkbox — recurring items in Agenda.md are plain lines.",
             "",
             "## Memory proposals from annotations",
             "After processing a `>` annotation, call propose_memory if the annotation reveals",
@@ -436,7 +444,7 @@ class AgendaAgent(BaseAgent):
                 "description": (
                     "Propose a fact or rule for long-term memory, derived from a user annotation. "
                     "Call after processing a correction, clarification, or behavioral instruction. "
-                    "The proposal lands in Migration/Exchange.md for the user to accept or reject."
+                    "The proposal lands in Agenda/Exchange.md for the user to accept or reject."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -545,23 +553,12 @@ class AgendaAgent(BaseAgent):
         return path.read_text(encoding="utf-8")
     
     def _write_file(self, path: Path, content: str) -> str:
-        """Write file with exclusive lock, rescuing any lines added externally since the review started."""
+        """Write file with exclusive lock."""
         import fcntl
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "a+", encoding="utf-8") as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.seek(0)
-                current = f.read()
-                if path.name == "Agenda.md" and hasattr(self, "_agenda_snapshot"):
-                    if current != self._agenda_snapshot:
-                        snapshot_set = set(self._agenda_snapshot.splitlines())
-                        rescued = [
-                            l for l in current.splitlines()
-                            if l.strip() and l not in snapshot_set
-                        ]
-                        if rescued:
-                            content = content.rstrip() + "\n\n" + "\n".join(rescued) + "\n"
                 f.seek(0)
                 f.truncate()
                 f.write(content)
@@ -591,12 +588,12 @@ class AgendaAgent(BaseAgent):
         if not content.strip():
             return "Error: content is required."
         try:
-            from outheis.core.config import load_config as _load_config
+            from outheis.core.config import load_config as _load_config, get_agenda_dir as _get_agenda_dir
             config = _load_config()
-            vault = config.human.primary_vault()
-            migration_dir = vault / "Migration"
-            migration_dir.mkdir(parents=True, exist_ok=True)
-            exchange_path = migration_dir / "Exchange.md"
+            agenda_dir = _get_agenda_dir()
+            if not agenda_dir:
+                return "Error: no agenda directory found."
+            exchange_path = agenda_dir / "Exchange.md"
 
             ts = datetime.now().strftime("%Y-%m-%d %H:%M")
             entry = (
@@ -612,7 +609,7 @@ class AgendaAgent(BaseAgent):
                 exchange_path.write_text(existing + "\n\n" + block, encoding="utf-8")
             else:
                 header = (
-                    "# Migration Exchange\n\n"
+                    "# Exchange\n\n"
                     "*Proposals for adoption into the memory system.*\n\n"
                 )
                 exchange_path.write_text(header + block, encoding="utf-8")
@@ -1190,35 +1187,34 @@ class AgendaAgent(BaseAgent):
             "   - Remove the resolved item from Exchange.md (rewrite via write_file for exchange, keeping unresolved items).\n"
             "   A `>` reply like 'Show all open Shadow items for qualification' means:\n"
             "   include ALL open Shadow.md items (without ✓) in Today regardless of date — this is a one-time qualification pass.\n"
-            "1. 📅 Today — plain lines, no dashes, no checkboxes.\n"
-            "   CRITICAL — carry-over rule: Every item currently in Today that has #action-required OR\n"
-            "   an overdue date (date < today) MUST appear in the new Today, no exceptions.\n"
-            "   These items are unfinished work — dropping them silently is data loss.\n"
-            "   TODAY IS NEVER CAPPED OR CURATED: do not select a 'top N' subset, do not prioritize\n"
-            "   and drop the rest. ALL qualifying items must be shown. If Today has 20 items, show 20.\n"
-            "   Only remove a Today item if it is explicitly marked done (✓ or #done-*) or has a `>` deferral annotation.\n"
-            "   For items without a date or tag: it is YOUR responsibility to assign date, tags, and\n"
-            "   correct placement based on the text. Read the item semantically:\n"
-            "     - explicit day/date reference → assign the corresponding #date, place accordingly.\n"
-            "     - item already in Today with NO date reference → assign #action-required. Do NOT assign a future date. Do NOT move to This Week.\n"
-            "     - far future reference → assign #date, move to Shadow.\n"
-            "   Never leave an item untagged — tagging is cato's job, not the user's.\n"
-            "   KEEP in Today if: overdue, due today, or #action-required.\n"
-            "   MOVE to This Week if: date within ~7 days AND the item was NOT already in Today without a date.\n"
-            "   MOVE to Shadow.md if: far future — item is preserved, reappears when due.\n"
-            "   Note: moving between sections or to Shadow is structural maintenance, NOT deleting.\n"
-            "   The 'never remove' rule applies only to items going permanently lost — not to correct placement.\n"
-            "   Then add items from Shadow.md not already shown:\n"
-            "   Priority 1 — must include: overdue date (date < today), due today, #action-required WITHOUT a future date.\n"
-            "   SECTION RULE for #action-required:\n"
-            "     - #action-required with NO date, or overdue date → belongs in Today (📅), mandatory.\n"
-            "     - #action-required with a FUTURE date → treat like any future item. Do NOT force into Today.\n"
-            "       Include in Today only if Today is underfull (fewer than ~5 items) after Priority 1 items are placed.\n"
-            "   Priority 2 — fill remaining slots with: items due within ~10 days, items that unblock\n"
-            "   something else, or items that have been open for a long time without progress.\n"
-            "   Do not add items further out unless they meet priority 1 or 2.\n"
-            "   Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
-            "   Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
+            "1. 📅 Today — plain lines, no dashes, no checkboxes. Three phases in order:\n"
+            "\n"
+            "   Phase A — TAG every untagged item in the current Today (do this before any carry-over decision):\n"
+            "     - has explicit day/date reference → assign #date-YYYY-MM-DD.\n"
+            "     - has far-future reference → assign #date-YYYY-MM-DD, mark for Shadow move.\n"
+            "     - has NO date reference at all → assign #action-required.\n"
+            "     Never leave an item untagged — tagging is cato's job, not the user's.\n"
+            "\n"
+            "   Phase B — CARRY OVER from current Today (after Phase A, all items are tagged):\n"
+            "     KEEP (mandatory, no exceptions — dropping is data loss):\n"
+            "       - #action-required with no date or with overdue date\n"
+            "       - any item whose #date is today or in the past\n"
+            "     MOVE to This Week: #date within ~7 days (and item was NOT already in Today without a date).\n"
+            "     MOVE to Shadow.md: far future #date — item is preserved, reappears when due.\n"
+            "     REMOVE only: explicitly marked done (✓ or #done-*) or has a `>` deferral annotation.\n"
+            "     TODAY IS NEVER CAPPED: do not select a top-N subset. If Today has 20 items, show 20.\n"
+            "\n"
+            "   Phase C — FILL from Shadow.md (items not already in Today):\n"
+            "     Mandatory (always add, regardless of count):\n"
+            "       - #action-required with NO date → Today, mandatory.\n"
+            "       - #action-required with overdue date → Today, mandatory.\n"
+            "       - #date = today or past → Today, mandatory.\n"
+            "     Fill up to ~5 items total (mandatory items do not count against the cap):\n"
+            "       - #action-required with a future date → include if Today has fewer than 5 items.\n"
+            "       - #date within ~10 days → include if Today has fewer than 5 items.\n"
+            "     Do not add items further out unless they meet the above criteria.\n"
+            "     Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
+            "     Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
             "2. 🗓️ This Week — plain lines.\n"
             "   Carry over existing This Week items (unannotated) EXCEPT: any item with #action-required\n"
             "   must be moved to Today (📅) instead — never left in This Week.\n"

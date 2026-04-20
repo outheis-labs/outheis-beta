@@ -2,7 +2,7 @@
 
 When cato processes a user annotation (> line) and detects a correction,
 clarification, or behavioral instruction, it calls propose_memory. This writes
-a proposal to Migration/Exchange.md in the Phase-A format so rumi can adopt it
+a proposal to Agenda/Exchange.md in the Phase-A format so rumi can adopt it
 on the next memory_migrate run.
 """
 
@@ -46,10 +46,10 @@ class TestProposeMemoryFormat:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 result = agent._tool_propose_memory("Quarterly report sent to accountant.", "user")
 
-            exchange = vault / "Migration" / "Exchange.md"
+            exchange = vault / "Agenda" / "Exchange.md"
             assert exchange.exists()
             assert "Quarterly report sent" in exchange.read_text()
             assert "✓" in result
@@ -58,10 +58,10 @@ class TestProposeMemoryFormat:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 agent._tool_propose_memory("User prefers appointments on Fridays.", "user")
 
-            text = (vault / "Migration" / "Exchange.md").read_text()
+            text = (vault / "Agenda" / "Exchange.md").read_text()
             assert "---" in text
             assert "- [ ] Accept" in text
             assert "- [ ] Reject" in text
@@ -71,22 +71,22 @@ class TestProposeMemoryFormat:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 agent._tool_propose_memory("Work items always scheduled first.", "rule:agenda")
 
-            text = (vault / "Migration" / "Exchange.md").read_text()
+            text = (vault / "Agenda" / "Exchange.md").read_text()
             assert "[rule:agenda]" in text
 
     def test_appends_to_existing_exchange(self):
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            migration = vault / "Migration"
+            migration = vault / "Agenda"
             migration.mkdir()
             (migration / "Exchange.md").write_text(
                 "# Migration Exchange\n\nexisting content\n", encoding="utf-8"
             )
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 agent._tool_propose_memory("New fact.", "user")
 
             text = (migration / "Exchange.md").read_text()
@@ -97,7 +97,7 @@ class TestProposeMemoryFormat:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 result = agent._tool_propose_memory("", "user")
         assert "error" in result.lower()
 
@@ -105,10 +105,10 @@ class TestProposeMemoryFormat:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 agent._tool_propose_memory("Fact.", "user")
 
-            text = (vault / "Migration" / "Exchange.md").read_text()
+            text = (vault / "Agenda" / "Exchange.md").read_text()
             assert "from annotation:" in text
 
 
@@ -122,21 +122,21 @@ class TestProposeMemoryViaExecuteTool:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 result = agent._execute_tool("propose_memory", {
                     "content": "Meetings preferred on Tuesdays.",
                     "type": "rule:agenda",
                 })
 
             assert "✓" in result
-            text = (vault / "Migration" / "Exchange.md").read_text()
+            text = (vault / "Agenda" / "Exchange.md").read_text()
             assert "Meetings preferred" in text
 
     def test_missing_content_returns_error(self):
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 result = agent._execute_tool("propose_memory", {"type": "user"})
         assert "error" in result.lower()
 
@@ -144,10 +144,10 @@ class TestProposeMemoryViaExecuteTool:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
-            with patch("outheis.core.config.load_config", return_value=fake_config(vault)):
+            with patch("outheis.agents.agenda.load_config", return_value=fake_config(vault)):
                 agent._execute_tool("propose_memory", {"content": "Fact A.", "type": "user"})
                 agent._execute_tool("propose_memory", {"content": "Fact B.", "type": "user"})
 
-            text = (vault / "Migration" / "Exchange.md").read_text()
+            text = (vault / "Agenda" / "Exchange.md").read_text()
             assert "Fact A." in text
             assert "Fact B." in text

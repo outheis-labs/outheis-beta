@@ -130,6 +130,7 @@ class TestProbeBilling:
     def test_returns_true_on_success(self, monkeypatch):
         d = make_dispatcher(local_fallback="local-llama")
         d._original_models = {"relay": "fast"}
+        d._cloud_key_available = True  # pretend API key is present
 
         import outheis.core.llm as llm_mod
         monkeypatch.setattr(llm_mod, "call_llm", lambda **kw: "pong")

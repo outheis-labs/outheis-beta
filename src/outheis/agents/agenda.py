@@ -274,7 +274,7 @@ class AgendaAgent(BaseAgent):
             "",
             "## Placement rules for new items (add/write/note requests)",
             "When adding a new item, determine placement strictly as follows:",
-            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 🧘 Persönlich, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",
+            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 🧘 Persönlich, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",  # noqa: i18n
             "  If a request mentions a non-existent section (e.g. 'Aufgaben', 'Recurring'), ignore the section name and use the correct placement rule below.",
             "- **NEVER place in the Personal section (🧘)** unless the user explicitly names it.",
             "  Personal is for recurring habits only — not for tasks or reminders.",
@@ -593,9 +593,7 @@ class AgendaAgent(BaseAgent):
         if not content.strip():
             return "Error: content is required."
         try:
-            from outheis.core.config import load_config as _load_config, get_agenda_dir as _get_agenda_dir
-            config = _load_config()
-            agenda_dir = _get_agenda_dir()
+            agenda_dir = get_agenda_dir()
             if not agenda_dir:
                 return "Error: no agenda directory found."
             exchange_path = agenda_dir / "Exchange.md"

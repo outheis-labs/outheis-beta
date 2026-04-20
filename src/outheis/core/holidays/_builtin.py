@@ -2,8 +2,8 @@
 Built-in holiday data for supported regions.
 
 Structure per region:
-  feiertage(year) -> dict[date, str]   — public holidays for that year
-  schulferien     -> list of (start, end, name) per year
+  holidays(year) -> dict[date, str]   — public holidays for that year
+  school_holidays -> list of (start, end, name) per year
 
 To add a new region, add an entry to REGIONS below.
 """
@@ -40,7 +40,7 @@ def _easter(year: int) -> date:
 # Source: https://www.bmi.bund.de/DE/themen/verfassung/feiertage/feiertage-node.html
 # =============================================================================
 
-def _feiertage_DE(year: int) -> dict[date, str]:
+def _holidays_DE(year: int) -> dict[date, str]:
     e = _easter(year)
     return {
         date(year, 1, 1):   "Neujahr",
@@ -60,7 +60,7 @@ def _feiertage_DE(year: int) -> dict[date, str]:
 # Source: https://www.stmi.bayern.de/staat-und-verfassung/feiertage/
 # =============================================================================
 
-def _feiertage_DE_BY(year: int) -> dict[date, str]:
+def _holidays_DE_BY(year: int) -> dict[date, str]:
     e = _easter(year)
     extra: dict[date, str] = {
         date(year, 1, 6):   "Heilige Drei Könige",  # noqa: i18n
@@ -70,13 +70,13 @@ def _feiertage_DE_BY(year: int) -> dict[date, str]:
         date(year, 8, 15):  "Mariä Himmelfahrt",  # noqa: i18n
         date(year, 11, 1):  "Allerheiligen",
     }
-    return {**_feiertage_DE(year), **extra}
+    return {**_holidays_DE(year), **extra}
 
 
 # Schulferien Bayern
 # Source: https://www.schulferien.org/deutschland/ferien/bayern/
 # Update annually.
-_SCHULFERIEN_DE_BY: dict[int, list[tuple[date, date, str]]] = {
+_SCHOOL_HOLIDAYS_DE_BY: dict[int, list[tuple[date, date, str]]] = {
     2026: [
         (date(2026, 2, 16), date(2026, 2, 20), "Frühjahrsferien"),  # noqa: i18n
         (date(2026, 3, 30), date(2026, 4, 10), "Osterferien"),
@@ -103,11 +103,11 @@ _SCHULFERIEN_DE_BY: dict[int, list[tuple[date, date, str]]] = {
 
 REGIONS: dict[tuple[str, str], dict] = {
     ("DE", ""): {
-        "feiertage": _feiertage_DE,
-        "schulferien": {},          # school holidays are state-specific
+        "holidays": _holidays_DE,
+        "school_holidays": {},          # school holidays are state-specific
     },
     ("DE", "BY"): {
-        "feiertage": _feiertage_DE_BY,
-        "schulferien": _SCHULFERIEN_DE_BY,
+        "holidays": _holidays_DE_BY,
+        "school_holidays": _SCHOOL_HOLIDAYS_DE_BY,
     },
 }

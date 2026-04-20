@@ -740,7 +740,7 @@ class AgendaAgent(BaseAgent):
         lbl = AGENDA_LABELS.get(lang, AGENDA_LABELS["en"])
 
         weekday = wdays[today_d.weekday()]
-        from outheis.core.holidays import get_day_label, get_schulferien
+        from outheis.core.holidays import get_day_label, get_school_holiday
         _hcfg = load_config().human.holidays
         _country, _state = _hcfg.country, _hcfg.state
         day_label = get_day_label(today_d, weekday, _country, _state)
@@ -752,9 +752,9 @@ class AgendaAgent(BaseAgent):
 
         # Structural scaffold only — content is filled by the LLM (cato).
         # Code's job: correct date, week number, section headers, personal carryover.
-        # Schulferien info line (only shown when state is configured)
-        schulferien = get_schulferien(today_d, _country, _state)
-        schulferien_note = f"*(Schulferien: {schulferien})*" if schulferien else ""
+        # School holiday info line (only shown when state is configured)
+        school_holiday = get_school_holiday(today_d, _country, _state)
+        school_holiday_note = f"*(School holiday: {school_holiday})*" if school_holiday else ""
 
         lines = [
             f"## ⛅ {day_label}, {date_str}",
@@ -785,7 +785,7 @@ class AgendaAgent(BaseAgent):
         else:
             lines.append("- [ ] ")
 
-        today_extra = [schulferien_note] if schulferien_note else []
+        today_extra = [school_holiday_note] if school_holiday_note else []
 
         lines += [
             "", "---", "",

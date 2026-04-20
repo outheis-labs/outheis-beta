@@ -170,6 +170,7 @@ class TestScanFileSelection:
                  patch("outheis.agents.data.load_config") as mock_cfg, \
                  patch("outheis.agents.data.get_human_dir", return_value=Path(d)):
                 mock_cfg.return_value.human.primary_vault.return_value = vault
+                mock_cfg.return_value.agents.get.return_value = None  # no retention
                 count = agent.scan_chronological_entries()
 
         assert count == 0
@@ -197,6 +198,7 @@ class TestScanFileSelection:
                  patch("outheis.agents.data.load_config") as mock_cfg, \
                  patch("outheis.agents.data.get_human_dir", return_value=Path(d)):
                 mock_cfg.return_value.human.primary_vault.return_value = vault
+                mock_cfg.return_value.agents.get.return_value = None  # no retention
                 agent.scan_chronological_entries()
 
         assert "new.md" in processed

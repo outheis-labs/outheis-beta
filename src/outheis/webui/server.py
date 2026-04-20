@@ -88,6 +88,7 @@ def _is_authenticated(request: Request) -> bool:
     return _verify_session_cookie(cookie)
 
 
+_BRAND = "\u03bf\u1f50\u03b8\u03b5\u03af\u03c2"  # noqa: i18n — Greek brand name, intentional
 _LOGIN_PAGE = """<!doctype html>
 <html lang="en">
 <head>
@@ -194,7 +195,7 @@ _LOGIN_PAGE = """<!doctype html>
 </head>
 <body>
 <div class="wrap">
-  <div class="logo" id="logo">οὐθείς</div>
+  <div class="logo" id="logo">__OUTHEIS_BRAND__</div>
   <label for="pw">Password</label>
   <input id="pw" type="password" autofocus>
   <button onclick="login()">Sign in</button>
@@ -261,7 +262,7 @@ async def auth_middleware(request: Request, call_next):
         return await call_next(request)
     # Unauthenticated browser request → login page
     if path == "/" or not path.startswith("/api"):
-        return HTMLResponse(_LOGIN_PAGE)
+        return HTMLResponse(_LOGIN_PAGE.replace("__OUTHEIS_BRAND__", _BRAND))
     # Unauthenticated API/WS request → 401
     return JSONResponse({"error": "Unauthorized"}, status_code=401)
 

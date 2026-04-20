@@ -442,6 +442,39 @@ function renderConfigGeneral() {
           </div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Holidays</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <label class="form-label">Country</label>
+            <div class="form-value">
+              <input type="text" id="cfg-holidays-country" value="${config.human?.holidays?.country || ''}" placeholder="e.g. DE — leave empty to disable">
+              <span class="form-hint">ISO 3166-1 alpha-2 country code. Leave empty to show no holidays.</span>
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">State / Region</label>
+            <div class="form-value">
+              <input type="text" id="cfg-holidays-state" value="${config.human?.holidays?.state || ''}" placeholder="e.g. BY — optional">
+              <span class="form-hint">State or region code for local holidays and school holidays. Leave empty for country-wide only.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">Agenda</span></div>
+        <div class="card-body">
+          <div class="form-row">
+            <label class="form-label">Done retention (days)</label>
+            <div class="form-value">
+              <input type="number" id="cfg-agenda-retention" value="${config.agents?.agenda?.retention ?? ''}" min="1" placeholder="Leave empty to keep forever">
+              <span class="form-hint">How many days completed (#done-*) items remain in Shadow.md before being pruned. Empty = keep forever.</span>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   `;
 }
@@ -823,6 +856,10 @@ async function saveConfig() {
   // General tab
   const nameEl = document.getElementById('cfg-name');
   if (nameEl) {
+    const holidaysCountry = document.getElementById('cfg-holidays-country')?.value?.trim() || '';
+    const holidaysState = document.getElementById('cfg-holidays-state')?.value?.trim() || '';
+    const retentionEl = document.getElementById('cfg-agenda-retention');
+    const retentionVal = retentionEl?.value ? parseInt(retentionEl.value, 10) : null;
     updatedConfig.human = {
       ...updatedConfig.human,
       name: nameEl.value,
@@ -831,7 +868,12 @@ async function saveConfig() {
       language: document.getElementById('cfg-language')?.value,
       timezone: document.getElementById('cfg-timezone')?.value,
       vault: Array.from(document.querySelectorAll('.vault-input')).map((el) => el.value).filter((v) => v),
+      holidays: { country: holidaysCountry, state: holidaysState },
     };
+    if (retentionEl) {
+      updatedConfig.agents = updatedConfig.agents || {};
+      updatedConfig.agents.agenda = { ...updatedConfig.agents.agenda, retention: retentionVal };
+    }
     const webuiPort = document.getElementById('cfg-webui-port');
     if (webuiPort) {
       updatedConfig.webui = {

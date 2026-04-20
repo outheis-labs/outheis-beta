@@ -400,6 +400,25 @@ async function renderConfigGeneral() {
               </select>
             </div>
           </div>
+          <div class="form-row">
+            <label class="form-label">Country</label>
+            <div class="form-value">
+              <select id="cfg-holidays-country" onchange="updateHolidaysStateDropdown()">
+                <option value="">— none —</option>
+                ${(regionsData || []).map(r =>
+                  `<option value="${r.country}" ${(config.human?.holidays?.country || '') === r.country ? 'selected' : ''}>${r.country}</option>`
+                ).join('')}
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <label class="form-label">State / Region</label>
+            <div class="form-value">
+              <select id="cfg-holidays-state">
+                ${_buildStateOptions(regionsData, config.human?.holidays?.country || '', config.human?.holidays?.state || '')}
+              </select>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -455,33 +474,6 @@ async function renderConfigGeneral() {
             <div class="form-value">
               <input type="number" id="cfg-webui-session-hours" value="${config.webui?.session_hours ?? 4}" min="1" max="720">
               <span class="form-hint">How long a login session stays valid before re-authentication is required.</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-header"><span class="card-title">Holidays</span></div>
-        <div class="card-body" id="holidays-card-body">
-          <div class="form-row">
-            <label class="form-label">Country</label>
-            <div class="form-value">
-              <select id="cfg-holidays-country" onchange="updateHolidaysStateDropdown()">
-                <option value="">— none —</option>
-                ${(regionsData || []).map(r =>
-                  `<option value="${r.country}" ${(config.human?.holidays?.country || '') === r.country ? 'selected' : ''}>${r.country}</option>`
-                ).join('')}
-              </select>
-              <span class="form-hint">Leave empty to show no holidays.</span>
-            </div>
-          </div>
-          <div class="form-row">
-            <label class="form-label">State / Region</label>
-            <div class="form-value">
-              <select id="cfg-holidays-state">
-                ${_buildStateOptions(regionsData, config.human?.holidays?.country || '', config.human?.holidays?.state || '')}
-              </select>
-              <span class="form-hint">State or region for local holidays and school holidays. Leave empty for country-wide only.</span>
             </div>
           </div>
         </div>

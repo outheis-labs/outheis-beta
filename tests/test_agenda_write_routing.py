@@ -8,7 +8,7 @@ Regression test for: "schreib" not in AGENDA_MODIFY_STEMS → wrongly returned
 verbatim agenda instead of writing.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from tests.fixtures.agenda_write_inputs import (
     DE_HINZUFUEG,
@@ -18,7 +18,6 @@ from tests.fixtures.agenda_write_inputs import (
     DE_TRAG_EIN,
     DE_ZEIG_AGENDA,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

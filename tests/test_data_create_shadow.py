@@ -6,10 +6,7 @@ file-selection logic without hitting the filesystem or API.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -148,7 +145,7 @@ class TestScanFileSelection:
         with tempfile.TemporaryDirectory() as d:
             vault = Path(d)
             (vault / "Agenda").mkdir()
-            shadow = vault / "Agenda" / "Shadow.md"
+            vault / "Agenda" / "Shadow.md"
             cache_path = Path(d) / "cache" / "shadow" / "file_state.json"
             cache_path.parent.mkdir(parents=True)
 
@@ -156,7 +153,8 @@ class TestScanFileSelection:
             note.write_text("content")
 
             # Simulate: note.md already cached with same hash
-            import json, hashlib
+            import hashlib
+            import json
             note_hash = hashlib.md5(note.read_bytes()).hexdigest()
             cache_path.write_text(json.dumps({"note.md": note_hash}))
 

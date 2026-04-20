@@ -13,7 +13,6 @@ from outheis.agents.base import BaseAgent
 from outheis.core.message import Message
 from outheis.core.tools import tool_error
 
-
 # =============================================================================
 # SIGNAL FORMATTING
 # =============================================================================
@@ -175,8 +174,8 @@ class RelayAgent(BaseAgent):
         # Fast pre-routing: agenda read requests bypass relay LLM entirely.
         # Requires BOTH an agenda keyword AND explicit read/display intent (or ≤4 words).
         # Mere mention of "agenda" in a discussion must NOT trigger this path.
-        from outheis.core.i18n import AGENDA_WRITE_STEMS, AGENDA_READ_INTENT_STEMS
         from outheis.core.config import load_config as _lc
+        from outheis.core.i18n import AGENDA_READ_INTENT_STEMS, AGENDA_WRITE_STEMS
         try:
             _lang = _lc().human.language[:2].lower()
         except Exception:
@@ -218,7 +217,7 @@ class RelayAgent(BaseAgent):
         response_source = "relay"
         if _at_prefix:
             if verbose:
-                print(f"[@ prefix → agenda]", file=sys.stderr)
+                print("[@ prefix → agenda]", file=sys.stderr)
             response_text = self._handle_with_agenda_agent(f"add to agenda: {_at_text}", msg)
             response_source = "cato"
         elif "@zeno" in text_lower:
@@ -238,12 +237,12 @@ class RelayAgent(BaseAgent):
             response_source = "alan"
         elif _is_agenda_read:
             if verbose:
-                print(f"[fast-route agenda-read → agenda]", file=sys.stderr)
+                print("[fast-route agenda-read → agenda]", file=sys.stderr)
             response_text = self._handle_with_agenda_agent(text, msg)
             response_source = "cato"
         elif _is_agenda_write:
             if verbose:
-                print(f"[fast-route agenda-write → agenda]", file=sys.stderr)
+                print("[fast-route agenda-write → agenda]", file=sys.stderr)
             response_text = self._handle_with_agenda_agent(text, msg)
             response_source = "cato"
         else:
@@ -609,6 +608,7 @@ class RelayAgent(BaseAgent):
                             result = "Dispatcher not available."
                         else:
                             import uuid
+
                             from outheis.core.config import get_messages_path
                             from outheis.core.message import create_agent_message
                             from outheis.core.queue import append
@@ -789,8 +789,9 @@ class RelayAgent(BaseAgent):
 
     def _add_to_rules(self, target: str, content: str) -> None:
         """Add a rule to rules file."""
-        from outheis.core.config import get_rules_dir
         from datetime import datetime
+
+        from outheis.core.config import get_rules_dir
 
         rules_dir = get_rules_dir()
         rules_dir.mkdir(parents=True, exist_ok=True)
@@ -810,8 +811,8 @@ class RelayAgent(BaseAgent):
 
     def _get_memory_traits(self) -> str:
         """Get memory traits summary."""
-        from outheis.core.memory import get_memory_store
         from outheis.core.config import get_rules_dir
+        from outheis.core.memory import get_memory_store
 
         store = get_memory_store()
         lines = ["Known traits:", ""]
@@ -848,7 +849,7 @@ class RelayAgent(BaseAgent):
                 lines.append("## Established Rules")
                 for rf in rule_files:
                     content = rf.read_text(encoding="utf-8")
-                    rule_count = len([l for l in content.split("\n") if l.strip().startswith("-")])
+                    rule_count = len([l for l in content.split("\n") if l.strip().startswith("-")])  # noqa: E741
                     if rule_count:
                         lines.append(f"  • {rf.stem}: {rule_count} rules")
 

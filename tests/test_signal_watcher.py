@@ -9,17 +9,12 @@ Two regressions guarded here:
 2. _watch_responses survives a broadcast message in the queue
 """
 
-import json
-import tempfile
 import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from outheis.core.message import create_agent_message
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -87,7 +82,7 @@ class TestUserPhoneAttribute:
 class TestWatcherBroadcastSurvival:
     """_watch_responses must not crash when broadcast messages are in the queue."""
 
-    def _run_watcher_briefly(self, t: "SignalTransport", duration: float = 1.5) -> threading.Thread:
+    def _run_watcher_briefly(self, t: "SignalTransport", duration: float = 1.5) -> threading.Thread:  # noqa: F821
         """Start the watcher thread and let it run for `duration` seconds."""
         t._watching = True
         thread = threading.Thread(target=t._watch_responses, daemon=True)

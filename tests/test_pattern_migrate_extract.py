@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -83,7 +82,7 @@ class TestParseJsonMigration:
                                          encoding="utf-8", delete=False) as f:
             f.write("not valid json {{")
             path = Path(f.name)
-        with pytest.raises(Exception):
+        with pytest.raises(Exception):  # noqa: B017
             agent._parse_json_migration(path)
 
     def test_missing_type_defaults_to_user(self):

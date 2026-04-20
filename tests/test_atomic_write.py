@@ -7,9 +7,11 @@ the WebUI thread while the dispatcher thread writes them.
 import json
 import threading
 
-import pytest
-
-from outheis.dispatcher.daemon import _atomic_write, _persist_registry, _task_registry_lock
+from outheis.dispatcher.daemon import (
+    _atomic_write,
+    _persist_registry,
+    _task_registry_lock,
+)
 
 
 class TestAtomicWrite:

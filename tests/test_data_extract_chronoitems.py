@@ -4,9 +4,7 @@ Tests the LLM prompt + output parsing without hitting the API.
 The method receives raw file content and returns two-line tag-format entries.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -50,7 +48,7 @@ class TestOutputFormat:
         )
         with patch("outheis.core.llm.call_llm", return_value=fake_llm_response(raw)):
             result = agent._extract_chronological_entries("test.md", "content")
-        lines = [l for l in result.splitlines() if l.strip()]
+        lines = [l for l in result.splitlines() if l.strip()]  # noqa: E741
         assert lines[0].startswith("#date-")
         assert not lines[1].startswith("#")
         assert lines[2].startswith("#action-required")

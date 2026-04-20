@@ -7,14 +7,14 @@ FastAPI backend with WebSocket for live updates.
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-from pathlib import Path
-
 import hashlib
 import hmac
+import json
+import os
 import secrets
 import time
+from datetime import UTC
+from pathlib import Path
 
 from fastapi import FastAPI, File, Request, UploadFile, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
@@ -562,7 +562,7 @@ async def create_migration_dir():
 
 
 @app.post("/api/migration/upload")
-async def upload_migration_file(file: UploadFile = File(...)):
+async def upload_migration_file(file: UploadFile = File(...)):  # noqa: B008
     migration_dir = get_vault_path() / "Migration"
     migration_dir.mkdir(parents=True, exist_ok=True)
     if not file.filename or Path(file.filename).suffix.lower() not in (".md", ".json"):
@@ -889,9 +889,10 @@ async def get_tags():
 
 @app.post("/api/tags/scan")
 async def scan_tags():
-    from outheis.core.queue import append
-    from outheis.core.message import create_agent_message
     import uuid
+
+    from outheis.core.message import create_agent_message
+    from outheis.core.queue import append
     msg = create_agent_message(
         from_agent="webui",
         to="dispatcher",
@@ -967,8 +968,8 @@ async def delete_tag(data: dict):
 # Messages API
 @app.post("/api/send")
 async def send_message(data: dict):
-    from outheis.core.queue import append
     from outheis.core.message import create_user_message
+    from outheis.core.queue import append
     text = data.get("text", "").strip()
     if not text:
         return {"error": "Empty message"}
@@ -1025,9 +1026,10 @@ async def get_running_tasks():
 
 @app.post("/api/scheduler/run/{task}")
 async def run_scheduler_task(task: str):
-    from outheis.core.queue import append
-    from outheis.core.message import create_agent_message
     import uuid
+
+    from outheis.core.message import create_agent_message
+    from outheis.core.queue import append
     msg = create_agent_message(
         from_agent="webui",
         to="dispatcher",
@@ -1066,9 +1068,9 @@ async def get_status():
 
     messages_today = 0
     if MESSAGES_PATH.exists():
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        today_start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
         for line in MESSAGES_PATH.read_text().strip().split("\n"):
             if not line:
                 continue
@@ -1127,6 +1129,7 @@ async def get_ollama_models():
 @app.get("/api/version")
 async def get_version():
     import time
+
     from outheis import __version__
 
     now = time.time()
@@ -1172,7 +1175,7 @@ async def restart_daemon():
         return {"status": "not_running"}
 
     from outheis.core.config import get_human_dir
-    log_path = str(get_human_dir() / "dispatcher.log")
+    str(get_human_dir() / "dispatcher.log")
 
     # Resolve outheis executable: same bin/ dir as the running Python interpreter
     from pathlib import Path as _Path
@@ -1224,9 +1227,9 @@ async def update_package():
     import shutil
     import subprocess
     import sys
+    from pathlib import Path as _Path
 
     from outheis.dispatcher.daemon import read_pid
-    from pathlib import Path as _Path
 
     current_pid = read_pid()
     outheis_cmd = str(_Path(sys.executable).parent / "outheis")

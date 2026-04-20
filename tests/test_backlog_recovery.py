@@ -10,14 +10,11 @@ replicating the logic directly — this mirrors what start() does and
 keeps the tests free of the full start() machinery.
 """
 
-import threading
 
-import pytest
 
-from outheis.core.config import Config, LLMConfig, AgentConfig
-from outheis.core.message import Message, create_agent_message, create_user_message
+from outheis.core.config import AgentConfig, Config, LLMConfig
+from outheis.core.message import Message, create_user_message
 from outheis.dispatcher.daemon import Dispatcher
-
 
 # ---------------------------------------------------------------------------
 # Helpers

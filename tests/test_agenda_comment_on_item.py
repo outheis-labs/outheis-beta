@@ -6,10 +6,7 @@ It triggers when Agenda.md or Exchange.md contain lines starting with '>'.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -152,7 +149,7 @@ class TestForceFlag:
             agenda_dir = Path(d) / "Agenda"
             agenda_dir.mkdir()
             (agenda_dir / "Agenda.md").write_text(
-                f"2026-04-08\nNo comments.", encoding="utf-8"
+                "2026-04-08\nNo comments.", encoding="utf-8"
             )
             with patch("outheis.agents.agenda.get_agenda_dir", return_value=agenda_dir), \
                  patch("outheis.agents.agenda.date") as mock_date, \

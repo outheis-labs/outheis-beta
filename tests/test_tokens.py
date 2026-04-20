@@ -3,14 +3,11 @@
 import json
 from datetime import datetime, timedelta
 
-import pytest
-
 from outheis.core.tokens import (
     _model_cost,
     get_stats_7days,
     get_usage_summary,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -5,12 +5,8 @@ No LLM calls — generate_backlog is mocked at the call_llm boundary.
 """
 
 import tempfile
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -9,7 +9,6 @@ will fail until the example file is updated.
 import json
 import os
 import shutil
-import tempfile
 from dataclasses import fields
 from pathlib import Path
 
@@ -93,6 +92,7 @@ class TestConfigExampleComplete:
     def test_no_unknown_agent_fields(self, example_data):
         """Agent entries must not contain fields outside AgentConfig schema."""
         from dataclasses import fields as dc_fields
+
         from outheis.core.config import AgentConfig
         valid_fields = {f.name for f in dc_fields(AgentConfig)}
         for role, cfg in example_data.get("agents", {}).items():

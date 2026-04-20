@@ -7,7 +7,7 @@ All transports implement this interface.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable
+from collections.abc import Callable
 
 from outheis.core.message import Message
 
@@ -36,6 +36,6 @@ class Transport(ABC):
         """Run the transport's main loop."""
         ...
 
-    def on_response(self, callback: Callable[[Message], None]) -> None:
+    def on_response(self, callback: Callable[[Message], None]) -> None:  # noqa: B027
         """Register a callback for responses (optional)."""
         pass

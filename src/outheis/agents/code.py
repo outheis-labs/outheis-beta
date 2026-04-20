@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
-from outheis.core.config import load_config, get_human_dir
+from outheis.core.config import get_human_dir, load_config
 from outheis.core.message import Message
-from outheis.core.tools import tool_error, tool_read_file, tool_load_skill
-
+from outheis.core.tools import tool_error, tool_load_skill, tool_read_file
 
 # =============================================================================
 # CODE AGENT
@@ -44,7 +44,7 @@ class CodeAgent(BaseAgent):
     name: str = "code"
 
     def get_system_prompt(self) -> str:
-        from outheis.agents.loader import load_skills, load_rules
+        from outheis.agents.loader import load_rules, load_skills
 
         config = load_config()
         skills = load_skills("code")
@@ -56,8 +56,8 @@ class CodeAgent(BaseAgent):
         parts = [
             "# Code Agent (alan)",
             "",
-            f"You are alan, the code agent of outheis — a local, privacy-first multi-agent system.",
-            f"Your task: analyze local source code and answer questions about the implementation.",
+            "You are alan, the code agent of outheis — a local, privacy-first multi-agent system.",
+            "Your task: analyze local source code and answer questions about the implementation.",
             f"Respond in {config.human.language}.",
             "",
             "Write proposals as individual files in vault/Codebase/ using write_codebase.",
@@ -128,7 +128,7 @@ class CodeAgent(BaseAgent):
                 if in_docstring:
                     break
                 in_docstring = True
-                text = stripped.strip('"""').strip("'''").strip()
+                text = stripped.strip('"""').strip("'''").strip()  # noqa: B005
                 if text:
                     return text
             elif in_docstring and stripped:
@@ -371,7 +371,7 @@ class CodeAgent(BaseAgent):
         return "\n".join(items) if items else "(empty)"
 
     def _tool_write_codebase(self, path: str, content: str) -> str:
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         if not path:
             return "No path provided"
@@ -390,7 +390,7 @@ class CodeAgent(BaseAgent):
 
         # Prepend ISO timestamp to proposal files
         if is_proposal:
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
             content = f"*{ts}*\n\n{content}"
 
         target.write_text(content, encoding="utf-8")
@@ -406,9 +406,10 @@ class CodeAgent(BaseAgent):
         exchange = codebase_dir / "Exchange.md"
         content = exchange.read_text(encoding="utf-8") if exchange.exists() else ""
         if f"## {filename}" not in content:
-            from datetime import datetime, timezone
+            from datetime import datetime
+
             from outheis.core.config import load_config
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            ts = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
             try:
                 lang = load_config().human.language
             except Exception:

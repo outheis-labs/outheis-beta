@@ -20,7 +20,6 @@ from typing import Any
 
 from outheis.core.config import LLMConfig, ModelConfig
 
-
 # =============================================================================
 # EXCEPTIONS
 # =============================================================================
@@ -98,7 +97,7 @@ def get_client(provider_name: str) -> Any:
         try:
             import openai
         except ImportError:
-            raise ImportError("openai package not installed — run: pip install openai")
+            raise ImportError("openai package not installed — run: pip install openai")  # noqa: B904
         kwargs = {}
         if provider_name.startswith("ollama"):
             api_key = provider.api_key or "ollama-local"

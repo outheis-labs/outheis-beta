@@ -16,10 +16,10 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Callable
 
 # Module-level task registry — shared between dispatcher and WebUI server
 # (both run in the same process). Also persisted to tasks.json so CLI tools
@@ -28,7 +28,7 @@ _task_registry: dict[str, dict] = {}
 _task_registry_lock = threading.Lock()
 
 
-def _atomic_write(path: "Path", text: str) -> None:
+def _atomic_write(path: Path, text: str) -> None:
     """Write *text* to *path* atomically via a sibling .tmp file + rename.
 
     The WebUI thread reads these files while the dispatcher thread writes them.
@@ -75,7 +75,7 @@ def read_task_registry() -> dict[str, dict]:
     return {}
 
 
-from outheis.agents import (
+from outheis.agents import (  # noqa: E402
     create_action_agent,
     create_agenda_agent,
     create_code_agent,
@@ -83,17 +83,21 @@ from outheis.agents import (
     create_pattern_agent,
     create_relay_agent,
 )
-from outheis.core.config import (
+from outheis.core.config import (  # noqa: E402
     Config,
     get_messages_path,
     init_directories,
     load_config,
 )
-from outheis.core.message import Message
-from outheis.core.queue import append, get_last_id, get_unanswered_requests, read_from
-from outheis.dispatcher.router import get_dispatch_target
-from outheis.dispatcher.watcher import QueueWatcher
-
+from outheis.core.message import Message  # noqa: E402
+from outheis.core.queue import (  # noqa: E402
+    append,
+    get_last_id,
+    get_unanswered_requests,
+    read_from,
+)
+from outheis.dispatcher.router import get_dispatch_target  # noqa: E402
+from outheis.dispatcher.watcher import QueueWatcher  # noqa: E402
 
 # =============================================================================
 # SCHEDULER
@@ -197,7 +201,7 @@ class Scheduler:
         now = datetime.now()
         return min(task.seconds_until_next(now) for task in self.tasks)
 
-    def get_due(self) -> list["ScheduledTask"]:
+    def get_due(self) -> list[ScheduledTask]:
         """Return due tasks and mark their last_run to prevent re-firing."""
         now = datetime.now()
         due = []
@@ -366,7 +370,8 @@ class Dispatcher:
         - silent=True: update models and state but don't broadcast (used on restart when already known).
         """
         import time as _time
-        from outheis.core.config import get_status_path, get_human_dir
+
+        from outheis.core.config import get_human_dir, get_status_path
         from outheis.core.message import create_agent_message
         from outheis.core.queue import append
 
@@ -410,11 +415,11 @@ class Dispatcher:
             )
         else:
             text = (
-                f"API credit balance exhausted. "
-                f"No local fallback model configured — requests will fail until credits are restored. "
-                f"Will notify you automatically when the API is available again."
+                "API credit balance exhausted. "
+                "No local fallback model configured — requests will fail until credits are restored. "
+                "Will notify you automatically when the API is available again."
             )
-            print(f"[fallback] No local_fallback configured — notifications only.", flush=True)
+            print("[fallback] No local_fallback configured — notifications only.", flush=True)
 
         # Write status file for WebUI
         status = {
@@ -429,7 +434,7 @@ class Dispatcher:
             print(f"[fallback] Could not write status file: {e}", flush=True)
 
         if silent:
-            print(f"[fallback] Restored fallback mode silently (already known).", flush=True)
+            print("[fallback] Restored fallback mode silently (already known).", flush=True)
             return
 
         # Broadcast notification to all transports
@@ -449,7 +454,8 @@ class Dispatcher:
     def _exit_fallback_mode(self) -> None:
         """Restore cloud models after billing is confirmed available again."""
         import time as _time
-        from outheis.core.config import get_status_path, get_human_dir
+
+        from outheis.core.config import get_human_dir, get_status_path
         from outheis.core.message import create_agent_message
         from outheis.core.queue import append
 
@@ -463,7 +469,7 @@ class Dispatcher:
             _fallback_flag.unlink(missing_ok=True)
         except Exception:
             pass
-        print(f"[fallback] Exiting fallback mode — cloud billing restored.", flush=True)
+        print("[fallback] Exiting fallback mode — cloud billing restored.", flush=True)
 
         # Restore original model aliases
         for role, original_model in self._original_models.items():
@@ -518,7 +524,7 @@ class Dispatcher:
 
     def _probe_billing(self) -> bool:
         """Make a minimal cloud API call. Return True if billing is now available."""
-        from outheis.core.llm import call_llm, BillingError
+        from outheis.core.llm import BillingError, call_llm
 
         # Skip probe if no API key is available — key won't appear on its own
         if not self._cloud_api_key_available():
@@ -555,14 +561,14 @@ class Dispatcher:
         """Scheduled task: silently check if billing is restored. Auto-exits fallback if so."""
         if not self._fallback_mode:
             return
-        print(f"[fallback] Probing cloud billing...", flush=True)
+        print("[fallback] Probing cloud billing...", flush=True)
         if self._probe_billing():
             self._exit_fallback_mode()
 
     def _check_billing_at_startup(self) -> None:
         """Probe cloud providers at startup. Enter fallback mode if billing fails."""
-        from outheis.core.llm import call_llm, BillingError, resolve_model
         from outheis.core.config import get_human_dir
+        from outheis.core.llm import BillingError, call_llm, resolve_model
 
         # Was fallback active before this restart?
         _fallback_flag = get_human_dir() / ".fallback_active"
@@ -570,7 +576,7 @@ class Dispatcher:
 
         # Collect unique cloud providers used by enabled agents
         cloud_aliases: set[str] = set()
-        for role, agent_cfg in self.config.agents.items():
+        for _role, agent_cfg in self.config.agents.items():
             if not agent_cfg.enabled:
                 continue
             try:
@@ -586,10 +592,10 @@ class Dispatcher:
         # No API key configured — enter fallback immediately without a network call
         if not self._cloud_api_key_available():
             if self.config.llm.local_fallback:
-                print(f"[startup] No cloud API key configured — switching to local model immediately.")
+                print("[startup] No cloud API key configured — switching to local model immediately.")
                 self._enter_fallback_mode("No cloud API key configured.", conversation_id=None, silent=_already_known)
             else:
-                print(f"[startup] No cloud API key configured and no local fallback set — requests will fail.")
+                print("[startup] No cloud API key configured and no local fallback set — requests will fail.")
             return
 
         # Test with the cheapest available alias
@@ -650,7 +656,7 @@ class Dispatcher:
     def _execute_task(
         self,
         task_name: str,
-        runner: "Callable[[], None]",
+        runner: Callable[[], None],
         conversation_id: str | None = None,
     ) -> bool:
         """
@@ -774,8 +780,8 @@ class Dispatcher:
 
     def _unload_ollama_model(self, model_name: str) -> None:
         """Tell Ollama to unload a model from memory (keep_alive=0)."""
-        import urllib.request
         import json as _json
+        import urllib.request
         provider = self.config.llm.providers.get("ollama.local")
         base = (provider.base_url if provider and provider.base_url else "http://localhost:11434").rstrip("/").removesuffix("/v1")
         url = f"{base}/api/generate"
@@ -862,9 +868,10 @@ class Dispatcher:
 
     def _run_data_migrate(self) -> None:
         """Scan and apply schema migrations for messages and insights."""
+        import sys
+
         from outheis.core.config import get_insights_path, get_messages_path
         from outheis.core.schema import INSIGHTS_VERSION, MESSAGES_VERSION, scan_file
-        import sys
         files = [
             (get_messages_path(), "Message", MESSAGES_VERSION),
             (get_insights_path(), "Insight", INSIGHTS_VERSION),
@@ -972,12 +979,11 @@ class Dispatcher:
 
     def _run_tag_scan(self) -> None:
         """Scan vault for #tags and update cache."""
-        import re
         import json
+        import re
         from datetime import datetime
-        from outheis.core.config import load_config
 
-        from outheis.core.config import get_human_dir
+        from outheis.core.config import get_human_dir, load_config
         config = load_config()
         vault = config.human.primary_vault()
         cache_path = get_human_dir() / "cache" / "tags.json"
@@ -1215,8 +1221,8 @@ class Dispatcher:
 
     def run(self) -> None:
         """Run the dispatcher daemon."""
-        from outheis.core.queue import recover_pending
         from outheis.core.llm import init_llm
+        from outheis.core.queue import recover_pending
         from outheis.dispatcher.lock import LockManager
 
         init_directories()
@@ -1259,7 +1265,9 @@ class Dispatcher:
         if self.config.webui.enabled:
             try:
                 import socket as _socket
+
                 import uvicorn
+
                 from outheis.webui.server import app as webui_app
 
                 # Safety: never expose on all interfaces unless explicitly configured.
@@ -1287,13 +1295,13 @@ class Dispatcher:
                 if not _port_free:
                     # Port still busy — kill whatever holds it and retry.
                     try:
-                        import subprocess as _sp
                         import signal as _signal
+                        import subprocess as _sp
                         _r = _sp.run(
                             ["lsof", "-i", f":{_port}", "-sTCP:LISTEN", "-Fp"],
                             capture_output=True, text=True, timeout=3,
                         )
-                        _pids = [int(l[1:]) for l in _r.stdout.splitlines() if l.startswith("p")]
+                        _pids = [int(l[1:]) for l in _r.stdout.splitlines() if l.startswith("p")]  # noqa: E741
                         for _pid in _pids:
                             try:
                                 os.kill(_pid, _signal.SIGKILL)
@@ -1506,8 +1514,8 @@ def start_daemon(foreground: bool = False) -> bool:
         return True
     else:
         # Start as subprocess (avoids macOS fork issues with CoreFoundation)
-        import subprocess
         import shutil
+        import subprocess
 
         # Find outheis command
         outheis_cmd = shutil.which("outheis")
@@ -1527,8 +1535,8 @@ def start_daemon(foreground: bool = False) -> bool:
         log_path = get_human_dir() / "dispatcher.log"
 
         # Start detached subprocess
-        with open(log_path, 'a') as log_file, open(os.devnull, 'r') as devnull:
-            process = subprocess.Popen(
+        with open(log_path, 'a') as log_file, open(os.devnull) as devnull:
+            subprocess.Popen(
                 cmd,
                 stdout=log_file,
                 stderr=log_file,

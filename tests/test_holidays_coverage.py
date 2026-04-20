@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 
 def _current_and_next_two_years() -> list[int]:
     today = date.today()

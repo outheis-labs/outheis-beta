@@ -1,21 +1,18 @@
 """test_relay_parse_exchange — unit tests for Relay routing and config/memory tools."""
 
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from outheis.core.message import create_agent_message
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 def make_relay(tmp_path=None):
-    from outheis.agents.relay import RelayAgent
     import tempfile
+
+    from outheis.agents.relay import RelayAgent
     agent = RelayAgent.__new__(RelayAgent)
     agent.model_alias = "fast"
     agent.name = "relay"

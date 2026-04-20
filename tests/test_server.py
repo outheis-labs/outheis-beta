@@ -10,8 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import outheis.webui.server as server_mod
-from outheis.webui.server import app, _safe_relative_path, list_files, list_files_multi
-
+from outheis.webui.server import _safe_relative_path, app, list_files, list_files_multi
 
 # ---------------------------------------------------------------------------
 # Fixtures

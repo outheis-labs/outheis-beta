@@ -12,12 +12,10 @@ These tests are written against the *intended* interface. They will
 fail until the feature is implemented and serve as a specification.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from outheis.core.message import create_agent_message, Message
-
+from outheis.core.message import Message, create_agent_message
 
 # ---------------------------------------------------------------------------
 # Helpers

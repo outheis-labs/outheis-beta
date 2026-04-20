@@ -12,9 +12,6 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -53,7 +50,7 @@ class TestAgendaExchangeRoute:
             agenda_dir = Path(d) / "Agenda"
             agenda_dir.mkdir()
             with patch("outheis.agents.agenda.get_agenda_dir", return_value=agenda_dir):
-                result = agent._execute_tool("write_file", {
+                agent._execute_tool("write_file", {
                     "file": "exchange",
                     "content": "test exchange entry"
                 })

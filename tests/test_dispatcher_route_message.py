@@ -3,8 +3,7 @@
 import pytest
 
 from outheis.core.message import Message, create_agent_message
-from outheis.dispatcher.router import get_dispatch_target, route, MENTION_PATTERNS
-
+from outheis.dispatcher.router import MENTION_PATTERNS, get_dispatch_target, route
 
 # ---------------------------------------------------------------------------
 # Helpers

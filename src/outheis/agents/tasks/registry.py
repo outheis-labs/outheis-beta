@@ -31,9 +31,9 @@ class TaskRegistry:
     Tasks are stored in ~/.outheis/human/tasks/<task-id>/
     """
 
-    tasks: dict[str, "Task"] = field(default_factory=dict)
+    tasks: dict[str, Task] = field(default_factory=dict)
 
-    def add(self, task: "Task") -> None:
+    def add(self, task: Task) -> None:
         """Add a task to the registry."""
         self.tasks[task.id] = task
         self._calculate_next_run(task)
@@ -52,11 +52,11 @@ class TaskRegistry:
             return True
         return False
 
-    def get(self, task_id: str) -> "Task | None":
+    def get(self, task_id: str) -> Task | None:
         """Get a task by ID."""
         return self.tasks.get(task_id)
 
-    def get_due_tasks(self) -> list["Task"]:
+    def get_due_tasks(self) -> list[Task]:
         """Get all tasks that are due to run."""
         now = datetime.now()
         due = []
@@ -65,7 +65,7 @@ class TaskRegistry:
                 due.append(task)
         return due
 
-    def mark_completed(self, task: "Task", result: "TaskResult") -> None:
+    def mark_completed(self, task: Task, result: TaskResult) -> None:  # noqa: F821
         """Mark a task as completed and calculate next run."""
         from outheis.agents.tasks.base import TaskSchedule
 
@@ -84,7 +84,7 @@ class TaskRegistry:
             self._calculate_next_run(task)
             task.save()
 
-    def _calculate_next_run(self, task: "Task") -> None:
+    def _calculate_next_run(self, task: Task) -> None:
         """Calculate the next run time for a task."""
         from outheis.agents.tasks.base import TaskSchedule
 
@@ -148,7 +148,7 @@ class TaskRegistry:
             except Exception as e:
                 print(f"Warning: Failed to load task {task_dir.name}: {e}")
 
-    def _deserialize_task(self, data: dict) -> "Task | None":
+    def _deserialize_task(self, data: dict) -> Task | None:
         """Deserialize a task from config.json data."""
         from outheis.agents.tasks.base import TaskSchedule, TaskSource
 

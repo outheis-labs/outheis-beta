@@ -4,12 +4,9 @@ Covers _enter_fallback_mode, _exit_fallback_mode, and _probe_billing.
 The Dispatcher is constructed minimally — no queue, no transports, no LLM calls.
 """
 
-import threading
-import pytest
 
-from outheis.core.config import Config, LLMConfig, AgentConfig
+from outheis.core.config import AgentConfig, Config, LLMConfig
 from outheis.dispatcher.daemon import Dispatcher
-
 
 # ---------------------------------------------------------------------------
 # Fixture

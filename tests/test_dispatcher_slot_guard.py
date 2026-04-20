@@ -7,11 +7,8 @@ and release the slot after completion (success or failure).
 import threading
 import time
 
-import pytest
-
-from outheis.core.config import Config, LLMConfig, AgentConfig
+from outheis.core.config import AgentConfig, Config, LLMConfig
 from outheis.dispatcher.daemon import Dispatcher
-
 
 # ---------------------------------------------------------------------------
 # Fixture
@@ -88,7 +85,7 @@ class TestSlotGuard:
         monkeypatch.setattr("outheis.dispatcher.daemon._persist_registry", lambda *a: None)
         d = make_dispatcher()
 
-        done = threading.Event()
+        threading.Event()
 
         def fast():
             pass

@@ -7,10 +7,7 @@ processing. Tests verify detection and context injection.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -177,7 +174,7 @@ class TestExchangeFileTool:
             exchange_path.write_text("existing content", encoding="utf-8")
 
             with patch("outheis.agents.agenda.get_agenda_dir", return_value=agenda_dir):
-                result = agent._append_file(exchange_path, "\nnew item")
+                agent._append_file(exchange_path, "\nnew item")
 
             content = exchange_path.read_text()
             assert "existing content" in content

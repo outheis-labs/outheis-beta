@@ -41,12 +41,12 @@ def init() -> None:
     from outheis.core.config import (
         Config,
         HumanConfig,
-        SignalConfig,
         ProviderConfig,
+        SignalConfig,
         get_config_path,
+        init_directories,
         load_config,
         save_config,
-        init_directories,
     )
 
     typer.echo("\n" + "=" * 50)
@@ -240,7 +240,7 @@ def init() -> None:
     else:
         typer.echo(f"⏭ {agenda_path} exists, skipping")
 
-    typer.echo(f"\nRun 'outheis start' to begin.\n")
+    typer.echo("\nRun 'outheis start' to begin.\n")
 
 
 def _validate_anthropic_key(api_key: str) -> bool:
@@ -263,6 +263,7 @@ def _validate_anthropic_key(api_key: str) -> bool:
 def _build_agenda_scaffold(language: str) -> str:
     """Build a correctly structured empty Agenda.md for the given language."""
     from datetime import date
+
     from outheis.core.i18n import AGENDA_LABELS, WEEKDAYS
 
     lang = language[:2].lower()
@@ -391,8 +392,8 @@ def update(
     skipped_versions: list[str] = []
     if not source:
         try:
-            import urllib.request as _urllib
             import json as _json
+            import urllib.request as _urllib
             with _urllib.urlopen("https://pypi.org/pypi/outheis/json", timeout=5) as r:
                 data = _json.loads(r.read())
             latest_version = data["info"]["version"]
@@ -515,6 +516,7 @@ def start(
 ) -> None:
     """Start the outheis dispatcher daemon."""
     import os
+
     from outheis.core.config import init_directories
     from outheis.dispatcher.daemon import start_daemon
 
@@ -606,6 +608,7 @@ def send(
 def chat() -> None:
     """Start interactive chat session (requires running dispatcher)."""
     import readline
+
     from outheis.dispatcher.daemon import daemon_status
     from outheis.transport.cli import CLITransport
 
@@ -1017,11 +1020,12 @@ task_app = typer.Typer(help="Manage scheduled tasks")
 app.add_typer(task_app, name="task")
 
 
-def _get_cli_source() -> "TaskSource":
+def _get_cli_source() -> TaskSource:  # noqa: F821
     """Create TaskSource for CLI context."""
     import os
     import socket
     from datetime import datetime
+
     from outheis.agents.tasks.base import TaskSource
 
     return TaskSource(
@@ -1063,6 +1067,7 @@ def task_add(
 ) -> None:
     """Add a new task from natural language instruction."""
     from datetime import datetime
+
     from outheis.agents.tasks import get_registry
     from outheis.agents.tasks.news import create_sz_task
 
@@ -1117,7 +1122,7 @@ def task_run(
     result = task.execute()
 
     if result.success:
-        typer.echo(f"✓ Success")
+        typer.echo("✓ Success")
         typer.echo("\nOutput:")
         typer.echo(task.format_for_agenda(result))
 

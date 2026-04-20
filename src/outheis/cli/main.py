@@ -431,13 +431,9 @@ def update(
         typer.echo(f"outheis {__version__} is already the latest release.")
         raise typer.Exit()
 
-    if latest_version:
-        date_str = f", released {release_date}" if release_date else ""
-        typer.echo(f"Updating outheis {__version__} → {latest_version}{date_str}")
-        if skipped_versions:
-            typer.echo(f"  {len(skipped_versions)} intermediate release(s) skipped: {', '.join(skipped_versions)}")
-    else:
-        typer.echo(f"Updating outheis {__version__} → latest...")
+    typer.echo(f"Updating outheis {__version__} → latest...")
+    if skipped_versions:
+        typer.echo(f"  {len(skipped_versions)} intermediate release(s) skipped: {', '.join(skipped_versions)}")
 
     if was_running:
         typer.echo("Stopping daemon...")
@@ -487,10 +483,11 @@ def update(
         typer.echo(f"outheis {__version__} — already up to date.")
         raise typer.Exit()
 
+    date_str = f", released {release_date}" if release_date else ""
     if installed_version:
-        typer.echo(f"Updated to outheis {installed_version}.")
+        typer.echo(f"Updated to outheis {installed_version}{date_str}.")
     elif latest_version:
-        typer.echo(f"Updated to outheis {latest_version}.")
+        typer.echo(f"Updated to outheis {latest_version}{date_str}.")
     else:
         typer.echo("outheis updated.")
 

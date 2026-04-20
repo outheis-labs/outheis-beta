@@ -110,10 +110,19 @@ class RelayAgent(BaseAgent):
         feedback_entries = store._entries.get("feedback", [])
         context_entries = store._entries.get("context", [])
 
+        from datetime import date as _date
+        today_iso = _date.today().isoformat()
+
         parts = [
             f"You are {config.human.name}'s personal assistant. "
             f"Language: {config.human.language}. "
-            "Route requests to the correct agent via tools. Respond concisely.",
+            f"Today: {today_iso}. "
+            "Route requests to the correct agent via tools. Respond concisely. "
+            "When the user mentions personal facts about people or relationships (family, names, roles) "
+            "call save_to_memory proactively. "
+            "When the user mentions completed work or decisions with lasting relevance (invoice sent, payment received, appointment confirmed) "
+            "call save_to_vault proactively. "
+            "Never just acknowledge verbally — persist.",
         ]
         if relay_rules:
             parts.append(f"# Routing rules\n\n{relay_rules}")
@@ -187,14 +196,18 @@ class RelayAgent(BaseAgent):
             len(text_lower.split()) <= 4
             or any(kw in text_lower for kw in _read_intent_keywords)
         )
+        _negation_keywords = ("nein", "nicht", "no ", "don't", "dont", "kein", "nicht in")
+        _has_negation = any(kw in text_lower for kw in _negation_keywords)
         _is_agenda_read = (
             _has_agenda_kw
             and _has_read_intent
+            and not _has_negation
             and not any(kw in text_lower for kw in _write_keywords)
         )
         _is_agenda_write = (
             _has_agenda_kw
             and any(kw in text_lower for kw in _write_keywords)
+            and not _has_negation
             and not _is_agenda_read
         )
 
@@ -370,8 +383,14 @@ class RelayAgent(BaseAgent):
         original_msg: Message,
     ) -> str:
         """Generate a response using LLM with tools."""
+        from outheis.core.llm import BillingError
         try:
             return self._call_llm_with_tools(text, context, original_msg.conversation_id, original_msg)
+        except BillingError as e:
+            # Trigger fallback mode via dispatcher so next requests use local model
+            if self._dispatcher is not None:
+                self._dispatcher._enter_fallback_mode(str(e), original_msg.conversation_id)
+            return "API credit balance exhausted. Switching to local fallback model — please resend your message."
         except Exception as e:
             return tool_error(str(e))
 
@@ -433,12 +452,11 @@ class RelayAgent(BaseAgent):
             },
             {
                 "name": "add_to_daily",
-                "description": "Add task/note/item to Agenda.md. Use when user wants to add something to their daily.",
+                "description": "Add task/note/item to Agenda.md. Agenda determines placement automatically — never pass a section name.",
                 "input_schema": {
                     "type": "object",
                     "properties": {
-                        "content": {"type": "string"},
-                        "section": {"type": "string", "description": "Target section or null for auto"}
+                        "content": {"type": "string"}
                     },
                     "required": ["content"]
                 }
@@ -488,6 +506,22 @@ class RelayAgent(BaseAgent):
                         "fact": {"type": "string", "description": "The fact to persist, in plain language"}
                     },
                     "required": ["fact"]
+                }
+            },
+            {
+                "name": "save_to_memory",
+                "description": (
+                    "Persist a personal fact about the user to long-term memory. "
+                    "Use for people, family relationships, names, roles, and personal background. "
+                    "Not for tasks or work items — use save_to_vault for those."
+                ),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string", "description": "The fact in plain language, self-contained"},
+                        "type": {"type": "string", "enum": ["user", "context"], "description": "'user' for permanent personal facts, 'context' for current focus/projects"}
+                    },
+                    "required": ["content", "type"]
                 }
             }
         ]
@@ -610,15 +644,13 @@ class RelayAgent(BaseAgent):
                             result = self._dispatcher.dispatch_sync("data", "Show all tags in the vault with counts", conversation_id)
                     elif block.name == "add_to_daily":
                         content = block.input.get("content", "")
-                        section = block.input.get("section", "")
                         if content:
-                            section_hint = f" in section '{section}'" if section else ""
                             if self._dispatcher is None:
                                 result = "Dispatcher not available."
                             else:
                                 result = self._dispatcher.dispatch_sync(
                                     "agenda",
-                                    f"Add to Agenda.md{section_hint}: {content}",
+                                    f"Add to Agenda.md: {content}",
                                     conversation_id
                                 )
                         else:
@@ -673,6 +705,14 @@ class RelayAgent(BaseAgent):
                             )
                         else:
                             result = "No fact provided or dispatcher unavailable."
+                    elif block.name == "save_to_memory":
+                        content = block.input.get("content", "")
+                        memory_type = block.input.get("type", "user")
+                        if content and memory_type in ("user", "context"):
+                            self._add_to_memory(content, memory_type)  # type: ignore[arg-type]
+                            result = f"✓ Saved to {memory_type} memory"
+                        else:
+                            result = "No content provided or invalid type."
                     else:
                         result = "Tool not found"
                     

@@ -1129,10 +1129,12 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
   .model-name { width: 100%; order: 4; }
 
   /* Agent rows */
-  .agent-row { flex-wrap: wrap; }
-  .agent-info { width: 100%; }
-  .agent-role { width: 100%; }
-  .agent-model { width: calc(100% - 84px); }
+  .agent-row { flex-wrap: wrap; row-gap: 6px; column-gap: 12px; }
+  .agent-color-bar { align-self: center; }
+  .agent-info { flex: 1; width: auto; min-width: 0; }
+  .agent-toggle { width: auto; }
+  .agent-role { width: 100%; padding-left: 15px; font-size: 12px; }
+  .agent-model { width: 100%; padding-left: 15px; }
 
   /* Scheduler rows */
   .sched-row { flex-wrap: wrap; }

@@ -9,7 +9,7 @@ from outheis.agents.tasks.registry import TaskRegistry, get_registry
 
 __all__ = [
     "Task",
-    "TaskResult", 
+    "TaskResult",
     "TaskSchedule",
     "TaskSource",
     "TaskRegistry",

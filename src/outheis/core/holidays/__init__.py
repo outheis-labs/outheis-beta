@@ -17,7 +17,6 @@ from datetime import date
 
 from outheis.core.holidays._builtin import REGIONS
 
-
 # =============================================================================
 # USER OVERRIDE LOADER
 # =============================================================================

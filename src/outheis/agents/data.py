@@ -15,11 +15,16 @@ from datetime import datetime
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
-from outheis.core.config import load_config, get_human_dir, AgentConfig
+from outheis.core.config import AgentConfig, get_human_dir, load_config
 from outheis.core.index import SearchIndex, create_index
 from outheis.core.message import Message
-from outheis.core.tools import tool_error, tool_read_file, tool_write_file_path, tool_append_file_path, tool_load_skill
-
+from outheis.core.tools import (
+    tool_append_file_path,
+    tool_error,
+    tool_load_skill,
+    tool_read_file,
+    tool_write_file_path,
+)
 
 # =============================================================================
 # DATA AGENT
@@ -47,8 +52,8 @@ class DataAgent(BaseAgent):
 
         Strategy: Index + Heuristics in context, detail via tools.
         """
+        from outheis.agents.loader import load_rules, load_skills
         from outheis.core.memory import get_memory_context
-        from outheis.agents.loader import load_skills, load_rules
 
         config = load_config()
         memory = get_memory_context()
@@ -141,7 +146,7 @@ class DataAgent(BaseAgent):
 
         lines = []
         try:
-            with open(index_file, "r", encoding="utf-8") as f:
+            with open(index_file, encoding="utf-8") as f:
                 entries = [json.loads(line) for line in f if line.strip()]
 
             # Sort by recency (most recent first)
@@ -521,6 +526,7 @@ class DataAgent(BaseAgent):
     def _process_with_tools(self, query: str, verbose: bool = False) -> str:
         """Process query using tools autonomously."""
         import sys
+
         from outheis.core.llm import call_llm
 
         messages = [{"role": "user", "content": query}]
@@ -656,8 +662,9 @@ class DataAgent(BaseAgent):
 
         # Remove expired #done-* entries across all sections
         if retention_days is not None:
-            from datetime import date as _date, timedelta as _td
             import re as _re
+            from datetime import date as _date
+            from datetime import timedelta as _td
             cutoff = _date.today() - _td(days=retention_days)
             _done_re = _re.compile(r"^#done-(\d{4}-\d{2}-\d{2})")
             pruned = 0

@@ -20,10 +20,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
-from outheis.core.message import Message
+from outheis.core.config import (
+    get_human_dir,
+    get_messages_path,
+    get_rules_dir,
+    get_skills_dir,
+    load_config,
+)
 from outheis.core.memory import get_memory_store
+from outheis.core.message import Message
 from outheis.core.queue import read_last_n
-from outheis.core.config import get_messages_path, get_human_dir, get_rules_dir, get_skills_dir, load_config
 
 
 def get_seed_dir() -> Path:
@@ -59,8 +65,8 @@ class PatternAgent(BaseAgent):
         return get_human_dir() / "memory" / "patterns.md"
 
     def get_system_prompt(self) -> str:
+        from outheis.agents.loader import load_rules, load_skills
         from outheis.core.memory import get_memory_context
-        from outheis.agents.loader import load_skills, load_rules
 
         memory = get_memory_context()
         skills = load_skills("pattern")
@@ -187,7 +193,7 @@ class PatternAgent(BaseAgent):
 
     def _extract_with_llm(self, conversation_text: str, current_memory: str) -> list[dict]:
         """Use LLM to extract memorable information."""
-        config = load_config()
+        load_config()
 
         user_prompt = f"""Current memory (don't repeat this):
 {current_memory if current_memory else "(empty)"}
@@ -420,7 +426,7 @@ Look for patterns that can be DISTILLED into skills:
 
 Example distillation:
 - Memory: "User corrected date format 3x"
-- Memory: "User prefers ISO dates"  
+- Memory: "User prefers ISO dates"
 - Memory: "User said dates should be YYYY-MM-DD"
 → Skill: "Dates: Always ISO format (YYYY-MM-DD)"
 → Delete 3 memory entries, add 1 skill line
@@ -621,9 +627,9 @@ If nothing new:
 
             if data.get("should_record") and data.get("insight"):
                 self._append_meta_insight(data["insight"])
-                print(f"[Pattern] Recorded strategy insight")
+                print("[Pattern] Recorded strategy insight")
 
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError:
             # LLM didn't return valid JSON - not critical, skip silently
             pass
         except Exception as e:
@@ -1192,6 +1198,7 @@ Be conservative — only rewrite when the file has genuine redundancy (5+ rules 
         Phase C — write proposals to Exchange.md; x-prefix all source files.
         """
         import re
+
         from outheis.core.config import load_config
         from outheis.core.memory import get_memory_store
 
@@ -1362,6 +1369,7 @@ Be conservative — only rewrite when the file has genuine redundancy (5+ rules 
         after the user has explicitly accepted a proposal in Exchange.md.
         """
         import json
+
         from outheis.core.llm import call_llm
 
         # Collect existing entries as exact-match reference only.
@@ -1370,7 +1378,7 @@ Be conservative — only rewrite when the file has genuine redundancy (5+ rules 
         existing_lines: list[str] = []
         all_entries = store.get_all()
         for mt, entries in all_entries.items():
-            mt_str = mt.value if hasattr(mt, 'value') else str(mt)
+            mt.value if hasattr(mt, 'value') else str(mt)
             for e in entries:
                 existing_lines.append(e.content)
 

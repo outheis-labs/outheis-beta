@@ -127,7 +127,7 @@ class NewsHeadlinesTask(Task):
 def create_sz_task(
     task_id: str = "sz-headlines",
     times: list[str] | None = None,
-    source: "TaskSource | None" = None,
+    source: TaskSource | None = None,
     instruction: str = "",
 ) -> NewsHeadlinesTask:
     """Create an SZ headlines task with default settings."""

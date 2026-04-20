@@ -17,11 +17,10 @@ Memory: What the agent knows (state)
 
 from __future__ import annotations
 
-from pathlib import Path
 from functools import lru_cache
+from pathlib import Path
 
 from outheis.core.config import get_human_dir
-
 
 # =============================================================================
 # PATHS
@@ -246,8 +245,8 @@ def list_user_rules() -> dict[str, list[str]]:
 
         # Extract rule lines (starting with -)
         rules = [
-            line.strip()[1:].strip() 
-            for line in content.split("\n") 
+            line.strip()[1:].strip()
+            for line in content.split("\n")
             if line.strip().startswith("-")
         ]
 

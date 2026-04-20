@@ -41,7 +41,7 @@ class TaskSource:
     phone: str | None = None
     uuid: str | None = None
 
-    # CLI/local-specific  
+    # CLI/local-specific
     user: str | None = None
     host: str | None = None
 
@@ -57,7 +57,7 @@ class TaskSource:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "TaskSource":
+    def from_dict(cls, data: dict) -> TaskSource:
         return cls(
             timestamp=datetime.fromisoformat(data["timestamp"]),
             interface=data["interface"],

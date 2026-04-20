@@ -20,7 +20,6 @@ from outheis.agents.tasks import get_registry
 from outheis.core.message import Message
 from outheis.core.tools import tool_error
 
-
 # =============================================================================
 # CODE PATHS
 # =============================================================================
@@ -51,8 +50,8 @@ class ActionAgent(BaseAgent):
 
     def get_system_prompt(self) -> str:
         """Minimal system prompt."""
+        from outheis.agents.loader import load_rules, load_skills
         from outheis.core.memory import get_memory_context
-        from outheis.agents.loader import load_skills, load_rules
 
         memory = get_memory_context()
         skills = load_skills("action")
@@ -354,6 +353,7 @@ class ActionAgent(BaseAgent):
     def _process_with_tools(self, query: str, verbose: bool = False) -> str:
         """Process query using tools."""
         import sys
+
         from outheis.core.llm import call_llm
 
         messages = [{"role": "user", "content": query}]
@@ -361,7 +361,7 @@ class ActionAgent(BaseAgent):
 
         max_iterations = 5
         system = self.get_system_prompt()
-        for iteration in range(max_iterations):
+        for _iteration in range(max_iterations):
             response = call_llm(
                 model=self.model_alias,
                 agent=self.name,

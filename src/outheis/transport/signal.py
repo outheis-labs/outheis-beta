@@ -15,7 +15,7 @@ from outheis.core.config import Config, get_messages_path
 from outheis.core.message import Message, create_user_message
 from outheis.core.queue import append, read_last_n
 from outheis.transport.base import Transport
-from outheis.transport.signal_rpc import SignalRPC, SignalMessage
+from outheis.transport.signal_rpc import SignalMessage, SignalRPC
 
 
 class SignalTransport(Transport):
@@ -245,7 +245,7 @@ class SignalTransport(Transport):
                         try:
                             self.rpc.send_to_phone(self.user_phone, self._strip_markdown(text))
                             sent_broadcast_ids.add(msg.id)
-                            print(f"📢 Sent broadcast to Signal", flush=True)
+                            print("📢 Sent broadcast to Signal", flush=True)
                         except Exception as e:
                             print(f"⚠️ Failed to send broadcast: {e}", flush=True)
 
@@ -267,9 +267,9 @@ class SignalTransport(Transport):
                             self.rpc.send_message(sender_uuid, self._strip_markdown(response_text))
                             if is_interim:
                                 sent_interim_ids.add(msg.id)
-                                print(f"📤 Sent interim to Signal", flush=True)
+                                print("📤 Sent interim to Signal", flush=True)
                             else:
-                                print(f"📤 Sent response to Signal", flush=True)
+                                print("📤 Sent response to Signal", flush=True)
                         except Exception as e:
                             print(f"⚠️ Failed to send: {e}", flush=True)
 

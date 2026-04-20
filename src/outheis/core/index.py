@@ -10,11 +10,10 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from outheis.core.vault import VaultFile, iter_vault_files
-
 
 # =============================================================================
 # INDEX ENTRY
@@ -77,7 +76,7 @@ class IndexEntry:
         # Get file modification time
         try:
             mtime = vf.path.stat().st_mtime
-            modified_at = datetime.fromtimestamp(mtime, timezone.utc).isoformat()
+            modified_at = datetime.fromtimestamp(mtime, UTC).isoformat()
         except OSError:
             modified_at = ""
 
@@ -90,7 +89,7 @@ class IndexEntry:
             title=vf.title,
             tags=vf.tags,
             content_hash=content_hash,
-            indexed_at=datetime.now(timezone.utc).isoformat(),
+            indexed_at=datetime.now(UTC).isoformat(),
             searchable=searchable,
             modified_at=modified_at,
             access_count=0,
@@ -216,7 +215,7 @@ class SearchIndex:
             return []
 
         results: list[tuple[float, IndexEntry]] = []
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for entry in self.entries.values():
             # Base score: matching terms
@@ -263,7 +262,7 @@ class SearchIndex:
         """Record that a file was accessed (e.g., opened, read)."""
         if path in self.entries:
             self.entries[path].access_count += 1
-            self.entries[path].last_accessed = datetime.now(timezone.utc).isoformat()
+            self.entries[path].last_accessed = datetime.now(UTC).isoformat()
             self.save()
 
     def search_by_tag(self, tag: str) -> list[IndexEntry]:
@@ -353,7 +352,7 @@ class SearchIndex:
                 "exists": bool,
                 "is_dir": bool,
                 "files": [str],      # If directory
-                "dirs": [str],       # If directory  
+                "dirs": [str],       # If directory
                 "content": str,      # If file
             }
         """

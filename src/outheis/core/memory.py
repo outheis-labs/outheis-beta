@@ -28,7 +28,6 @@ from typing import Literal
 
 from outheis.core.config import get_human_dir
 
-
 # =============================================================================
 # TYPES
 # =============================================================================
@@ -66,7 +65,7 @@ def _sanitize(text: str) -> str:
     return _INVISIBLE_RE.sub("", text).strip()
 
 
-def _format_entry_line(entry: "MemoryEntry") -> str:
+def _format_entry_line(entry: MemoryEntry) -> str:
     """Format a memory entry for inclusion in a prompt context string.
 
     External entries are wrapped in boundary markers to limit prompt injection

@@ -16,14 +16,17 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
-from outheis.core.config import load_config, get_human_dir
+from outheis.core.config import get_human_dir, load_config
 from outheis.core.message import Message
-from outheis.core.tools import tool_write_file_name, tool_append_file_name, tool_load_skill
-
+from outheis.core.tools import (
+    tool_append_file_name,
+    tool_load_skill,
+    tool_write_file_name,
+)
 
 # =============================================================================
 # HELPERS
@@ -82,14 +85,13 @@ class AgendaAgent(BaseAgent):
         Unlike Data agent (large vault), Agenda has only 3 files.
         All context is loaded upfront — no read tools needed.
         """
-        from outheis.core.memory import get_memory_context
-        from outheis.agents.loader import load_skills, load_rules
-
+        from outheis.agents.loader import load_rules, load_skills
         from outheis.core.i18n import (
+            ANNOTATION_BEHAVIORAL_KEYWORDS,
             ANNOTATION_COMPLETION_KEYWORDS,
             ANNOTATION_POSTPONE_KEYWORDS,
-            ANNOTATION_BEHAVIORAL_KEYWORDS,
         )
+        from outheis.core.memory import get_memory_context
 
         config = load_config()
         lang = config.human.language[:2].lower() if config.human.language else "en"
@@ -378,6 +380,7 @@ class AgendaAgent(BaseAgent):
         """
         import sys
         import uuid
+
         from outheis.core.config import get_messages_path
         from outheis.core.message import create_agent_message
         from outheis.core.queue import append
@@ -474,8 +477,8 @@ class AgendaAgent(BaseAgent):
                     lang = _lc().human.language[:2].lower()
                 except Exception:
                     lang = "de"
-                from outheis.core.holidays import get_day_label as _get_day_label
                 from outheis.core.config import load_config as _lc2
+                from outheis.core.holidays import get_day_label as _get_day_label
                 dt = date.fromisoformat(d)
                 wday = _WDAYS.get(lang, _WDAYS["en"])[dt.weekday()]
                 _h = _lc2().human.holidays
@@ -721,13 +724,14 @@ class AgendaAgent(BaseAgent):
         """
         import re
         from datetime import datetime as dt
+
         from outheis.core.config import load_config
 
-        shadow_path = agenda_dir / "Shadow.md"
+        agenda_dir / "Shadow.md"
         now = dt.now()
         today_d = date.today()
-        today_iso = today_d.isoformat()
-        week_iso = (today_d + timedelta(days=7)).isoformat()
+        today_d.isoformat()
+        (today_d + timedelta(days=7)).isoformat()
         week_num = today_d.isocalendar()[1]
 
         try:
@@ -1013,6 +1017,7 @@ class AgendaAgent(BaseAgent):
                              max_tokens: int = 2048) -> str:
         """Process query using tools autonomously."""
         import sys
+
         from outheis.core.llm import call_llm
 
         if prior_content:
@@ -1029,7 +1034,7 @@ class AgendaAgent(BaseAgent):
         system = system_override if system_override is not None else self.get_system_prompt()
 
         max_iterations = 20
-        for iteration in range(max_iterations):
+        for _iteration in range(max_iterations):
             response = call_llm(
                 model=self.model_alias,
                 agent=self.name,
@@ -1362,7 +1367,7 @@ class AgendaAgent(BaseAgent):
 
         backlog_path = agenda_dir / "Backlog.md"
         backlog_path.write_text(markdown + "\n", encoding="utf-8")
-        return f"Backlog.md written."
+        return "Backlog.md written."
 
     def refresh_daily(self) -> str:
         """Manual refresh — called by user command."""

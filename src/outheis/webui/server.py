@@ -1224,6 +1224,7 @@ subprocess.run(start_cmd, env=env, check=False)
 
 @app.post("/api/update")
 async def update_package():
+    import json
     import shutil
     import subprocess
     import sys
@@ -1232,67 +1233,96 @@ async def update_package():
     from outheis.dispatcher.daemon import read_pid
 
     current_pid = read_pid()
+
+    # Resolve outheis binary: prefer sibling of current interpreter, fall back to PATH
     outheis_cmd = str(_Path(sys.executable).parent / "outheis")
     if not _Path(outheis_cmd).exists():
         outheis_cmd = shutil.which("outheis") or sys.argv[0]
 
     pipx_bin = shutil.which("pipx")
-    using_pipx = pipx_bin and ("pipx" in sys.executable or (
-        pipx_bin and subprocess.run(
+    using_pipx = bool(pipx_bin and ("pipx" in sys.executable or (
+        subprocess.run(
             [pipx_bin, "list", "--short"], capture_output=True, text=True,
         ).stdout.find("outheis") != -1
-    ))
+    )))
     if using_pipx:
         upgrade_cmd = [pipx_bin, "upgrade", "outheis"]
     else:
         upgrade_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", "outheis"]
 
-    pid_val = current_pid or 0
-    start_cmd_repr = repr([outheis_cmd, "start"])
-    upgrade_cmd_repr = repr(upgrade_cmd)
-    env_repr = repr(dict(os.environ))
+    log_path = str(_Path.home() / ".outheis" / "update.log")
 
-    script = f"""
-import os, time, signal, subprocess
+    # Pass data via JSON to avoid repr() serialisation issues with env values
+    payload = json.dumps({
+        "pid": current_pid or 0,
+        "upgrade_cmd": upgrade_cmd,
+        "start_cmd": [outheis_cmd, "start"],
+        "log_path": log_path,
+    })
 
-pid = {pid_val}
-upgrade_cmd = {upgrade_cmd_repr}
-start_cmd = {start_cmd_repr}
-env = {env_repr}
+    script = r"""
+import json, os, sys, time, signal, subprocess
+from pathlib import Path
 
+data = json.loads(sys.argv[1])
+pid          = data["pid"]
+upgrade_cmd  = data["upgrade_cmd"]
+start_cmd    = data["start_cmd"]
+log_path     = data["log_path"]
+
+Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+
+def log(msg):
+    with open(log_path, "a") as f:
+        f.write(msg + "\n")
+
+log(f"=== update started ===")
 time.sleep(1)
 
 if pid:
+    log(f"stopping daemon (pid {pid})")
     try:
         os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
-        pass
+        log("daemon already gone")
     for _ in range(20):
         time.sleep(0.5)
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
+            log("daemon stopped")
             break
 
-subprocess.run(upgrade_cmd, env=env, check=False)
+log(f"running: {upgrade_cmd}")
+r = subprocess.run(upgrade_cmd, capture_output=True, text=True)
+log(r.stdout[-2000:] if r.stdout else "(no stdout)")
+if r.returncode != 0:
+    log(f"upgrade failed (rc={r.returncode}): {r.stderr[-1000:]}")
+    sys.exit(1)
+log("upgrade ok")
+
 time.sleep(1)
-subprocess.run(start_cmd, env=env, check=False)
+log(f"running: {start_cmd}")
+r2 = subprocess.run(start_cmd, capture_output=True, text=True)
+if r2.returncode != 0:
+    log(f"start failed (rc={r2.returncode}): {r2.stderr[-1000:]}")
+else:
+    log("start ok")
 """
 
     subprocess.Popen(
-        [sys.executable, "-c", script],
+        [sys.executable, "-c", script, payload],
         start_new_session=True,
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env=dict(os.environ),
     )
 
     # Invalidate version cache so next check reflects new version
     _version_cache["ts"] = 0.0
     _version_cache["data"] = None
 
-    return {"status": "updating"}
+    return {"status": "updating", "log": log_path}
 
 
 # WebSocket

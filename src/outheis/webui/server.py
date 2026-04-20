@@ -346,6 +346,18 @@ async def save_config(config: dict):
     return {"status": "saved"}
 
 
+@app.get("/api/regions")
+async def get_regions():
+    """Return supported holiday regions derived from built-in REGIONS registry."""
+    from outheis.core.holidays._builtin import REGIONS
+    countries: dict[str, list[str]] = {}
+    for country, state in REGIONS:
+        countries.setdefault(country, [])
+        if state:
+            countries[country].append(state)
+    return {"regions": [{"country": c, "states": sorted(s)} for c, s in sorted(countries.items())]}
+
+
 # Files API
 def list_files(directory: Path, extension: str = ".md") -> list[dict]:
     if not directory.exists():

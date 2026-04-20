@@ -328,7 +328,7 @@ function switchConfigTab(tab) {
 async function renderConfigTab() {
   switch (currentTab) {
     case 'general':
-      renderConfigGeneral();
+      await renderConfigGeneral();
       break;
     case 'providers':
       renderConfigProviders();
@@ -345,7 +345,24 @@ async function renderConfigTab() {
   }
 }
 
-function renderConfigGeneral() {
+function _buildStateOptions(regionsData, country, selectedState) {
+  const region = (regionsData || []).find(r => r.country === country);
+  const states = region ? region.states : [];
+  const noneSelected = !selectedState ? 'selected' : '';
+  return `<option value="" ${noneSelected}>— country-wide —</option>` +
+    states.map(s => `<option value="${s}" ${selectedState === s ? 'selected' : ''}>${s}</option>`).join('');
+}
+
+function updateHolidaysStateDropdown() {
+  const country = document.getElementById('cfg-holidays-country')?.value || '';
+  const stateEl = document.getElementById('cfg-holidays-state');
+  if (stateEl) stateEl.innerHTML = _buildStateOptions(window._regionsData || [], country, '');
+}
+
+async function renderConfigGeneral() {
+  const regionsResp = await fetchAPI('/api/regions').catch(() => ({ regions: [] }));
+  const regionsData = regionsResp.regions || [];
+  window._regionsData = regionsData;
   viewContent.innerHTML = `
     <div class="scroll">
       <div class="card">
@@ -445,19 +462,26 @@ function renderConfigGeneral() {
 
       <div class="card">
         <div class="card-header"><span class="card-title">Holidays</span></div>
-        <div class="card-body">
+        <div class="card-body" id="holidays-card-body">
           <div class="form-row">
             <label class="form-label">Country</label>
             <div class="form-value">
-              <input type="text" id="cfg-holidays-country" value="${config.human?.holidays?.country || ''}" placeholder="e.g. DE — leave empty to disable">
-              <span class="form-hint">ISO 3166-1 alpha-2 country code. Leave empty to show no holidays.</span>
+              <select id="cfg-holidays-country" onchange="updateHolidaysStateDropdown()">
+                <option value="">— none —</option>
+                ${(regionsData || []).map(r =>
+                  `<option value="${r.country}" ${(config.human?.holidays?.country || '') === r.country ? 'selected' : ''}>${r.country}</option>`
+                ).join('')}
+              </select>
+              <span class="form-hint">Leave empty to show no holidays.</span>
             </div>
           </div>
           <div class="form-row">
             <label class="form-label">State / Region</label>
             <div class="form-value">
-              <input type="text" id="cfg-holidays-state" value="${config.human?.holidays?.state || ''}" placeholder="e.g. BY — optional">
-              <span class="form-hint">State or region code for local holidays and school holidays. Leave empty for country-wide only.</span>
+              <select id="cfg-holidays-state">
+                ${_buildStateOptions(regionsData, config.human?.holidays?.country || '', config.human?.holidays?.state || '')}
+              </select>
+              <span class="form-hint">State or region for local holidays and school holidays. Leave empty for country-wide only.</span>
             </div>
           </div>
         </div>

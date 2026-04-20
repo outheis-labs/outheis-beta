@@ -473,9 +473,13 @@ class AgendaAgent(BaseAgent):
                     lang = _lc().human.language[:2].lower()
                 except Exception:
                     lang = "de"
+                from outheis.core.holidays import get_day_label as _get_day_label
+                from outheis.core.config import load_config as _lc2
                 dt = date.fromisoformat(d)
                 wday = _WDAYS.get(lang, _WDAYS["en"])[dt.weekday()]
-                return f"{wday}, {dt.strftime('%d.%m.%Y')}"
+                _h = _lc2().human.holidays
+                label = _get_day_label(dt, wday, _h.country, _h.state)
+                return f"{label}, {dt.strftime('%d.%m.%Y')}"
             except Exception as e:
                 return f"Error: {e}"
 
@@ -737,6 +741,10 @@ class AgendaAgent(BaseAgent):
         lbl = AGENDA_LABELS.get(lang, AGENDA_LABELS["en"])
 
         weekday = wdays[today_d.weekday()]
+        from outheis.core.holidays import get_day_label, get_schulferien
+        _hcfg = load_config().human.holidays
+        _country, _state = _hcfg.country, _hcfg.state
+        day_label = get_day_label(today_d, weekday, _country, _state)
         date_str = today_d.strftime("%d.%m.%Y")
         timestamp = now.strftime("%H:%M")
 
@@ -745,8 +753,12 @@ class AgendaAgent(BaseAgent):
 
         # Structural scaffold only — content is filled by the LLM (cato).
         # Code's job: correct date, week number, section headers, personal carryover.
+        # Schulferien info line (only shown when state is configured)
+        schulferien = get_schulferien(today_d, _country, _state)
+        schulferien_note = f"*(Schulferien: {schulferien})*" if schulferien else ""
+
         lines = [
-            f"## ⛅ {weekday}, {date_str}",
+            f"## ⛅ {day_label}, {date_str}",
             f"*{lbl['week']} {week_num} / {lbl['generated']}: {timestamp}*",
             "",
             "---",
@@ -774,9 +786,12 @@ class AgendaAgent(BaseAgent):
         else:
             lines.append("- [ ] ")
 
+        today_extra = [schulferien_note] if schulferien_note else []
+
         lines += [
             "", "---", "",
             f"## 📅 {lbl['today_hdr']}", "",
+            *today_extra,
             lbl["empty_today"], "",
             "---", "",
             f"## 🗓️ {lbl['week_hdr']}", "",

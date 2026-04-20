@@ -83,6 +83,13 @@ def get_archive_dir() -> Path:
 # =============================================================================
 
 @dataclass
+class HolidaysConfig:
+    """Holiday display configuration."""
+    country: str = ""  # ISO 3166-1 alpha-2, e.g. "DE". Empty = no holidays shown.
+    state: str = ""    # ISO 3166-2 subdivision, e.g. "BY". Empty = country-level only.
+
+
+@dataclass
 class HumanConfig:
     """Human (administrator) configuration."""
     name: str = "Human"
@@ -90,6 +97,7 @@ class HumanConfig:
     language: str = "en"
     timezone: str = "Europe/Berlin"
     vault: list[str] = field(default_factory=lambda: ["~/Documents/Vault"])
+    holidays: HolidaysConfig = field(default_factory=HolidaysConfig)
 
     def primary_vault(self) -> Path:
         """Get primary vault path. Respects OUTHEIS_VAULT env var."""
@@ -431,12 +439,17 @@ def load_config() -> Config:
     else:
         phone_list = phone_raw or []
     
+    holidays_data = human_data.get("holidays", {})
     human = HumanConfig(
         name=human_data.get("name", "Human"),
         phone=phone_list,
         language=human_data.get("language", "en"),
         timezone=human_data.get("timezone", "Europe/Berlin"),
         vault=human_data.get("vault", ["~/Documents/Vault"]),
+        holidays=HolidaysConfig(
+            country=holidays_data.get("country", ""),
+            state=holidays_data.get("state", ""),
+        ),
     )
 
     # Signal

@@ -21,65 +21,65 @@ def _current_and_next_two_years() -> list[int]:
 
 
 # ---------------------------------------------------------------------------
-# Feiertage coverage — all regions, 2 years ahead
+# holidays coverage — all regions, 2 years ahead
 # ---------------------------------------------------------------------------
 
-class TestFeiertageCoverage:
+class TestHolidayCoverage:
 
-    def test_all_regions_have_feiertage_callable(self):
-        """Every region must supply a feiertage callable."""
+    def test_all_regions_have_holidays_callable(self):
+        """Every region must supply a holidays callable."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            assert callable(region.get("feiertage")), (
-                f"Region {key} is missing a 'feiertage' callable"
+            assert callable(region.get("holidays")), (
+                f"Region {key} is missing a 'holidays' callable"
             )
 
-    def test_feiertage_returns_nonempty_dict_for_each_year(self):
-        """feiertage(year) must return at least one holiday for current+2 years."""
+    def test_holidays_returns_nonempty_dict_for_each_year(self):
+        """holidays(year) must return at least one holiday for current+2 years."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            fn = region["feiertage"]
+            fn = region["holidays"]
             for year in _current_and_next_two_years():
                 result = fn(year)
                 assert isinstance(result, dict), (
-                    f"Region {key}: feiertage({year}) did not return a dict"
+                    f"Region {key}: holidays({year}) did not return a dict"
                 )
                 assert len(result) > 0, (
-                    f"Region {key}: feiertage({year}) returned an empty dict — "
+                    f"Region {key}: holidays({year}) returned an empty dict — "
                     f"holiday data missing for year {year}"
                 )
 
-    def test_feiertage_keys_are_date_objects(self):
-        """All keys returned by feiertage() must be date objects."""
+    def test_holidays_keys_are_date_objects(self):
+        """All keys returned by holidays() must be date objects."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            fn = region["feiertage"]
+            fn = region["holidays"]
             for year in _current_and_next_two_years():
                 for d in fn(year).keys():
                     assert isinstance(d, date), (
-                        f"Region {key}: feiertage({year}) contains non-date key {d!r}"
+                        f"Region {key}: holidays({year}) contains non-date key {d!r}"
                     )
 
-    def test_feiertage_values_are_nonempty_strings(self):
-        """All values returned by feiertage() must be non-empty strings."""
+    def test_holidays_values_are_nonempty_strings(self):
+        """All values returned by holidays() must be non-empty strings."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            fn = region["feiertage"]
+            fn = region["holidays"]
             for year in _current_and_next_two_years():
                 for d, name in fn(year).items():
                     assert isinstance(name, str) and name.strip(), (
-                        f"Region {key}: feiertage({year})[{d}] is not a non-empty string"
+                        f"Region {key}: holidays({year})[{d}] is not a non-empty string"
                     )
 
-    def test_feiertage_dates_fall_in_correct_year(self):
-        """All dates returned by feiertage(year) must belong to that year."""
+    def test_holidays_dates_fall_in_correct_year(self):
+        """All dates returned by holidays(year) must belong to that year."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            fn = region["feiertage"]
+            fn = region["holidays"]
             for year in _current_and_next_two_years():
                 for d in fn(year).keys():
                     assert d.year == year, (
-                        f"Region {key}: feiertage({year}) contains date {d} "
+                        f"Region {key}: holidays({year}) contains date {d} "
                         f"which belongs to year {d.year}, not {year}"
                     )
 
@@ -88,22 +88,22 @@ class TestFeiertageCoverage:
 # Schulferien — presence check only for current year (not coverage guarantee)
 # ---------------------------------------------------------------------------
 
-class TestSchulferienStructure:
+class TestSchoolHolidayStructure:
 
-    def test_schulferien_is_dict(self):
-        """schulferien must be a dict (year → list of tuples)."""
+    def test_school_holidays_is_dict(self):
+        """school_holidays must be a dict (year → list of tuples)."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            sf = region.get("schulferien", {})
-            assert isinstance(sf, dict), (
-                f"Region {key}: 'schulferien' must be a dict, got {type(sf)}"
+            sh = region.get("school_holidays", {})
+            assert isinstance(sh, dict), (
+                f"Region {key}: 'school_holidays' must be a dict, got {type(sh)}"
             )
 
-    def test_schulferien_entries_are_valid_tuples(self):
-        """Each Schulferien entry must be (date, date, str) with start <= end."""
+    def test_school_holiday_entries_are_valid_tuples(self):
+        """Each school holiday entry must be (date, date, str) with start <= end."""
         from outheis.core.holidays._builtin import REGIONS
         for key, region in REGIONS.items():
-            for year, periods in region.get("schulferien", {}).items():
+            for year, periods in region.get("school_holidays", {}).items():
                 for entry in periods:
                     assert len(entry) == 3, (
                         f"Region {key} year {year}: entry {entry!r} must have 3 elements"
@@ -127,34 +127,34 @@ class TestSchulferienStructure:
 # get_feiertag public API
 # ---------------------------------------------------------------------------
 
-class TestGetFeiertag:
+class TestGetHoliday:
 
     def test_returns_none_when_no_country(self):
-        from outheis.core.holidays import get_feiertag
-        assert get_feiertag(date(2026, 1, 1), "", "") is None
+        from outheis.core.holidays import get_holiday
+        assert get_holiday(date(2026, 1, 1), "", "") is None
 
     def test_returns_name_for_known_holiday(self):
-        from outheis.core.holidays import get_feiertag
+        from outheis.core.holidays import get_holiday
         # Neujahr is always 1 January for DE
-        result = get_feiertag(date(2026, 1, 1), "DE", "")
+        result = get_holiday(date(2026, 1, 1), "DE", "")
         assert result == "Neujahr"
 
     def test_returns_none_for_non_holiday(self):
-        from outheis.core.holidays import get_feiertag
+        from outheis.core.holidays import get_holiday
         # A random mid-week date unlikely to be a holiday
-        result = get_feiertag(date(2026, 3, 4), "DE", "")
+        result = get_holiday(date(2026, 3, 4), "DE", "")
         assert result is None
 
     def test_state_specific_holiday_visible_with_state(self):
-        from outheis.core.holidays import get_feiertag
+        from outheis.core.holidays import get_holiday
         # Heilige Drei Koenige (Jan 6) is only in Bayern (BY), not federal DE  # noqa: i18n
-        result_federal = get_feiertag(date(2026, 1, 6), "DE", "")
-        result_by = get_feiertag(date(2026, 1, 6), "DE", "BY")
+        result_federal = get_holiday(date(2026, 1, 6), "DE", "")
+        result_by = get_holiday(date(2026, 1, 6), "DE", "BY")
         assert result_federal is None
         assert result_by is not None
 
     def test_unknown_region_returns_none(self):
-        from outheis.core.holidays import get_feiertag
-        result = get_feiertag(date(2026, 12, 25), "XX", "YY")
+        from outheis.core.holidays import get_holiday
+        result = get_holiday(date(2026, 12, 25), "XX", "YY")
         # No data for XX → falls back to country-only XX → also None
         assert result is None

@@ -4,7 +4,7 @@ Holiday lookup for Agenda.md scaffold and get_weekday tool.
 Behaviour:
   country=""             → nothing shown (no config = no holidays)
   country="DE", state="" → federal DE holidays only, no school holidays
-  country="DE", state="BY" → federal + Bayern + Bayern Schulferien
+  country="DE", state="BY" → federal + Bayern + Bayern school holidays
 
 User overrides: place ~/.outheis/human/holidays/DE-BY.md (or DE.md)
 to add custom holidays.  Format: one entry per line: YYYY-MM-DD Name
@@ -54,7 +54,7 @@ def _load_user_overrides(country: str, state: str) -> dict[date, str]:
 # PUBLIC API
 # =============================================================================
 
-def get_feiertag(d: date, country: str, state: str) -> str | None:
+def get_holiday(d: date, country: str, state: str) -> str | None:
     """
     Return the public holiday name for date d, or None.
     Returns None if country is empty (no holidays configured).
@@ -72,12 +72,12 @@ def get_feiertag(d: date, country: str, state: str) -> str | None:
     for key in ((country, state), (country, "")):
         region = REGIONS.get(key)
         if region:
-            return region["feiertage"](d.year).get(d)
+            return region["holidays"](d.year).get(d)
 
     return None
 
 
-def get_schulferien(d: date, country: str, state: str) -> str | None:
+def get_school_holiday(d: date, country: str, state: str) -> str | None:
     """
     Return the school holiday name if d falls within a holiday period, or None.
     Only available when state is configured (school holidays are state-specific).
@@ -89,9 +89,9 @@ def get_schulferien(d: date, country: str, state: str) -> str | None:
     if not region:
         return None
 
-    schulferien = region.get("schulferien", {})
+    school_holidays = region.get("school_holidays", {})
     for year in (d.year, d.year - 1):
-        for start, end, name in schulferien.get(year, []):
+        for start, end, name in school_holidays.get(year, []):
             if start <= d <= end:
                 return name
 
@@ -100,8 +100,8 @@ def get_schulferien(d: date, country: str, state: str) -> str | None:
 
 def get_day_label(d: date, weekday_name: str, country: str, state: str) -> str:
     """
-    Return the display label for the Agenda.md ⛅ header line.
-    Feiertag name replaces weekday name; plain weekday if no holiday.
+    Return the display label for the Agenda.md header line.
+    Holiday name replaces weekday name; plain weekday if no holiday.
     """
-    feiertag = get_feiertag(d, country, state)
-    return feiertag if feiertag else weekday_name
+    holiday = get_holiday(d, country, state)
+    return holiday if holiday else weekday_name

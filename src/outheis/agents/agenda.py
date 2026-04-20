@@ -279,18 +279,19 @@ class AgendaAgent(BaseAgent):
             "- **NEVER place in the Personal section (🧘)** unless the user explicitly names it.",
             "  Personal is for recurring habits only — not for tasks or reminders.",
             "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
-            "- **Date = today** → add plain line to Today (📅) AND a tagged entry (`#date-YYYY-MM-DD`) to Shadow.md.",
-            "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry (`#date-YYYY-MM-DD`) to Shadow.md.",
-            "- **Date = beyond this week** → add tagged entry (`#date-YYYY-MM-DD`) to Shadow.md only.",
-            "  The item will appear in Agenda.md automatically when due.",
-            "- **Weekday named without year context** → resolve to the next occurrence from today",
-            "  and apply the rule above.",
+            "- **Date = today** → add plain line to Today (📅) AND a tagged entry to Shadow.md.",
+            "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry to Shadow.md.",
+            "- **Date = beyond this week** → add tagged entry to Shadow.md only. It will appear in Agenda.md when due.",
+            "- **Weekday named without year context** → resolve to the next occurrence from today and apply the rule above.",
             "- **Recurring items** (e.g. 'every Wednesday', 'weekly', 'jeden Mittwoch'):",
             "  → add a `#recurring-[day]` entry to Shadow.md only. Do NOT add to Agenda.md.",
-            "  → The item will appear in Today automatically on the relevant weekday.",
-            "  → day codes: mo=Montag, di=Dienstag, mi=Mittwoch, do=Donnerstag, fr=Freitag, sa=Samstag, so=Sonntag.",
-            "  → Example: 'Leichtathletik jeden Mittwoch 16:00' → Shadow.md entry: `#recurring-mi` / `Leichtathletik 16:00`",
+            "  → day codes: mo di mi do fr sa so.",
             "  → Do NOT add a checkbox — recurring items in Agenda.md are plain lines.",
+            "",
+            "Shadow.md entry format (mandatory for all writes):",
+            "  Line 1: #date-YYYY-MM-DD   (or #action-required, or #recurring-[day])",
+            "  Line 2: plain description",
+            "  Blank line between entries. Never put tag and description on the same line.",
             "",
             "## Memory proposals from annotations",
             "After processing a `>` annotation, call propose_memory if the annotation reveals",
@@ -1239,6 +1240,16 @@ class AgendaAgent(BaseAgent):
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"
             "6. Future items the user entered directly into Agenda.md: if an item has a date beyond this week or is clearly a future appointment, add it to Shadow.md (as a new dated item) and remove it from Agenda.md. It will reappear via Shadow.md when due.\n"
+            "\n"
+            "SHADOW.MD FORMAT — mandatory whenever you write Shadow.md (rule 6 or rule 7):\n"
+            "  Every entry is exactly two lines, blank line between entries:\n"
+            "    Line 1 (tags only):  #date-YYYY-MM-DD  OR  #action-required  (plus optional extra tags)\n"
+            "    Line 2 (text only):  plain description, self-contained\n"
+            "  The <!-- BEGIN: filename.md --> / <!-- END: filename.md --> section markers from the\n"
+            "  data agent MUST be preserved exactly — do NOT remove or reformat them.\n"
+            "  NEVER write plain-text lines without a tag line above them.\n"
+            "  NEVER merge the tag and description onto one line.\n"
+            "\n"
             "7. Process `>` annotations — BATCH EXECUTION in ONE step:\n"
             "   Identify ALL annotations. Then emit all tool calls in a single response:\n"
             "   a) ONE write_file(file='shadow') with ALL Shadow.md changes at once:\n"

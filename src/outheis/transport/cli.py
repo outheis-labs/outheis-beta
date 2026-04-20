@@ -46,7 +46,7 @@ class CLITransport:
     def check_for_response(self, message_id: str) -> Message | None:
         """
         Check once for a response to a message.
-        
+
         Non-blocking single check.
         """
         messages = read_last_n(self.queue_path, 10)

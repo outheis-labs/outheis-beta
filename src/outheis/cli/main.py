@@ -37,21 +37,13 @@ def init() -> None:
     """Interactive setup wizard for outheis."""
     import os
     import shutil
-    import subprocess
-    from datetime import date, timedelta
 
     from outheis.core.config import (
         Config,
         HumanConfig,
         SignalConfig,
-        AllowedContact,
-        LLMConfig,
         ProviderConfig,
-        ModelConfig,
-        AgentConfig,
-        UpdatesConfig,
         get_config_path,
-        get_human_dir,
         load_config,
         save_config,
         init_directories,
@@ -270,7 +262,7 @@ def _validate_anthropic_key(api_key: str) -> bool:
 
 def _build_agenda_scaffold(language: str) -> str:
     """Build a correctly structured empty Agenda.md for the given language."""
-    from datetime import date, timedelta
+    from datetime import date
     from outheis.core.i18n import AGENDA_LABELS, WEEKDAYS
 
     lang = language[:2].lower()
@@ -332,27 +324,27 @@ def _check_signal_registration(phone: str) -> bool:
 def _register_signal(phone: str) -> bool:
     """Register a phone number with signal-cli."""
     import subprocess
-    
+
     typer.echo(f"\nRegistering {phone} with Signal...")
     typer.echo("Signal will send an SMS with a verification code.\n")
-    
+
     use_voice = typer.confirm("Use voice call instead of SMS?", default=False)
-    
+
     try:
         # Request verification
         cmd = ["signal-cli", "-a", phone, "register"]
         if use_voice:
             cmd.append("--voice")
-        
+
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        
+
         if result.returncode != 0:
             typer.echo(f"Error: {result.stderr}")
             return False
-        
+
         # Get code from user
         code = typer.prompt("Enter verification code")
-        
+
         # Verify
         result = subprocess.run(
             ["signal-cli", "-a", phone, "verify", code],
@@ -360,14 +352,14 @@ def _register_signal(phone: str) -> bool:
             text=True,
             timeout=30,
         )
-        
+
         if result.returncode == 0:
             typer.echo("✓ Registration successful!")
             return True
         else:
             typer.echo(f"Error: {result.stderr}")
             return False
-            
+
     except subprocess.TimeoutExpired:
         typer.echo("Timeout — try again later")
         return False
@@ -562,7 +554,7 @@ def send(
     """Send a message and wait for response."""
     import sys
     import time
-    
+
     from outheis.dispatcher.daemon import daemon_status
     from outheis.transport.cli import CLITransport
 
@@ -580,7 +572,7 @@ def send(
     start = time.time()
     spinner = ['⡀', '⡄', '⡆', '⡇', '⣇', '⣧', '⣷', '⣿', '⣾', '⣼', '⣸', '⣰', '⣠', '⣀', '⢀', ' ']
     spinner_idx = 0
-    
+
     while time.time() - start < timeout:
         # Check for response
         response = transport.check_for_response(msg.id)
@@ -588,7 +580,7 @@ def send(
             # Clear spinner line
             sys.stdout.write('\r' + ' ' * 40 + '\r')
             sys.stdout.flush()
-            
+
             # Display response
             text = response.payload.get('text') or response.payload.get('answer', '')
             if response.payload.get('error'):
@@ -596,14 +588,14 @@ def send(
             else:
                 typer.echo(text)
             return
-        
+
         # Show spinner with elapsed time
         elapsed = int(time.time() - start)
         sys.stdout.write(f'\r{spinner[spinner_idx]} Waiting for response... ({elapsed}s)')
         sys.stdout.flush()
         spinner_idx = (spinner_idx + 1) % len(spinner)
         time.sleep(0.3)
-    
+
     # Timeout
     sys.stdout.write('\r' + ' ' * 40 + '\r')
     sys.stdout.flush()
@@ -625,7 +617,7 @@ def chat() -> None:
 
     # Configure readline for history
     readline.set_history_length(10)
-    
+
     typer.echo("outheis CLI (type 'exit' to quit)")
     typer.echo("-" * 40)
 
@@ -816,12 +808,12 @@ def pattern_seed(
     from outheis.core.config import get_human_dir
 
     seed_dir = get_human_dir() / "memory" / "seed"
-    
+
     if not seed_dir.exists():
         typer.echo(f"No seed directory: {seed_dir}")
         typer.echo("Create it and add .json files to migrate memory.")
         return
-    
+
     # Count unprocessed files
     files = [f for f in seed_dir.glob("*.json") if not f.name.startswith("x-")]
     if not files:
@@ -851,7 +843,7 @@ def pattern_apply() -> None:
     from outheis.core.config import get_human_dir
 
     staging = get_human_dir() / "memory" / "seed.json"
-    
+
     if not staging.exists():
         typer.echo("No staging file found. Run 'outheis pattern seed' first.")
         return
@@ -899,32 +891,32 @@ def memory(
 ) -> None:
     """View and manage persistent memory."""
     from outheis.core.memory import get_memory_store
-    
+
     store = get_memory_store()
-    
+
     if add:
         # Parse "type:content" format
         if ":" not in add:
             typer.echo("Format: --add 'type:content' (type = user/feedback/context)")
             raise typer.Exit(1)
-        
+
         memory_type, content = add.split(":", 1)
         memory_type = memory_type.strip().lower()
         content = content.strip()
-        
+
         if memory_type not in ["user", "feedback", "context"]:
             typer.echo(f"Invalid type: {memory_type}. Use user/feedback/context.")
             raise typer.Exit(1)
-        
+
         store.add(content, memory_type)
         typer.echo(f"Added to {memory_type}: {content}")
         return
-    
+
     if clear:
         if clear not in ["user", "feedback", "context", "all"]:
             typer.echo("Use: --clear user/feedback/context/all")
             raise typer.Exit(1)
-        
+
         if clear == "all":
             for mt in ["user", "feedback", "context"]:
                 store.clear(mt)
@@ -933,11 +925,11 @@ def memory(
             store.clear(clear)
             typer.echo(f"Cleared {clear} memory.")
         return
-    
+
     # Show memory
     typer.echo("Memory")
     typer.echo("-" * 40)
-    
+
     for memory_type in ["user", "feedback", "context"]:
         entries = store.get(memory_type)
         typer.echo(f"\n[{memory_type}] ({len(entries)} entries)")
@@ -956,10 +948,10 @@ def memory(
                     markers.append(f"↓{days_left}d")
                 else:
                     markers.append("expired")
-            
+
             status = f" [{', '.join(markers)}]" if markers else ""
             typer.echo(f"  {i+1}. {entry.content}{status}")
-    
+
     typer.echo()
 
 
@@ -973,25 +965,24 @@ def rules(
     from outheis.agents.loader import (
         get_system_rules_dir,
         get_user_rules_dir,
-        list_user_rules,
     )
-    
+
     system_dir = get_system_rules_dir()
     user_dir = get_user_rules_dir()
-    
+
     agents = ["common", "relay", "data", "agenda", "action", "pattern"]
-    
+
     if agent:
         if agent not in agents:
             typer.echo(f"Unknown agent: {agent}. Use: {', '.join(agents)}")
             raise typer.Exit(1)
         agents = [agent]
-    
+
     for ag in agents:
         typer.echo(f"\n{'='*40}")
         typer.echo(f"[{ag}]")
         typer.echo('='*40)
-        
+
         # System rules
         if not user_only:
             system_file = system_dir / f"{ag}.md"
@@ -1005,7 +996,7 @@ def rules(
                     typer.echo(content)
             else:
                 typer.echo("\n## System Rules: (none)")
-        
+
         # User rules
         if not system_only:
             user_file = user_dir / f"{ag}.md"
@@ -1014,7 +1005,7 @@ def rules(
                 typer.echo(user_file.read_text())
             else:
                 typer.echo("\n## User Rules: (none yet)")
-    
+
     typer.echo()
 
 
@@ -1032,7 +1023,7 @@ def _get_cli_source() -> "TaskSource":
     import socket
     from datetime import datetime
     from outheis.agents.tasks.base import TaskSource
-    
+
     return TaskSource(
         timestamp=datetime.now(),
         interface="cli",
@@ -1045,22 +1036,22 @@ def _get_cli_source() -> "TaskSource":
 def task_list() -> None:
     """List all registered tasks."""
     from outheis.agents.tasks import get_registry
-    
+
     registry = get_registry()
-    
+
     if not registry.tasks:
         typer.echo("No tasks registered.")
         typer.echo("\nAdd a task with: outheis task add <instruction>")
         return
-    
+
     typer.echo(f"\n{'ID':<20} {'Name':<25} {'Schedule':<15} {'Next Run':<20}")
     typer.echo("-" * 80)
-    
+
     for task in registry.tasks.values():
         next_run = task.next_run.strftime("%Y-%m-%d %H:%M") if task.next_run else "—"
         status = "✓" if task.enabled else "✗"
         typer.echo(f"{status} {task.id:<18} {task.name:<25} {task.schedule.value:<15} {next_run:<20}")
-    
+
     typer.echo()
 
 
@@ -1074,28 +1065,28 @@ def task_add(
     from datetime import datetime
     from outheis.agents.tasks import get_registry
     from outheis.agents.tasks.news import create_sz_task
-    
+
     # For now, only SZ headlines task is supported
     # TODO: Parse instruction and create appropriate task type
-    
+
     if "sz" in instruction.lower() or "sueddeutsche" in instruction.lower() or "headlines" in instruction.lower():
         # Create SZ headlines task
         if not task_id:
             task_id = f"sz-headlines-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-        
+
         time_list = [t.strip() for t in times.split(",")]
         source = _get_cli_source()
-        
+
         task = create_sz_task(
             task_id=task_id,
             times=time_list,
             source=source,
             instruction=instruction,
         )
-        
+
         registry = get_registry()
         registry.add(task)
-        
+
         typer.echo(f"✓ Task '{task.name}' created")
         typer.echo(f"  ID: {task.id}")
         typer.echo(f"  Schedule: {task.schedule.value} at {', '.join(task.times)}")
@@ -1113,23 +1104,23 @@ def task_run(
 ) -> None:
     """Run a task immediately."""
     from outheis.agents.tasks import get_registry
-    
+
     registry = get_registry()
     task = registry.get(task_id)
-    
+
     if not task:
         typer.echo(f"✗ Task not found: {task_id}")
         raise typer.Exit(1)
-    
+
     typer.echo(f"Running '{task.name}'...")
-    
+
     result = task.execute()
-    
+
     if result.success:
         typer.echo(f"✓ Success")
         typer.echo("\nOutput:")
         typer.echo(task.format_for_agenda(result))
-        
+
         # Save to history
         registry.mark_completed(task, result)
     else:
@@ -1144,20 +1135,20 @@ def task_remove(
 ) -> None:
     """Remove a task."""
     from outheis.agents.tasks import get_registry
-    
+
     registry = get_registry()
     task = registry.get(task_id)
-    
+
     if not task:
         typer.echo(f"✗ Task not found: {task_id}")
         raise typer.Exit(1)
-    
+
     if not force:
         confirm = typer.confirm(f"Remove task '{task.name}'?")
         if not confirm:
             typer.echo("Cancelled.")
             raise typer.Exit(0)
-    
+
     registry.remove(task_id)
     typer.echo(f"✓ Task '{task_id}' removed")
 
@@ -1168,14 +1159,14 @@ def task_show(
 ) -> None:
     """Show task details."""
     from outheis.agents.tasks import get_registry
-    
+
     registry = get_registry()
     task = registry.get(task_id)
-    
+
     if not task:
         typer.echo(f"✗ Task not found: {task_id}")
         raise typer.Exit(1)
-    
+
     # Print directive.md content
     directive_path = task.get_task_dir() / "directive.md"
     if directive_path.exists():
@@ -1196,24 +1187,24 @@ app.add_typer(memory_app, name="memory")
 def memory_show() -> None:
     """Show all memory entries."""
     from outheis.core.memory import get_memory_store
-    
+
     store = get_memory_store()
     all_memory = store.get_all()
-    
+
     for memory_type in ["user", "feedback", "context"]:
         entries = all_memory.get(memory_type, [])
         typer.echo(f"\n## {memory_type.title()} ({len(entries)} entries)")
-        
+
         if not entries:
             typer.echo("  (none)")
             continue
-        
+
         for i, entry in enumerate(entries):
             explicit = "!" if entry.is_explicit else " "
             typer.echo(f"  {i+1}. {explicit} {entry.content}")
             if entry.decay_days:
                 typer.echo(f"      (expires in {entry.decay_days} days)")
-    
+
     typer.echo()
 
 
@@ -1221,12 +1212,12 @@ def memory_show() -> None:
 def memory_analyze() -> None:
     """Analyze recent conversations and extract memory."""
     from outheis.agents.pattern import create_pattern_agent
-    
+
     typer.echo("Analyzing recent conversations...")
-    
+
     agent = create_pattern_agent()
     count = agent.run_scheduled()
-    
+
     if count:
         typer.echo(f"✓ Extracted {count} new memory entries")
     else:
@@ -1239,15 +1230,15 @@ def memory_add(
     memory_type: str = typer.Option("user", "--type", "-t", help="Memory type: user, feedback, context"),
 ) -> None:
     """Add a memory entry manually."""
-    from outheis.core.memory import get_memory_store, MemoryType
-    
+    from outheis.core.memory import get_memory_store
+
     if memory_type not in ["user", "feedback", "context"]:
         typer.echo(f"Invalid type: {memory_type}. Use: user, feedback, context")
         raise typer.Exit(1)
-    
+
     store = get_memory_store()
     store.add(content, memory_type, is_explicit=True)
-    
+
     typer.echo(f"✓ Added to {memory_type}: {content}")
 
 
@@ -1258,19 +1249,19 @@ def memory_clear(
 ) -> None:
     """Clear memory entries."""
     from outheis.core.memory import get_memory_store
-    
+
     if memory_type not in ["user", "feedback", "context", "all"]:
         typer.echo(f"Invalid type: {memory_type}")
         raise typer.Exit(1)
-    
+
     if not force:
         confirm = typer.confirm(f"Clear {memory_type} memory?")
         if not confirm:
             typer.echo("Cancelled.")
             raise typer.Exit(0)
-    
+
     store = get_memory_store()
-    
+
     if memory_type == "all":
         for mt in ["user", "feedback", "context"]:
             store.clear(mt)

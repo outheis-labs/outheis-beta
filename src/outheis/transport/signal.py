@@ -21,39 +21,39 @@ from outheis.transport.signal_rpc import SignalRPC, SignalMessage
 class SignalTransport(Transport):
     """
     Signal Messenger transport.
-    
+
     Runs two threads:
     - Main thread: receives Signal messages, writes to queue
     - Watcher thread: monitors queue for responses, sends back via Signal
     """
-    
+
     name = "signal"
-    
+
     def __init__(self, config: Config):
         """
         Args:
             config: outheis configuration
         """
         self.config = config
-        
+
         # Validate config
         if not config.signal or not config.signal.bot_phone:
             raise ValueError("signal.bot_phone not configured")
         if not config.human.phone:
             raise ValueError("human.phone not configured")
-        
+
         self.bot_phone = config.signal.bot_phone
-        
+
         # Build allowed phones: human phones + signal.allowed
         self.allowed_phones: dict[str, str] = {}  # phone -> name
         for phone in config.human.phone:
             self.allowed_phones[phone] = config.human.name
         for contact in config.signal.allowed:
             self.allowed_phones[contact.phone] = contact.name
-        
+
         # Load learned UUIDs from persistent storage
         self.known_uuids: dict[str, str] = self._load_known_uuids()  # phone -> uuid
-        
+
         self.rpc = SignalRPC(self.bot_phone)
         self.queue_path = get_messages_path()
 
@@ -63,19 +63,19 @@ class SignalTransport(Transport):
         # Pending responses: {message_id: sender_uuid}
         self.pending: dict[str, str] = {}
         self._lock = threading.Lock()
-        
+
         # Watcher thread control
         self._watching = False
         self._watcher_thread: threading.Thread | None = None
-        
+
         # Optional: Whisper for voice — loaded lazily in run() to avoid blocking startup
         self.whisper_model = None
-    
+
     def _get_signal_state_path(self) -> Path:
         """Get path to signal state file."""
         from outheis.core.config import get_human_dir
         return get_human_dir() / "signal.json"
-    
+
     def _load_known_uuids(self) -> dict[str, str]:
         """Load known phone->UUID mappings from persistent storage."""
         import json
@@ -93,7 +93,7 @@ class SignalTransport(Transport):
             except Exception:
                 pass
         return {}
-    
+
     def _save_known_uuids(self) -> None:
         """Save phone->UUID mappings to persistent storage."""
         import json
@@ -101,7 +101,7 @@ class SignalTransport(Transport):
         path.parent.mkdir(parents=True, exist_ok=True)
         data = {"known_uuids": self.known_uuids}
         path.write_text(json.dumps(data, indent=2))
-    
+
     def _init_whisper(self) -> None:
         """Initialize Whisper for voice transcription (optional)."""
         try:
@@ -111,13 +111,13 @@ class SignalTransport(Transport):
             print("✓ Whisper loaded", flush=True)
         except ImportError:
             print("ℹ️  Whisper not available (install faster-whisper for voice)", flush=True)  # noqa: i18n — info symbol
-    
+
     def _is_allowed(self, msg: SignalMessage) -> bool:
         """Check if sender is allowed (human.phone + signal.allowed)."""
         # Check if UUID is in known mappings
         if msg.sender_uuid in self.known_uuids.values():
             return True
-        
+
         # Check phone number — learn and save UUID
         if msg.sender_phone and msg.sender_phone in self.allowed_phones:
             self.known_uuids[msg.sender_phone] = msg.sender_uuid
@@ -125,7 +125,7 @@ class SignalTransport(Transport):
             name = self.allowed_phones[msg.sender_phone]
             print(f"📝 Learned UUID for {name} ({msg.sender_phone}): {msg.sender_uuid[:8]}...", flush=True)
             return True
-        
+
         # First-time setup: no UUIDs known yet, accept first message
         # Only if it could be the human (we don't know which phone they're using)
         if not self.known_uuids and msg.sender_uuid:
@@ -135,22 +135,22 @@ class SignalTransport(Transport):
             self._save_known_uuids()
             print(f"📝 First contact — saved UUID: {msg.sender_uuid[:8]}...", flush=True)
             return True
-        
+
         return False
-    
+
     def _transcribe_voice(self, audio_data: bytes) -> str | None:
         """Transcribe voice message with Whisper."""
         if not self.whisper_model:
             return None
-        
+
         import tempfile
-        
+
         try:
             # Write to temp file
             with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
                 f.write(audio_data)
                 temp_path = f.name
-            
+
             # Transcribe
             whisper_lang = self.config.human.language[:2].lower() if self.config.human.language else None
             segments, _ = self.whisper_model.transcribe(
@@ -158,18 +158,18 @@ class SignalTransport(Transport):
                 language=whisper_lang,
                 beam_size=5,
             )
-            
+
             text = " ".join(s.text.strip() for s in segments)
-            
+
             # Cleanup
             Path(temp_path).unlink(missing_ok=True)
-            
+
             return text if text else None
-            
+
         except Exception as e:
             print(f"⚠️ Transcription error: {e}", flush=True)
             return None
-    
+
     def send(self, text: str) -> Message:
         """Create and queue a user message."""
         msg = create_user_message(
@@ -179,14 +179,14 @@ class SignalTransport(Transport):
         )
         append(self.queue_path, msg)
         return msg
-    
+
     def wait_for_response(self, message_id: str, timeout: float = 30.0) -> Message | None:
         """Wait for a response (used internally by watcher)."""
         start = time.time()
-        
+
         while time.time() - start < timeout:
             messages = read_last_n(self.queue_path, 20)
-            
+
             for msg in messages:
                 if (
                     msg.reply_to == message_id
@@ -194,11 +194,11 @@ class SignalTransport(Transport):
                     and msg.from_agent
                 ):
                     return msg
-            
+
             time.sleep(0.5)
-        
+
         return None
-    
+
     @staticmethod
     def _strip_markdown(text: str) -> str:
         """Remove markdown markup, preserve structure, emojis, and content."""
@@ -277,25 +277,25 @@ class SignalTransport(Transport):
                     if not is_interim:
                         with self._lock:
                             self.pending.pop(msg.reply_to, None)
-    
+
     def _handle_message(self, msg: SignalMessage) -> None:
         """Handle incoming Signal message."""
         # Check authorization
         if not self._is_allowed(msg):
             print(f"⚠️ Unauthorized: {msg.sender_phone}", flush=True)
             return
-        
+
         text = msg.text
-        
+
         # Handle voice message
         if msg.is_voice and msg.attachments:
             print("🎤 Voice message, transcribing...", flush=True)
-            
+
             voice_att = next(
                 (a for a in msg.attachments if a.get("contentType", "").startswith("audio/")),
                 None
             )
-            
+
             if voice_att and voice_att.get("id"):
                 audio_data = self.rpc.get_attachment(voice_att["id"])
                 if audio_data:
@@ -303,12 +303,12 @@ class SignalTransport(Transport):
                     if transcribed:
                         print(f"✓ Transcribed: {transcribed[:50]}...", flush=True)
                         text = transcribed
-        
+
         if not text.strip():
             return
-        
+
         print(f"📩 {msg.sender_name}: {text[:60]}{'...' if len(text) > 60 else ''}", flush=True)
-        
+
         # Create message and add to queue
         user_msg = create_user_message(
             text=text,
@@ -316,13 +316,13 @@ class SignalTransport(Transport):
             identity=msg.sender_phone or msg.sender_uuid,
         )
         append(self.queue_path, user_msg)
-        
+
         # Track for response
         with self._lock:
             self.pending[user_msg.id] = msg.sender_uuid
-        
+
         print(f"💬 Queued [{user_msg.id[:8]}], waiting for response...", flush=True)
-    
+
     def run(self) -> None:
         """Run Signal transport main loop."""
         self._init_whisper()
@@ -335,7 +335,7 @@ class SignalTransport(Transport):
             print(f"  • {name}: {phone}")
         print(f"Voice: {'✓' if self.whisper_model else '✗'}")
         print("=" * 50 + "\n")
-        
+
         try:
             # Start RPC
             print("Starting signal-cli...", flush=True)

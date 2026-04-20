@@ -74,17 +74,17 @@ class AgendaAgent(BaseAgent):
     name: str = "agenda"
     _dispatcher: any = None  # Set by daemon after creation
     _passthrough_content: str | None = None  # Set by _tool_get_daily; checked in _process_with_tools
-    
+
     def get_system_prompt(self) -> str:
         """
         Build system prompt with FULL CONTEXT.
-        
+
         Unlike Data agent (large vault), Agenda has only 3 files.
         All context is loaded upfront — no read tools needed.
         """
         from outheis.core.memory import get_memory_context
         from outheis.agents.loader import load_skills, load_rules
-        
+
         from outheis.core.i18n import (
             ANNOTATION_COMPLETION_KEYWORDS,
             ANNOTATION_POSTPONE_KEYWORDS,
@@ -111,10 +111,10 @@ class AgendaAgent(BaseAgent):
         today_iso = get_today_iso()
         now = datetime.now().strftime("%H:%M")
         weekday = date.today().strftime("%A")
-        
+
         # Load all agenda files upfront
         agenda_context = self._load_agenda_context()
-        
+
         template = get_daily_template()
 
         parts = [
@@ -302,17 +302,17 @@ class AgendaAgent(BaseAgent):
             "  propose the outcome as a fact. type='user'.",
             f"One propose_memory call per annotation at most. Skip trivial completions ({completion_kws.split(',')[0].strip()}).",
         ]
-        
+
         if skills:
             parts.append("")
             parts.append("## Skills")
             parts.append(skills)
-        
+
         if rules:
             parts.append("")
             parts.append("## Rules")
             parts.append(rules)
-        
+
         if memory:
             parts.append("")
             parts.append(memory)
@@ -392,8 +392,8 @@ class AgendaAgent(BaseAgent):
         )
         append(get_messages_path(), msg)
         print("[agenda] Shadow.md sparse — shadow_scan requested", file=sys.stderr)
-    
-    
+
+
     def _get_tools(self) -> list[dict]:
         return [
             {
@@ -457,7 +457,7 @@ class AgendaAgent(BaseAgent):
                 }
             },
         ]
-    
+
     def _execute_tool(self, name: str, inputs: dict) -> str:
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
@@ -515,7 +515,7 @@ class AgendaAgent(BaseAgent):
             if filename == "Agenda.md":
                 return "Error: use write_file for Agenda.md, never append_file — always write the complete file."
             return self._append_file(agenda_dir / filename, inputs.get("content", ""))
-        
+
         elif name == "load_skill":
             return self._load_skill(inputs.get("topic", ""))
 
@@ -546,17 +546,17 @@ class AgendaAgent(BaseAgent):
 
         else:
             return f"Unknown tool: {name}"
-    
+
     # =========================================================================
     # FILE OPERATIONS
     # =========================================================================
-    
+
     def _read_file(self, path: Path) -> str:
         """Read file, return content or message if not exists."""
         if not path.exists():
             return f"{path.name} does not exist yet."
         return path.read_text(encoding="utf-8")
-    
+
     def _write_file(self, path: Path, content: str) -> str:
         """Write file with exclusive lock."""
         import fcntl
@@ -583,7 +583,7 @@ class AgendaAgent(BaseAgent):
             return f"✓ Appended to {path.name}"
         except Exception as e:
             return f"Error: {e}"
-    
+
     def _tool_propose_memory(self, content: str, memory_type: str) -> str:
         """Append an annotation-derived proposal to Migration/Exchange.md.
 
@@ -625,22 +625,22 @@ class AgendaAgent(BaseAgent):
         """Load detailed skill."""
         skills_path = get_human_dir() / "skills" / "agenda.md"
         system_skills_path = Path(__file__).parent / "skills" / "agenda.md"
-        
+
         content = ""
         if skills_path.exists():
             content += skills_path.read_text(encoding="utf-8")
         if system_skills_path.exists():
             content += "\n\n" + system_skills_path.read_text(encoding="utf-8")
-        
+
         if not content:
             return "No skills found."
-        
+
         # Find relevant section
         topic_lower = topic.lower()
         lines = content.split("\n")
         relevant = []
         in_section = False
-        
+
         for line in lines:
             if line.startswith("## "):
                 if topic_lower in line.lower():
@@ -650,11 +650,11 @@ class AgendaAgent(BaseAgent):
                     break
             elif in_section:
                 relevant.append(line)
-        
+
         if relevant:
             return "\n".join(relevant)
         return f"Section '{topic}' not found."
-    
+
 
     def _today_needs_refill(self, agenda_dir: Path, agenda_text: str) -> bool:
         """
@@ -805,17 +805,17 @@ class AgendaAgent(BaseAgent):
     # =========================================================================
     # HASH-BASED CHANGE DETECTION
     # =========================================================================
-    
+
     def _compute_hash(self, path: Path) -> str:
         """Compute MD5 hash of a file."""
         if not path.exists():
             return ""
         return hashlib.md5(path.read_bytes()).hexdigest()
-    
+
     def _get_hash_cache_path(self) -> Path:
         """Get path to agenda hash cache."""
         return get_human_dir() / "cache" / "agenda" / "hashes.json"
-    
+
     def _load_hashes(self) -> dict:
         """Load stored hashes from cache."""
         path = self._get_hash_cache_path()
@@ -825,17 +825,17 @@ class AgendaAgent(BaseAgent):
             return json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             return {}
-    
+
     def _save_hashes(self, hashes: dict) -> None:
         """Save current hashes to cache."""
         path = self._get_hash_cache_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
-    
+
         # =========================================================================
     # MESSAGE HANDLING
     # =========================================================================
-    
+
     def _tool_get_daily(self) -> str:
         """Return Agenda.md verbatim. Sets _passthrough_content for state saving."""
         agenda_dir = get_agenda_dir()
@@ -1038,13 +1038,13 @@ class AgendaAgent(BaseAgent):
                 tools=tools,
                 max_tokens=max_tokens,
             )
-            
+
             tool_uses = [b for b in response.content if b.type == "tool_use"]
-            
+
             if not tool_uses:
                 text_parts = [b.text for b in response.content if hasattr(b, "text")]
                 return "\n".join(text_parts) if text_parts else "No response."
-            
+
             tool_results = []
             for tool in tool_uses:
                 if verbose:
@@ -1063,32 +1063,32 @@ class AgendaAgent(BaseAgent):
 
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
-        
+
         return "Max iterations reached."
-    
+
     # =========================================================================
     # SCHEDULED TASKS
     # =========================================================================
-    
+
     def run_review(self, force: bool = False) -> None:
         """
         Hourly review — called by scheduler at xx:55.
-        
+
         - force=True: unconditional run (04:55 = morning, 23:55 = evening)
         - force=False: skip if no agenda files changed (hash-based)
         """
         import sys
-        
+
         now = datetime.now()
         timestamp = now.isoformat()
-        
+
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
             return
-        
+
         filenames = ["Agenda.md", "Exchange.md"]
         current_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
-        
+
         agenda_path = agenda_dir / "Agenda.md"
         daily_text = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
 
@@ -1138,7 +1138,7 @@ class AgendaAgent(BaseAgent):
                 "Items may have been completed or deferred — check if 'Today' has capacity "
                 "and pull additional candidates from Shadow.md to fill any freed slots."
             )
-        
+
         # Read current Agenda.md — stays on disk untouched until LLM writes the new version.
         agenda_path = agenda_dir / "Agenda.md"
         pre_scaffold_content = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
@@ -1278,7 +1278,7 @@ class AgendaAgent(BaseAgent):
             print(f"[{timestamp}] Agenda LLM: {result[:120]}", file=sys.stderr)
         except Exception as e:
             print(f"[{timestamp}] Agenda LLM error: {e}", file=sys.stderr)
-    
+
     def generate_backlog(self) -> str:
         """
         Generate Backlog.md — LLM-sorted view of all open Shadow.md items.
@@ -1371,7 +1371,7 @@ class AgendaAgent(BaseAgent):
             "that the structure fits. Process Exchange.md free-form inputs if present. "
             "Report what you did."
         )
-    
+
     def insert_to_daily(self, content: str, section: str | None = None) -> bool:
         """Insert content to Agenda.md — called by Relay."""
         section_hint = f" in section '{section}'" if section else ""
@@ -1379,16 +1379,16 @@ class AgendaAgent(BaseAgent):
             f"Add the following to Agenda.md{section_hint}: {content}"
         )
         return "✓" in result or "added" in result.lower()
-    
+
     # =========================================================================
     # LEARNING
     # =========================================================================
-    
+
     def learn_preference(self, category: str, preference: str) -> None:
         """Store learned preference in skills."""
         from outheis.agents.loader import append_user_skill
         append_user_skill("agenda", preference, section=category)
-    
+
     def remember(self, content: str, memory_type: str = "feedback") -> None:
         """Store in memory."""
         from outheis.core.memory import get_memory_store
@@ -1404,7 +1404,7 @@ def create_agenda_agent(model_alias: str | None = None) -> AgendaAgent:
     """Create Agenda agent with config."""
     if model_alias:
         return AgendaAgent(model_alias=model_alias)
-    
+
     config = load_config()
     agent_cfg = config.agents.get("agenda")
     if agent_cfg:

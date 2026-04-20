@@ -14,7 +14,6 @@ Lines starting with '#' are comments.
 from __future__ import annotations
 
 from datetime import date
-from pathlib import Path
 
 from outheis.core.holidays._builtin import REGIONS
 

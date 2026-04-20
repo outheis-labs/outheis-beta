@@ -394,7 +394,7 @@ def _parse_scheduled_task(data: dict, defaults: ScheduledTaskConfig) -> Schedule
 def _parse_schedule(data: dict) -> ScheduleConfig:
     """Parse schedule configuration."""
     defaults = ScheduleConfig()
-    
+
     return ScheduleConfig(
         pattern_infer=_parse_scheduled_task(
             data.get("pattern_infer", data.get("pattern_nightly", {})), defaults.pattern_infer
@@ -438,7 +438,7 @@ def load_config() -> Config:
         phone_list = [phone_raw] if phone_raw else []
     else:
         phone_list = phone_raw or []
-    
+
     holidays_data = human_data.get("holidays", {})
     human = HumanConfig(
         name=human_data.get("name", "Human"),

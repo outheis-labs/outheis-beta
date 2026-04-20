@@ -20,7 +20,7 @@ __all__ = ["Transport", "CLITransport"]
 
 # Signal transport is optional (requires signal-cli)
 try:
-    from outheis.transport.signal import SignalTransport
+    from outheis.transport.signal import SignalTransport  # noqa: F401
     __all__.append("SignalTransport")
 except ImportError:
     pass

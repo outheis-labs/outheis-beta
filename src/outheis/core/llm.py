@@ -15,10 +15,10 @@ code never needs to branch on provider.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from outheis.core.config import LLMConfig, ModelConfig, ModelResolutionError
+from outheis.core.config import LLMConfig, ModelConfig
 
 
 # =============================================================================

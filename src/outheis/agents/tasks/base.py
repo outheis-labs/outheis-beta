@@ -35,16 +35,16 @@ class TaskSource:
     """Metadata about who created the task and how."""
     timestamp: datetime
     interface: str  # "signal", "cli", "web"
-    
+
     # Signal-specific
     name: str | None = None
     phone: str | None = None
     uuid: str | None = None
-    
+
     # CLI/local-specific  
     user: str | None = None
     host: str | None = None
-    
+
     def to_dict(self) -> dict:
         return {
             "timestamp": self.timestamp.isoformat(),
@@ -55,7 +55,7 @@ class TaskSource:
             "user": self.user,
             "host": self.host,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict) -> "TaskSource":
         return cls(
@@ -67,7 +67,7 @@ class TaskSource:
             user=data.get("user"),
             host=data.get("host"),
         )
-    
+
     def to_markdown(self) -> str:
         """Format source info for directive.md."""
         lines = [
@@ -102,64 +102,64 @@ class TaskResult:
 class Task(ABC):
     """
     Base class for executable tasks.
-    
+
     Tasks are created by the user (via Relay) and executed by Action Agent.
     Each task has its own directory with directive.md, config.json, etc.
     """
-    
+
     id: str
     name: str
     schedule: TaskSchedule
     enabled: bool = True
-    
+
     # Original instruction (human language)
     instruction: str = ""
-    
+
     # Who created this task
     source: TaskSource | None = None
-    
+
     # Schedule details
     times: list[str] = field(default_factory=list)  # ["08:00", "18:00"]
     days: list[int] = field(default_factory=list)   # [0, 2, 4] = Mon, Wed, Fri
-    
+
     # Execution tracking
     last_run: datetime | None = None
     next_run: datetime | None = None
     run_count: int = 0
-    
+
     # Target agent for output (usually "agenda")
     target_agent: str = "agenda"
-    
+
     @abstractmethod
     def execute(self) -> TaskResult:
         """Execute the task and return result."""
         pass
-    
+
     @abstractmethod
     def format_for_agenda(self, result: TaskResult) -> str:
         """Format the result for insertion into Agenda."""
         pass
-    
+
     def get_task_dir(self) -> Path:
         """Get the directory for this task."""
         from outheis.core.config import get_human_dir
         return get_human_dir() / "tasks" / self.id
-    
+
     def save(self) -> None:
         """Save task to its directory."""
         import json
-        
+
         task_dir = self.get_task_dir()
         task_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Save config.json
         config_path = task_dir / "config.json"
         config_path.write_text(json.dumps(self.to_dict(), indent=2, default=str))
-        
+
         # Save/update directive.md
         directive_path = task_dir / "directive.md"
         directive_path.write_text(self.to_directive_md())
-    
+
     def to_directive_md(self) -> str:
         """Generate directive.md content."""
         lines = [
@@ -170,11 +170,11 @@ class Task(ABC):
             self.instruction or "(no instruction)",
             "",
         ]
-        
+
         if self.source:
             lines.append(self.source.to_markdown())
             lines.append("")
-        
+
         lines.extend([
             "## Configuration",
             "",
@@ -188,34 +188,34 @@ class Task(ABC):
             f"- Created: {self.source.timestamp.isoformat() if self.source else 'unknown'}",
             f"- Executions: {self.run_count}",
         ])
-        
+
         if self.last_run:
             lines.append(f"- Last run: {self.last_run.isoformat()}")
-        
+
         return "\n".join(lines) + "\n"
-    
+
     def append_history(self, result: TaskResult) -> None:
         """Append execution result to history.jsonl."""
         import json
-        
+
         task_dir = self.get_task_dir()
         history_path = task_dir / "history.jsonl"
-        
+
         entry = {
             "timestamp": result.timestamp.isoformat(),
             "success": result.success,
             "error": result.error,
         }
-        
+
         with open(history_path, "a") as f:
             f.write(json.dumps(entry) + "\n")
-    
+
     def save_output(self, content: str) -> None:
         """Save last output to output.md."""
         task_dir = self.get_task_dir()
         output_path = task_dir / "output.md"
         output_path.write_text(content)
-    
+
     def to_dict(self) -> dict:
         """Serialize task to dictionary."""
         return {

@@ -48,18 +48,18 @@ class VaultFile:
     def tags(self) -> list[str]:
         """
         Get tags from frontmatter AND inline #tags in body.
-        
+
         Supports formats:
         - #tag
         - #level-sublevel (e.g. #status-active)
         - #level/sublevel (e.g. #date/today)
         - #date-YYYY-MM-DD
-        
+
         Returns deduplicated list, preserving order of first occurrence.
         """
         all_tags = []
         seen = set()
-        
+
         # 1. Frontmatter tags (if any)
         fm_tags = self.frontmatter.get("tags", [])
         if isinstance(fm_tags, str):
@@ -69,7 +69,7 @@ class VaultFile:
             if tag_lower not in seen:
                 seen.add(tag_lower)
                 all_tags.append(tag)
-        
+
         # 2. Inline tags from body
         body = self.body
         for match in INLINE_TAG_PATTERN.finditer(body):
@@ -78,7 +78,7 @@ class VaultFile:
             if tag_lower not in seen:
                 seen.add(tag_lower)
                 all_tags.append(tag)
-        
+
         return all_tags
 
     @property
@@ -93,7 +93,7 @@ class VaultFile:
 def extract_inline_tags(text: str) -> list[str]:
     """
     Extract inline #tags from text.
-    
+
     Utility function for parsing tags from any text.
     """
     tags = []

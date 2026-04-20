@@ -169,11 +169,11 @@ class ScheduledTask:
 class Scheduler:
     """
     Built-in scheduler for periodic tasks.
-    
+
     No external dependencies. Integrates with select() timeout.
     """
     tasks: list[ScheduledTask] = field(default_factory=list)
-    
+
     def add(
         self,
         name: str,
@@ -188,15 +188,15 @@ class Scheduler:
             time=time or [],
             interval_minutes=interval_minutes,
         ))
-    
+
     def seconds_until_next(self) -> float:
         """Seconds until next task needs to run."""
         if not self.tasks:
             return 3600.0  # No tasks, check again in an hour
-        
+
         now = datetime.now()
         return min(task.seconds_until_next(now) for task in self.tasks)
-    
+
     def get_due(self) -> list["ScheduledTask"]:
         """Return due tasks and mark their last_run to prevent re-firing."""
         now = datetime.now()
@@ -308,7 +308,7 @@ class Dispatcher:
 
     Watches the message queue, routes messages to agents,
     manages responses, and runs scheduled tasks.
-    
+
     Uses select() with timeout for efficient waiting:
     - Wakes on file changes (inotify/kqueue via watcher)
     - Wakes on scheduled task deadline
@@ -350,7 +350,7 @@ class Dispatcher:
         # Register signal handlers
         signal.signal(signal.SIGTERM, self._handle_shutdown)
         signal.signal(signal.SIGINT, self._handle_shutdown)
-        
+
         # Create wakeup pipe
         self._wakeup_read, self._wakeup_write = os.pipe()
         os.set_blocking(self._wakeup_read, False)
@@ -518,7 +518,7 @@ class Dispatcher:
 
     def _probe_billing(self) -> bool:
         """Make a minimal cloud API call. Return True if billing is now available."""
-        from outheis.core.llm import call_llm, BillingError, resolve_model
+        from outheis.core.llm import call_llm, BillingError
 
         # Skip probe if no API key is available — key won't appear on its own
         if not self._cloud_api_key_available():
@@ -622,7 +622,7 @@ class Dispatcher:
     def _setup_scheduled_tasks(self) -> None:
         """Configure scheduled tasks from config."""
         sched = self.config.schedule
-        
+
         if sched.pattern_infer.enabled:
             self.scheduler.add("pattern_infer", self._run_pattern_agent, time=sched.pattern_infer.time)
         if sched.index_rebuild.enabled:
@@ -883,7 +883,7 @@ class Dispatcher:
     def _run_shadow_scan(self) -> None:
         """
         Nightly shadow scan: Data agent scans vault for chronological entries.
-        
+
         Detects dates, deadlines, birthdays, appointments across all vault files.
         Writes to Agenda/Shadow.md — appends new entries, doesn't overwrite.
         """
@@ -911,7 +911,7 @@ class Dispatcher:
             hours = [int(t.split(":")[0]) for t in time if ":" in t]
             hour = datetime.now().hour
             force = bool(hours) and (hour == hours[0] or hour == hours[-1])
-        
+
         agent = self.get_agent("agenda")
         if agent and hasattr(agent, 'run_review'):
             try:
@@ -1010,22 +1010,22 @@ class Dispatcher:
     def _run_action_tasks(self) -> None:
         """Run due action tasks."""
         from outheis.agents.tasks import get_registry
-        
+
         registry = get_registry()
         due_tasks = registry.get_due_tasks()
-        
+
         if not due_tasks:
             return
-        
+
         for task in due_tasks:
             try:
                 result = task.execute()
                 registry.mark_completed(task, result)
-                
+
                 if result.success and task.target_agent == "agenda":
                     # Send to agenda agent
                     self._insert_to_agenda(task.format_for_agenda(result))
-                
+
                 print(f"Task '{task.name}' executed: {'✓' if result.success else '✗'}")
             except Exception as e:
                 print(f"Task '{task.name}' failed: {e}")
@@ -1042,11 +1042,11 @@ class Dispatcher:
             # Get agent-specific config
             agent_config = self.config.agents.get(name)
             model_alias = agent_config.model if agent_config else "capable"
-            
+
             # Check if agent is enabled
             if agent_config and not agent_config.enabled:
                 return None
-            
+
             if name == "relay":
                 relay = create_relay_agent(model_alias=model_alias)
                 relay._dispatcher = self
@@ -1082,7 +1082,7 @@ class Dispatcher:
 
         Used by relay to delegate to data, agenda, action, alan.
         """
-        from outheis.core.message import create_agent_message, generate_id
+        from outheis.core.message import create_agent_message
 
         # Log request
         request_msg = create_agent_message(
@@ -1229,7 +1229,7 @@ class Dispatcher:
         if lock_dir.exists():
             for f in lock_dir.glob("*.lock"):
                 f.unlink(missing_ok=True)
-        
+
         # Initialize LLM with config (once, at startup)
         init_llm(self.config.llm)
 
@@ -1400,23 +1400,23 @@ class Dispatcher:
             while self.running:
                 # Calculate timeout until next scheduled task
                 timeout = min(self.scheduler.seconds_until_next(), 60.0)
-                
+
                 # Wait for wakeup signal or timeout
                 ready, _, _ = select.select([self._wakeup_read], [], [], timeout)
-                
+
                 if ready:
                     # Drain wakeup pipe
                     try:
                         os.read(self._wakeup_read, 1024)
                     except OSError:
                         pass
-                
+
                 # Run any due scheduled tasks
                 for task in self.scheduler.get_due():
                     started = self._execute_task(task.name, task.run)
                     if started:
                         print(f"[dispatcher] scheduled: {task.name}")
-                    
+
         finally:
             watcher.stop()
             lock_manager.stop()
@@ -1508,24 +1508,24 @@ def start_daemon(foreground: bool = False) -> bool:
         # Start as subprocess (avoids macOS fork issues with CoreFoundation)
         import subprocess
         import shutil
-        
+
         # Find outheis command
         outheis_cmd = shutil.which("outheis")
-        
+
         # Build command
         if outheis_cmd:
             cmd = [outheis_cmd, "start", "-f"]
         else:
             # Fallback: use python -m
             cmd = [sys.executable, "-m", "outheis.cli.main", "start", "-f"]
-        
+
         # Copy environment, including any overrides
         env = os.environ.copy()
-        
+
         # Log file for daemon output
         from outheis.core.config import get_human_dir
         log_path = get_human_dir() / "dispatcher.log"
-        
+
         # Start detached subprocess
         with open(log_path, 'a') as log_file, open(os.devnull, 'r') as devnull:
             process = subprocess.Popen(
@@ -1536,7 +1536,7 @@ def start_daemon(foreground: bool = False) -> bool:
                 start_new_session=True,
                 env=env,
             )
-        
+
         # Wait for PID file with retries
         child_pid = None
         for _ in range(10):  # Up to 5 seconds
@@ -1544,7 +1544,7 @@ def start_daemon(foreground: bool = False) -> bool:
             child_pid = read_pid()
             if child_pid:
                 break
-        
+
         if child_pid:
             print(f"  {GREEN}✓{RESET} Dispatcher started (PID {child_pid})")
             print(f"  {GREEN}✓{RESET} Log: {log_path}")
@@ -1598,11 +1598,11 @@ def _validate_paths(config: Config) -> list[str]:
     """
     Validate vault and agenda paths.
     Creates Agenda directory and files if missing.
-    
+
     Returns list of errors for enabled agents that require paths.
     """
     errors = []
-    
+
     # Check vault paths if data agent is enabled
     data_config = config.agents.get("data")
     if data_config and data_config.enabled:
@@ -1614,26 +1614,26 @@ def _validate_paths(config: Config) -> list[str]:
             if len(missing_vaults) == len(vaults):
                 # All vaults missing
                 errors.append(f"Data agent enabled but vault not found: {vaults[0]}")
-    
+
     # Check/create Agenda directory if agenda agent is enabled
     agenda_config = config.agents.get("agenda")
     if agenda_config and agenda_config.enabled:
         primary_vault = config.human.primary_vault()
-        
+
         if not primary_vault.exists():
             errors.append(f"Agenda agent enabled but vault not found: {primary_vault}")
         else:
             agenda_dir = primary_vault / "Agenda"
-            
+
             # Create Agenda directory if missing
             if not agenda_dir.exists():
                 print(f"  ⚠ Agenda directory not found, creating: {agenda_dir}")
                 agenda_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Create required files if missing
             from datetime import datetime
             today = datetime.now().strftime("%A, %d %B %Y")
-            
+
             agenda_files = {
                 "Agenda.md": f"""# {today}
 
@@ -1655,36 +1655,36 @@ def _validate_paths(config: Config) -> list[str]:
 
 """,
             }
-            
+
             for filename, default_content in agenda_files.items():
                 filepath = agenda_dir / filename
                 if not filepath.exists():
                     print(f"  ⚠ Creating: {filepath}")
                     filepath.write_text(default_content, encoding="utf-8")
-    
+
     return errors
 
 
 def _validate_api_keys(config: Config) -> list[str]:
     """
     Validate API keys for configured providers.
-    
+
     Returns list of errors, empty if all valid.
     """
     import os as _os
     errors = []
-    
+
     # Collect which providers are actually used
     used_providers = set()
     for agent_cfg in config.agents.values():
         if agent_cfg.enabled:
             model_cfg = config.llm.get_model(agent_cfg.model)
             used_providers.add(model_cfg.provider)
-    
+
     # Validate each used provider
     for provider_name in used_providers:
         provider_cfg = config.llm.get_provider(provider_name)
-        
+
         if provider_name == "anthropic":
             # Check config first, then environment
             api_key = provider_cfg.api_key or _os.environ.get("ANTHROPIC_API_KEY")
@@ -1711,7 +1711,7 @@ def _validate_api_keys(config: Config) -> list[str]:
                         errors.append(f"Anthropic API key error: {e}")
                 except Exception as e:
                     errors.append(f"API key validation failed: {e}")
-        
+
         elif provider_name == "ollama.local":
             # Check if local Ollama is reachable
             base_url = provider_cfg.base_url or "http://localhost:11434"
@@ -1720,12 +1720,12 @@ def _validate_api_keys(config: Config) -> list[str]:
                 urllib.request.urlopen(f"{base_url}/api/tags", timeout=2)
             except Exception:
                 errors.append(f"Ollama not reachable at {base_url}")
-        
+
         elif provider_name == "openai":
             api_key = provider_cfg.api_key or _os.environ.get("OPENAI_API_KEY")
             if not api_key:
                 errors.append("OpenAI API key not set (config or OPENAI_API_KEY)")
-    
+
     return errors
 
 

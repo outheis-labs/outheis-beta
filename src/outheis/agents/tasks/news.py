@@ -7,7 +7,7 @@ PoC: Sueddeutsche Zeitung (sz.de)
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 
 import httpx
@@ -20,14 +20,14 @@ from outheis.agents.tasks.base import Task, TaskResult, TaskSchedule, TaskSource
 class NewsHeadlinesTask(Task):
     """
     Fetch top headlines from a news source.
-    
+
     Default: sz.de (Sueddeutsche Zeitung)
     """
-    
+
     source_url: str = "https://www.sz.de"
     source_name: str = "SZ"
     max_headlines: int = 5
-    
+
     def execute(self) -> TaskResult:
         """Fetch headlines from the news source."""
         try:
@@ -37,11 +37,11 @@ class NewsHeadlinesTask(Task):
             }
             response = httpx.get(self.source_url, headers=headers, timeout=10.0, follow_redirects=True)
             response.raise_for_status()
-            
+
             # Parse headlines
             soup = BeautifulSoup(response.text, "html.parser")
             headlines = self._extract_headlines(soup)
-            
+
             return TaskResult(
                 success=True,
                 data={
@@ -51,17 +51,17 @@ class NewsHeadlinesTask(Task):
                     "fetched_at": datetime.now().isoformat(),
                 }
             )
-        
+
         except Exception as e:
             return TaskResult(
                 success=False,
                 error=str(e),
             )
-    
+
     def _extract_headlines(self, soup: BeautifulSoup) -> list[str]:
         """Extract headlines from parsed HTML."""
         headlines = []
-        
+
         # SZ uses various headline elements
         # Try multiple selectors
         selectors = [
@@ -74,7 +74,7 @@ class NewsHeadlinesTask(Task):
             "h2 a",
             "h3 a",
         ]
-        
+
         seen = set()
         for selector in selectors:
             for el in soup.select(selector):
@@ -85,7 +85,7 @@ class NewsHeadlinesTask(Task):
                 if len(text) > 15 and text not in seen:
                     seen.add(text)
                     headlines.append(text)
-        
+
         # Fallback: find any h2/h3 with reasonable text
         if not headlines:
             for tag in ["h2", "h3"]:
@@ -95,9 +95,9 @@ class NewsHeadlinesTask(Task):
                     if 15 < len(text) < 200 and text not in seen:
                         seen.add(text)
                         headlines.append(text)
-        
+
         return headlines
-    
+
     def format_for_agenda(self, result: TaskResult) -> str:
         """Format headlines for Agenda.md insertion."""
         from outheis.core.memory import wrap_external_content
@@ -112,7 +112,7 @@ class NewsHeadlinesTask(Task):
             lines.append(f"- {wrap_external_content(headline)}")
 
         return "\n".join(lines) + "\n"
-    
+
     def to_dict(self) -> dict:
         """Serialize task including news-specific fields."""
         data = super().to_dict()

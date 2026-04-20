@@ -11,7 +11,7 @@ NOT active in production. Only enabled when config.agents["code"].enabled is Tru
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
@@ -371,7 +371,6 @@ class CodeAgent(BaseAgent):
         return "\n".join(items) if items else "(empty)"
 
     def _tool_write_codebase(self, path: str, content: str) -> str:
-        import time as _time
         from datetime import datetime, timezone
 
         if not path:
@@ -507,7 +506,6 @@ class CodeAgent(BaseAgent):
         return self._process_with_tools(query)
 
     def _process_with_tools(self, query: str, verbose: bool = False) -> str:
-        import sys
         from outheis.core.llm import call_llm
 
         messages = [{"role": "user", "content": query}]
@@ -556,7 +554,7 @@ def create_code_agent(model_alias: str | None = None) -> CodeAgent:
     """Create Code agent (alan) with config."""
     if model_alias:
         return CodeAgent(model_alias=model_alias)
-    
+
     config = load_config()
     agent_cfg = config.agents.get("code")
     if agent_cfg:

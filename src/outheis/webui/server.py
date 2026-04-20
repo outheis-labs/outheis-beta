@@ -16,8 +16,8 @@ import hmac
 import secrets
 import time
 
-from fastapi import FastAPI, File, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import FastAPI, File, Request, UploadFile, WebSocket
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
 from outheis.core.config import get_human_dir
 
@@ -847,7 +847,6 @@ _TAG_RE = __import__("re").compile(r"(?<!\w)#([a-zA-Z\u00c0-\u017e][a-zA-Z\u00c0
 
 
 def _scan_vault_tags() -> dict:
-    import re
     from datetime import datetime
 
     vault = get_vault_path()
@@ -1045,7 +1044,7 @@ async def run_scheduler_task(task: str):
 @app.get("/api/status")
 async def get_status():
     try:
-        from outheis.dispatcher.daemon import read_pid, get_pid_path
+        from outheis.dispatcher.daemon import read_pid
         _pid = read_pid()
         if _pid:
             os.kill(_pid, 0)  # raises if process is gone

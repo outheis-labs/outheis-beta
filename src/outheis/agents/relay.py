@@ -147,7 +147,7 @@ class RelayAgent(BaseAgent):
         """Handle an incoming message."""
         import os
         import sys
-        
+
         verbose = os.environ.get("OUTHEIS_VERBOSE")
         text = msg.payload.get("text", "")
 
@@ -158,7 +158,7 @@ class RelayAgent(BaseAgent):
         # This stores AND continues processing - agent knows it immediately
         from outheis.core.memory import handle_explicit_memory
         was_memory, stored_content, memory_type = handle_explicit_memory(text)
-        
+
         if was_memory:
             if verbose:
                 print(f"[memory: {memory_type}] {stored_content}", file=sys.stderr)
@@ -353,25 +353,25 @@ class RelayAgent(BaseAgent):
     ) -> list[Message]:
         """
         Merge session context with conversation context.
-        
+
         Removes duplicates, keeps conversation messages at the end
         for recency, limits total to avoid token bloat.
         """
         seen_ids = set()
         merged = []
-        
+
         # Add session context first (older)
         for msg in session_context:
             if msg.id not in seen_ids:
                 seen_ids.add(msg.id)
                 merged.append(msg)
-        
+
         # Add conversation context (newer, overwrites order)
         for msg in conv_context:
             if msg.id not in seen_ids:
                 seen_ids.add(msg.id)
                 merged.append(msg)
-        
+
         # Sort by timestamp and limit
         merged.sort(key=lambda m: m.timestamp or 0)
         return merged[-10:]  # Keep last 10 for context
@@ -398,9 +398,9 @@ class RelayAgent(BaseAgent):
         """Call LLM API with tool support for vault/agenda access."""
         import os
         import sys
-        
+
         verbose = os.environ.get("OUTHEIS_VERBOSE")
-        
+
         # Define tools — descriptions are intentionally terse to minimize input tokens
         tools = [
             {
@@ -525,7 +525,7 @@ class RelayAgent(BaseAgent):
                 }
             }
         ]
-        
+
         # Build messages — exclude relay responses that signal tool failures
         # (they poison the LLM context and cause repeated refusals)
         _failure_markers = ("not responding", "agent error", "not available", "cannot do that")
@@ -544,7 +544,7 @@ class RelayAgent(BaseAgent):
                     content = f"[{source} response: {first_line}…]"
                 messages.append({"role": "assistant", "content": content})
         messages.append({"role": "user", "content": text})
-        
+
         # First call - tool decision
         from outheis.core.llm import call_llm
 
@@ -557,21 +557,21 @@ class RelayAgent(BaseAgent):
             tools=tools,
             max_tokens=4096,
         )
-        
+
         # Agentic loop - LLM can use multiple tools across turns
         max_turns = 8  # Safety limit
         turn = 0
-        
+
         while turn < max_turns:
             turn += 1
-            
+
             # Budget warning when running low
             if turn == max_turns - 1:
                 messages.append({
                     "role": "user",
                     "content": "[System: Last turn. Respond to the user now.]"
                 })
-            
+
             # Check if tool use is needed
             if response.stop_reason != "tool_use":
                 # No more tools - extract final response
@@ -579,14 +579,14 @@ class RelayAgent(BaseAgent):
                     if hasattr(block, "text"):
                         return block.text
                 return "I was unable to formulate a response."
-            
+
             # Process tool calls
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
                     if verbose:
                         print(f"[turn {turn}, tool: {block.name}({block.input})]", file=sys.stderr)
-                    
+
                     if block.name == "search_vault":
                         if self._dispatcher is None:
                             result = "Dispatcher not available."
@@ -715,17 +715,17 @@ class RelayAgent(BaseAgent):
                             result = "No content provided or invalid type."
                     else:
                         result = "Tool not found"
-                    
+
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
                         "content": result,
                     })
-            
+
             # Continue conversation with tool results
             messages.append({"role": "assistant", "content": response.content})
             messages.append({"role": "user", "content": tool_results})
-            
+
             response = call_llm(
                 model=self.model_alias,
                 agent=self.name,
@@ -741,13 +741,13 @@ class RelayAgent(BaseAgent):
     def _get_config_info(self, aspect: str) -> str:
         """Get configuration information for the user."""
         from outheis.core.config import load_config
-        
+
         config = load_config()
-        
+
         if aspect == "vault":
             vaults = config.human.all_vaults()
             return f"Vault paths: {[str(v) for v in vaults]}"
-        
+
         elif aspect == "signal":
             if config.signal.enabled:
                 return (
@@ -758,20 +758,20 @@ class RelayAgent(BaseAgent):
                 )
             else:
                 return "Signal is not enabled."
-        
+
         elif aspect == "agents":
             lines = ["Agent configuration:"]
             for name, agent_cfg in config.agents.items():
                 status = "enabled" if agent_cfg.enabled else "disabled"
                 lines.append(f"  {name} ({agent_cfg.name}): {status}, model: {agent_cfg.model}")
             return "\n".join(lines)
-        
+
         elif aspect == "models":
             lines = ["Model aliases:"]
             for alias, model_cfg in config.llm.models.items():
                 lines.append(f"  {alias}: {model_cfg.provider}/{model_cfg.name}")
             return "\n".join(lines)
-        
+
         else:  # "all" or unknown
             lines = [
                 f"Human: {config.human.name}",
@@ -791,14 +791,14 @@ class RelayAgent(BaseAgent):
         """Add a rule to rules file."""
         from outheis.core.config import get_rules_dir
         from datetime import datetime
-        
+
         rules_dir = get_rules_dir()
         rules_dir.mkdir(parents=True, exist_ok=True)
         rules_file = rules_dir / f"{target}.md"
-        
+
         timestamp = datetime.now().strftime("%Y-%m-%d")
         rule_line = f"- {content}  <!-- {timestamp} -->\n"
-        
+
         if rules_file.exists():
             existing = rules_file.read_text(encoding="utf-8")
             if content in existing:
@@ -812,7 +812,7 @@ class RelayAgent(BaseAgent):
         """Get memory traits summary."""
         from outheis.core.memory import get_memory_store
         from outheis.core.config import get_rules_dir
-        
+
         store = get_memory_store()
         lines = ["Known traits:", ""]
 
@@ -851,7 +851,7 @@ class RelayAgent(BaseAgent):
                     rule_count = len([l for l in content.split("\n") if l.strip().startswith("-")])
                     if rule_count:
                         lines.append(f"  • {rf.stem}: {rule_count} rules")
-        
+
         return "\n".join(lines)
 
     def _write_memory_trait(self, agent: str, trait: str) -> str:
@@ -859,10 +859,10 @@ class RelayAgent(BaseAgent):
         valid_agents = ["relay", "data", "agenda", "pattern", "common"]
         if agent not in valid_agents:
             return f"Invalid agent: {agent}. Use: {', '.join(valid_agents)}"
-        
+
         if not trait:
             return "No trait provided."
-        
+
         self._add_to_rules(agent, trait)
         return f"✓ Rule added to {agent}: {trait}"
 

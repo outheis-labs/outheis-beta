@@ -138,20 +138,20 @@ def get_last_id(path: Path) -> str | None:
 def get_unanswered_requests(path: Path) -> list[Message]:
     """
     Find request messages that have no response.
-    
+
     A request is unanswered if:
     - It's addressed to "dispatcher"
     - No message has reply_to pointing to its ID
-    
+
     Used on startup to process messages that crashed before response.
     """
     if not path.exists():
         return []
-    
+
     # Read all messages
     requests: dict[str, Message] = {}  # id -> message
     answered_ids: set[str] = set()
-    
+
     with open(path, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -160,18 +160,18 @@ def get_unanswered_requests(path: Path) -> list[Message]:
             try:
                 d = read_message(line)
                 msg = Message.from_dict(d)
-                
+
                 # Track requests to dispatcher
                 if msg.to == "dispatcher" and msg.type == "request":
                     requests[msg.id] = msg
-                
+
                 # Track which requests have been answered
                 if msg.reply_to:
                     answered_ids.add(msg.reply_to)
-                    
+
             except Exception:
                 continue
-    
+
     # Return unanswered requests
     return [msg for msg_id, msg in requests.items() if msg_id not in answered_ids]
 

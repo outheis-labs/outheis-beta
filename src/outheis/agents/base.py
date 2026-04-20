@@ -93,24 +93,24 @@ class BaseAgent(ABC):
         """Get recent messages in a conversation for context."""
         messages = read_conversation(self.queue_path, conversation_id)
         return messages[-max_messages:]
-    
+
     def get_session_context(self, max_messages: int = 50) -> list[Message]:
         """
         Get recent messages across all conversations for session continuity.
-        
+
         This provides context from previous sessions, allowing the user to
         continue conversations after restart.
         """
         from outheis.core.queue import read_last_n
-        
+
         all_recent = read_last_n(self.queue_path, max_messages * 2)
-        
+
         # Filter to user messages and relay responses
         relevant = [
             msg for msg in all_recent
             if msg.from_user or (msg.from_agent == "relay" and msg.to == "transport")
         ]
-        
+
         return relevant[-max_messages:]
 
     def remember(
@@ -121,21 +121,21 @@ class BaseAgent(ABC):
     ) -> None:
         """
         Store information in memory during interaction.
-        
+
         Called by agents when they recognize something worth remembering:
         - User expresses an intent or gives an order
         - User shares personal information
         - User states a preference about how to work
-        
+
         The agent decides what's relevant. No rigid rules.
-        
+
         Args:
             content: What to remember (concise, one fact)
             memory_type: "user" (personal), "feedback" (preferences), "context" (current focus)
             confidence: 0-1, how certain (default 0.9 for agent-inferred)
         """
-        from outheis.core.memory import get_memory_store, MemoryType
-        
+        from outheis.core.memory import get_memory_store
+
         store = get_memory_store()
         store.add(
             content,

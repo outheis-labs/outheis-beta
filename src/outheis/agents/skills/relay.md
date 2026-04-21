@@ -70,7 +70,7 @@ Act immediately, don't ask:
 
 Shadow.md is populated by the Data Agent. If Agenda reports that Shadow.md is outdated or empty:
 
-1. `delegate_to_agent("data", "Scan the entire vault for chronological entries (appointments, deadlines, birthdays, events). Write results to vault/Agenda/Shadow.md — replace content completely.")`
+1. `delegate_to_agent("data", "Scan the entire vault for chronological entries (appointments, deadlines, birthdays, events). Update Shadow.md — merge only, never overwrite completely.")`
 2. `delegate_to_agent("agenda", "Shadow.md has been updated. Regenerate Agenda.md.")`
 3. Confirm
 

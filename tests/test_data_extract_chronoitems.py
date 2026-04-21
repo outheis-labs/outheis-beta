@@ -92,13 +92,40 @@ class TestTagFormat:
             result = agent._extract_chronological_entries("f.md", "c")
         assert "#action-required" in result
 
-    def test_recurring_tag_format(self):
-        """Recurring items use #recurring-FREQ tag."""
+    def test_recurring_weekly_with_date(self):
+        """Recurring weekly items include #date (next occurrence) alongside #recurring-weekly."""
         agent = make_agent()
-        raw = "#recurring-weekly\nWeekly team standup"
+        raw = "#date-2026-04-28 #recurring-weekly\nWeekly team standup"
         with patch("outheis.core.llm.call_llm", return_value=fake_llm_response(raw)):
             result = agent._extract_chronological_entries("f.md", "c")
         assert "#recurring-weekly" in result
+        assert "#date-" in result
+
+    def test_recurring_specific_weekdays_canonical(self):
+        """Multi-day recurring uses canonical ISO codes, not locale-specific."""
+        agent = make_agent()
+        raw = "#date-2026-04-23 #recurring-mon-wed-thu\nHIIT Training"
+        with patch("outheis.core.llm.call_llm", return_value=fake_llm_response(raw)):
+            result = agent._extract_chronological_entries("f.md", "c")
+        assert "#recurring-mon-wed-thu" in result
+        # Locale-specific codes must NOT appear
+        assert "#recurring-mo-mi-do" not in result
+
+    def test_recurring_yearly(self):
+        """Yearly recurring for birthdays/annual events."""
+        agent = make_agent()
+        raw = "#date-2026-12-25 #recurring-yearly\nChristmas"
+        with patch("outheis.core.llm.call_llm", return_value=fake_llm_response(raw)):
+            result = agent._extract_chronological_entries("f.md", "c")
+        assert "#recurring-yearly" in result
+
+    def test_recurring_monthly_specific_days(self):
+        """Monthly recurring on specific days uses #recurring-monthly-DD-DD format."""
+        agent = make_agent()
+        raw = "#date-2026-05-10 #recurring-monthly-10-22\nPayroll run"
+        with patch("outheis.core.llm.call_llm", return_value=fake_llm_response(raw)):
+            result = agent._extract_chronological_entries("f.md", "c")
+        assert "#recurring-monthly-10-22" in result
 
 
 # ---------------------------------------------------------------------------

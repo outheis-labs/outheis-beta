@@ -128,6 +128,35 @@ WEEKDAYS: dict[str, list[str]] = {
     "nl": ["Maandag", "Dinsdag", "Woensdag", "Donderdag", "Vrijdag", "Zaterdag", "Zondag"],
 }
 
+# Short weekday abbreviations per locale (index matches WEEKDAYS — 0=Monday)
+WEEKDAY_ABBREVS: dict[str, list[str]] = {
+    "de": ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
+    "en": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "fr": ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"],
+    "es": ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"],
+    "it": ["Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom"],
+    "pt": ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
+    "nl": ["Ma", "Di", "Wo", "Do", "Vr", "Za", "Zo"],
+}
+
+# Canonical weekday codes for Shadow.md recurring tags — always ISO English, language-neutral.
+# Index 0 = Monday (matches Python's date.weekday()).
+RECURRING_WEEKDAY_CODES: list[str] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+def locale_abbrevs_to_canonical(abbrevs: list[str], lang: str) -> list[str]:
+    """Convert locale weekday abbreviations to canonical ISO codes.
+
+    Example: ["Mo", "Mi", "Do"] with lang="de" -> ["mon", "wed", "thu"]
+    Unknown abbreviations are returned unchanged (lowercased).
+    """
+    locale_list = WEEKDAY_ABBREVS.get(lang, WEEKDAY_ABBREVS.get(lang.split("-")[0], []))
+    lookup = {a.lower(): RECURRING_WEEKDAY_CODES[i] for i, a in enumerate(locale_list)}
+    result = []
+    for a in abbrevs:
+        result.append(lookup.get(a.lower(), a.lower()))
+    return result
+
+
 AGENDA_LABELS: dict[str, dict[str, str]] = {
     "de": {
         "week": "KW",

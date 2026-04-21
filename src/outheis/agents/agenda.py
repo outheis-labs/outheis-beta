@@ -61,6 +61,84 @@ def get_daily_template() -> str | None:
     return None
 
 
+def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
+    """Compute the next occurrence date for a recurring Shadow.md entry.
+
+    Args:
+        current_date: The current #date value (i.e. today or the last shown date).
+        tag: The #recurring-* tag string (e.g. '#recurring-weekly', '#recurring-mon-wed-thu').
+
+    Returns:
+        The next occurrence date, or None if the tag is not a known recurring format.
+    """
+    from datetime import date as _date, timedelta as _td
+    from outheis.core.i18n import RECURRING_WEEKDAY_CODES
+
+    tag = tag.strip().lower()
+
+    if tag == "#recurring-daily":
+        return current_date + _td(days=1)
+
+    if tag == "#recurring-weekly":
+        return current_date + _td(weeks=1)
+
+    if tag == "#recurring-monthly":
+        import calendar
+        year, month, day = current_date.year, current_date.month, current_date.day
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+        day = min(day, calendar.monthrange(year, month)[1])
+        return _date(year, month, day)
+
+    if tag == "#recurring-yearly":
+        import calendar
+        year = current_date.year + 1
+        day = min(current_date.day, calendar.monthrange(year, current_date.month)[1])
+        return _date(year, current_date.month, day)
+
+    # #recurring-monthly-10-22  (specific days of month)
+    if tag.startswith("#recurring-monthly-"):
+        import calendar
+        parts = tag[len("#recurring-monthly-"):].split("-")
+        try:
+            days = sorted(int(p) for p in parts)
+        except ValueError:
+            return None
+        from datetime import date as _date2
+        today = _date2.today()
+        year, month = today.year, today.month
+        for _ in range(25):  # max 25 month iterations
+            max_day = calendar.monthrange(year, month)[1]
+            for d in days:
+                if d > max_day:
+                    continue
+                candidate = _date(year, month, d)
+                if candidate > today:
+                    return candidate
+            if month == 12:
+                year, month = year + 1, 1
+            else:
+                month += 1
+        return None
+
+    # #recurring-mon-wed-thu  (specific weekdays)
+    prefix = "#recurring-"
+    if tag.startswith(prefix):
+        codes = tag[len(prefix):].split("-")
+        if all(c in RECURRING_WEEKDAY_CODES for c in codes):
+            target_weekdays = [RECURRING_WEEKDAY_CODES.index(c) for c in codes]
+            from datetime import date as _date2
+            today = _date2.today()
+            for delta in range(1, 8):
+                candidate = today + _td(days=delta)
+                if candidate.weekday() in target_weekdays:
+                    return candidate
+
+    return None
+
+
 # =============================================================================
 # AGENDA AGENT
 # =============================================================================
@@ -286,12 +364,15 @@ class AgendaAgent(BaseAgent):
             "- **Date = beyond this week** → add tagged entry to Shadow.md only. It will appear in Agenda.md when due.",
             "- **Weekday named without year context** → resolve to the next occurrence from today and apply the rule above.",
             "- **Recurring items** (e.g. 'every Wednesday', 'weekly', 'jeden Mittwoch'):",
-            "  → add a `#recurring-[day]` entry to Shadow.md only. Do NOT add to Agenda.md.",
-            "  → day codes: mo di mi do fr sa so.",
+            "  → add a `#recurring-TYPE` entry to Shadow.md only. Do NOT add to Agenda.md.",
+            "  → include `#date-YYYY-MM-DD` (next occurrence) alongside the recurring tag.",
+            "  → Recurring tag formats: #recurring-daily | #recurring-weekly | #recurring-mon-wed-thu |",
+            "     #recurring-monthly | #recurring-monthly-10-22 | #recurring-yearly.",
+            "  → Weekday codes ALWAYS canonical ISO English: mon tue wed thu fri sat sun.",
             "  → Do NOT add a checkbox — recurring items in Agenda.md are plain lines.",
             "",
             "Shadow.md entry format (mandatory for all writes):",
-            "  Line 1: #date-YYYY-MM-DD   (or #action-required, or #recurring-[day])",
+            "  Line 1: #date-YYYY-MM-DD   (or #action-required, or #date-YYYY-MM-DD #recurring-TYPE)",
             "  Line 2: plain description",
             "  Blank line between entries. Never put tag and description on the same line.",
             "",

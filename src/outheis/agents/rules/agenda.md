@@ -37,8 +37,8 @@ Asynchronous communication — bidirectional. Two types of entries coexist:
 
 **User → System** (user writes these as async inputs — tasks, notes, instructions):
 ```markdown
-Morgen Termin mit Katja um 14:00 eintragen
-Bitte die Deadline für Projektplan auf 30.04. verschieben
+Add appointment with Katja tomorrow at 14:00
+Move project plan deadline to April 30
 ```
 
 User entries have **no timestamp header**. You distinguish them from system questions by the absence of the `## YYYY-MM-DDTHH:MM:00` format.

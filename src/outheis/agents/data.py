@@ -788,9 +788,28 @@ class DataAgent(BaseAgent):
             #action-required [optional tags]
             Plain text description
 
-        or for recurring items:
-            #recurring-weekly [optional tags]   (or #recurring-mo-mi-do etc.)
+        or for recurring items — #date is always the NEXT occurrence:
+            #recurring-daily [optional tags]
             Plain text description
+
+            #date-2026-04-28 #recurring-weekly [optional tags]
+            Weekly team standup (every Monday)
+
+            #date-2026-04-23 #recurring-mon-wed-thu [optional tags]
+            HIIT Training 11:55-13:15
+
+            #date-2026-05-10 #recurring-monthly [optional tags]
+            Monthly invoice review
+
+            #date-2026-04-10 #recurring-monthly-10-22 [optional tags]
+            Payroll run
+
+            #date-2026-12-25 #recurring-yearly [optional tags]
+            Christmas
+
+        Weekday codes are always canonical ISO English (mon tue wed thu fri sat sun),
+        never locale-specific abbreviations. The LLM maps from vault content language
+        to canonical codes.
         """
         from outheis.core.llm import call_llm
 
@@ -817,12 +836,18 @@ class DataAgent(BaseAgent):
             "Pick up cups from Suzanne\n\n"
             "#action-required\n"
             "Call with client: discuss project funding after return\n\n"
-            "#recurring-weekly\n"
-            "Weekly team standup\n\n"
-            "#recurring-mo-mi-do\n"
-            "HIIT Training 11:55–13:15\n\n"
+            "#date-2026-04-28 #recurring-weekly\n"
+            "Weekly team standup (every Monday)\n\n"
+            "#date-2026-04-23 #recurring-mon-wed-thu\n"
+            "HIIT Training 11:55-13:15\n\n"
+            "#date-2026-12-25 #recurring-yearly\n"
+            "Christmas\n\n"
             "First line: tags only. Required: #date-YYYY-MM-DD, or #action-required (no fixed date), "
-            "or #recurring-FREQ / #recurring-MO-MI-DO (recurring). "
+            "or #recurring-TYPE with optional #date for next occurrence (recurring). "
+            "Recurring tag format: #recurring-daily | #recurring-weekly | #recurring-mon-wed-thu | "
+            "#recurring-monthly | #recurring-monthly-10-22 | #recurring-yearly. "
+            "Weekday codes are ALWAYS canonical ISO English (mon tue wed thu fri sat sun) — never locale-specific. "
+            "For recurring items, #date-YYYY-MM-DD is the next expected occurrence. "
             "Add unit/type tags from the file if present (e.g. #unit-project, #action-send). "
             "Second line: plain text, self-contained description.\n"
             "If no valid entries exist: respond with exactly the word NONE and nothing else."

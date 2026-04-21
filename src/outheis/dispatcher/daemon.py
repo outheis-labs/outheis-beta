@@ -1645,7 +1645,7 @@ def _validate_paths(config: Config) -> list[str]:
             agenda_files = {
                 "Agenda.md": f"""# {today}
 
-## 🧘 Daily
+## 📌 Daily
 
 ## 🔴 Today
 

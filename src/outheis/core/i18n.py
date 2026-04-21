@@ -160,7 +160,7 @@ def locale_abbrevs_to_canonical(abbrevs: list[str], lang: str) -> list[str]:
 AGENDA_LABELS: dict[str, dict[str, str]] = {
     "de": {
         "week": "KW",
-        "personal": "Persönlich",
+        "personal": "Fixpunkte",
         "today_hdr": "Heute",
         "week_hdr": "Diese Woche",
         "overdue": "Überfällig",
@@ -168,10 +168,11 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(keine überfälligen oder heutigen Items)*",
         "empty_week": "*(keine Items diese Woche)*",
         "generated": "Aktualisiert",
+        "comment_hint": "Mit \">\" vor einem Item kommentieren oder anweisen.",
     },
     "en": {
         "week": "Week",
-        "personal": "Personal",
+        "personal": "Recurring",
         "today_hdr": "Today",
         "week_hdr": "This Week",
         "overdue": "Overdue",
@@ -179,10 +180,11 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(no overdue or due-today items)*",
         "empty_week": "*(no items this week)*",
         "generated": "Generated",
+        "comment_hint": "Use \">\" before an item to comment or give instructions.",
     },
     "fr": {
         "week": "Semaine",
-        "personal": "Personnel",
+        "personal": "Récurrent",
         "today_hdr": "Aujourd'hui",
         "week_hdr": "Cette semaine",
         "overdue": "En retard",
@@ -190,10 +192,11 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(aucun élément en retard ou dû aujourd'hui)*",
         "empty_week": "*(aucun élément cette semaine)*",
         "generated": "Généré",
+        "comment_hint": "Utilisez \">\" devant un élément pour commenter ou donner des instructions.",
     },
     "es": {
         "week": "Semana",
-        "personal": "Personal",
+        "personal": "Recurrente",
         "today_hdr": "Hoy",
         "week_hdr": "Esta semana",
         "overdue": "Atrasado",
@@ -201,10 +204,11 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(sin elementos vencidos o de hoy)*",
         "empty_week": "*(sin elementos esta semana)*",
         "generated": "Generado",
+        "comment_hint": "Use \">\" antes de un elemento para comentar o dar instrucciones.",
     },
     "it": {
         "week": "Settimana",
-        "personal": "Personale",
+        "personal": "Ricorrente",
         "today_hdr": "Oggi",
         "week_hdr": "Questa settimana",
         "overdue": "In ritardo",
@@ -212,5 +216,6 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(nessun elemento scaduto o di oggi)*",
         "empty_week": "*(nessun elemento questa settimana)*",
         "generated": "Generato",
+        "comment_hint": "Usa \">\" prima di un elemento per commentare o dare istruzioni.",
     },
 }

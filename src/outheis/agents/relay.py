@@ -25,7 +25,7 @@ _SIGNAL_BULLET = "▸"
 _SIGNAL_BULLET_SECTIONS = {"📅", "🗓️", "💶"}
 
 # Sections where markdown checkboxes are converted to Unicode glyphs.
-_SIGNAL_CHECKBOX_SECTIONS = {"🧘"}
+_SIGNAL_CHECKBOX_SECTIONS = {"📌"}
 
 _SIGNAL_CHECKBOX_OPEN = "🟩"
 _SIGNAL_CHECKBOX_DONE = "✅"
@@ -36,7 +36,7 @@ def _format_agenda_for_signal(text: str) -> str:
     Signal-specific agenda formatting.
 
     - 📅 Heute / 🗓️ Diese Woche / 💶 Cashflow: prefix each content line with ▸
-    - 🧘 Personal: convert - [x] → ✅, - [ ] → 🟩  (no bullet — has checkboxes)
+    - 📌 Recurring: convert - [x] → ✅, - [ ] → 🟩  (no bullet — has checkboxes)
     - All other content: passed through unchanged.
     """
     lines = text.split("\n")

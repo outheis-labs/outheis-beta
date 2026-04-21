@@ -240,7 +240,7 @@ class AgendaAgent(BaseAgent):
             "- load_skill(topic) — load detailed skills if needed",
             "",
             "## Principles",
-            "- Agenda.md = the single daily file: ⛅ header, 🧘 Personal, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
+            "- Agenda.md = the single daily file: ⛅ header, 📌 Recurring, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
             "- 📅 Today and 🗓️ This Week are filled from Shadow.md — only what is actually there, nothing invented.",
             "  Every genuinely open item must appear — do not omit real tasks or reminders.",
             "  Filter out (not open items): completed (✓), `#done-*` entries, pure log entries, single-day public holidays (these go in 📅 Today as bold header per rules), duplicates.",
@@ -263,7 +263,7 @@ class AgendaAgent(BaseAgent):
             "  **Preserve all existing `>` annotation lines exactly as they are.** Do not process, remove,",
             "  or act on annotations during a simple add/write request — they are handled by the review cycle.",
             "- Section headers in the language from config.",
-            "- 🧘 Personal section: `- [ ]` checkboxes only. 📅/🗓️ sections: plain lines, no dashes, no checkboxes.",
+            "- 📌 Recurring section: `- [ ]` checkboxes only. 📅/🗓️ sections: plain lines, no dashes, no checkboxes.",
             "- Adopt the user's structure, don't impose one.",
             "- When uncertain, write to Exchange.md using append_file. Always use this format:",
             "  ```",
@@ -354,10 +354,10 @@ class AgendaAgent(BaseAgent):
             "",
             "## Placement rules for new items (add/write/note requests)",
             "When adding a new item, determine placement strictly as follows:",
-            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 🧘 Persönlich, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",  # noqa: i18n
+            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 📌 Fixpunkte, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",  # noqa: i18n
             "  If a request mentions a non-existent section (e.g. 'Aufgaben', 'Recurring'), ignore the section name and use the correct placement rule below.",
-            "- **NEVER place in the Personal section (🧘)** unless the user explicitly names it.",
-            "  Personal is for recurring habits only — not for tasks or reminders.",
+            "- **NEVER place in the Recurring section (📌)** unless the user explicitly names it.",
+            "  Recurring (Fixpunkte) is for recurring habits only — not for tasks or reminders.",  # noqa: i18n
             "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
             "- **Date = today** → add plain line to Today (📅) AND a tagged entry to Shadow.md.",
             "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry to Shadow.md.",
@@ -845,10 +845,11 @@ class AgendaAgent(BaseAgent):
         lines = [
             f"## ⛅ {day_label}, {date_str}",
             f"*{lbl['week']} {week_num} / {lbl['generated']}: {timestamp}*",
+            f"*{lbl.get('comment_hint', '')}*" if lbl.get('comment_hint') else "",
             "",
             "---",
             "",
-            f"## 🧘 {lbl['personal']}",
+            f"## 📌 {lbl['personal']}",
             "",
         ]
 
@@ -858,7 +859,7 @@ class AgendaAgent(BaseAgent):
         if agenda_path.exists():
             in_personal = False
             for line in agenda_path.read_text(encoding="utf-8").splitlines():
-                if re.match(r'^##\s+🧘', line):
+                if re.match(r'^##\s+📌', line):
                     in_personal = True
                     continue
                 if in_personal:
@@ -1321,7 +1322,7 @@ class AgendaAgent(BaseAgent):
             "   and NO date must be moved to Today (📅) instead — never left in This Week.\n"
             "   Add Shadow.md items with #date in the next 7 days (including those with #action-required\n"
             "   if they have a specific date — undated #action-required always belongs in Today).\n"
-            "3. 🧘 Personal — carry over existing checkboxes unchanged.\n"
+            "3. 📌 Recurring (Fixpunkte) — carry over existing checkboxes unchanged.\n"  # noqa: i18n
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"

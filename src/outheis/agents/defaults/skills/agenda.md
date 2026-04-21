@@ -11,7 +11,7 @@ Default template:
 *Updated: [HH:MM]*
 
 ---
-## 🧘 Personal
+## 📌 Recurring
 
 - [ ]
 

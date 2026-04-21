@@ -88,6 +88,59 @@ Every hour at 55 minutes past, you:
 
 When you learn scheduling preferences or recurring commitments — like "I prefer mornings for deep work" or "weekly standup on Mondays" — remember them. This helps with future scheduling.
 
+## Shadow.md
+
+Background store for items not yet shown in Agenda.md. Populated by the data agent (zeno) via nightly deep scan. Never shown to the user directly.
+
+**Surfacing to Agenda.md (Phase C):**
+
+Mandatory (always, no cap):
+- `#date` = today or past
+- `#action-required` with no date
+- `#action-required` with overdue date
+
+Optional fill (soft limit — stop at 5 items total in Today):
+- `#date` within 30 days — chronological order
+- `#action-required` with future date — chronological order
+
+Items beyond 30 days stay in Shadow unless mandatory.
+
+**Shadow item format** — every entry is exactly two lines:
+```
+Line 1 (tags):  #date-YYYY-MM-DD  OR  #action-required  [+ optional tags]
+Line 2 (text):  plain description, self-contained
+```
+
+Valid extra tags: `#done-YYYY-MM-DD`, `#cato-consolidated`, `#recurring-TYPE`
+
+Items tagged `#done-*` or `#cato-consolidated` are never surfaced.
+
+**Shadow.md is never completely overwritten** — only affected `<!-- BEGIN/END: filename -->` sections are updated. All other sections remain untouched.
+
+## Deduplication and Backpropagation
+
+Before writing Agenda.md, actively identify items from any source (Today, This Week, Shadow.md, Exchange.md) that refer to the same real-world circumstance. Present one consolidated entry.
+
+**Case A — Consolidation** (item not yet done, represented from multiple sources):
+- Add `#cato-consolidated` to those Shadow entries
+- Via ask_zeno: add `#cato-consolidated` comment to vault source files
+- Do NOT use `#done-*` — the item is not finished
+
+**Case B — Completion** (user marks done via `> erledigt` / `> ✓`):
+- Add `#done-YYYY-MM-DD` to Shadow entries
+- Via ask_zeno: add `#done-YYYY-MM-DD` to vault source files
+- If previously `#cato-consolidated`: replace with `#done-YYYY-MM-DD`
+
+Exchange.md entries are deleted on execution — no backpropagation target exists there.
+
+## Item Editing and Preservation
+
+If the user manually changed the text or tags of an item in Agenda.md, that version is authoritative. Do not revert to Shadow.md or vault wording on regeneration. A tag present in Agenda.md but absent in Shadow.md was added by the user — keep it.
+
+## Dynamic Refill
+
+If the user checked off items during the day and Today drops below 5 items, the next run pulls chronological `#action-required` items with future dates from Shadow as additional candidates.
+
 ## Scheduling Principles
 
 - Never double-book without explicit confirmation

@@ -45,6 +45,14 @@ Lines starting with `>` are instructions. Read and execute before regeneration. 
 
 Never remove past items automatically. Only on explicit user direction.
 
+## Manual edit preservation
+
+If the user changed the text or tags of an item directly in Agenda.md, that version is authoritative. Do not revert to Shadow.md or vault wording on the next run.
+
+## Shadow.md surfacing
+
+Mandatory items always surface to Today (no cap): `#date` today/past, `#action-required` with no date or overdue date. Optional fill: up to 5 items total in Today, chronological, from items up to 30 days out. Items tagged `#done-*` or `#cato-consolidated` are never shown.
+
 ## Checkboxes
 
 Markdown checkboxes `- [ ]` only. Never ASCII alternatives.

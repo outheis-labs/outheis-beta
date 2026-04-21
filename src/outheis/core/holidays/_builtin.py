@@ -55,29 +55,29 @@ def _holidays_DE(year: int) -> dict[date, str]:
 
 
 # =============================================================================
-# DE-BY — Bayern additions on top of DE
+# DE-BY — Bavaria (BY) additions on top of DE
 # Source: https://www.stmi.bayern.de/staat-und-verfassung/feiertage/
 # =============================================================================
 
 def _holidays_DE_BY(year: int) -> dict[date, str]:
     e = _easter(year)
     extra: dict[date, str] = {
-        date(year, 1, 6):   "Heilige Drei Könige",  # noqa: i18n
+        date(year, 1, 6):   "Heilige Drei Könige",
         e:                   "Ostersonntag",
         e + timedelta(49):  "Pfingstsonntag",
         e + timedelta(60):  "Fronleichnam",
-        date(year, 8, 15):  "Mariä Himmelfahrt",  # noqa: i18n
+        date(year, 8, 15):  "Mariä Himmelfahrt",
         date(year, 11, 1):  "Allerheiligen",
     }
     return {**_holidays_DE(year), **extra}
 
 
-# Schulferien Bayern
+# School holidays — Bavaria (BY)
 # Source: https://www.schulferien.org/deutschland/ferien/bayern/
 # Update annually.
 _SCHOOL_HOLIDAYS_DE_BY: dict[int, list[tuple[date, date, str]]] = {
     2026: [
-        (date(2026, 2, 16), date(2026, 2, 20), "Frühjahrsferien"),  # noqa: i18n
+        (date(2026, 2, 16), date(2026, 2, 20), "Frühjahrsferien"),
         (date(2026, 3, 30), date(2026, 4, 10), "Osterferien"),
         (date(2026, 5, 26), date(2026, 6, 5),  "Pfingstferien"),
         (date(2026, 8, 3),  date(2026, 9, 14), "Sommerferien"),
@@ -85,7 +85,7 @@ _SCHOOL_HOLIDAYS_DE_BY: dict[int, list[tuple[date, date, str]]] = {
         (date(2026, 12, 24), date(2027, 1, 8), "Weihnachtsferien"),
     ],
     2027: [
-        (date(2027, 2, 8),  date(2027, 2, 12), "Frühjahrsferien"),  # noqa: i18n
+        (date(2027, 2, 8),  date(2027, 2, 12), "Frühjahrsferien"),
         (date(2027, 3, 22), date(2027, 4, 2),  "Osterferien"),
         (date(2027, 5, 18), date(2027, 5, 28), "Pfingstferien"),
         (date(2027, 8, 2),  date(2027, 9, 13), "Sommerferien"),

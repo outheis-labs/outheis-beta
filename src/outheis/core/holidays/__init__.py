@@ -4,7 +4,7 @@ Holiday lookup for Agenda.md scaffold and get_weekday tool.
 Behaviour:
   country=""             → nothing shown (no config = no holidays)
   country="DE", state="" → federal DE holidays only, no school holidays
-  country="DE", state="BY" → federal + Bayern + Bayern school holidays
+  country="DE", state="BY" → federal + Bavaria (BY) + Bavaria school holidays
 
 User overrides: place ~/.outheis/human/holidays/DE-BY.md (or DE.md)
 to add custom holidays.  Format: one entry per line: YYYY-MM-DD Name

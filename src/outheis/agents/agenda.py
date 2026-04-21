@@ -61,6 +61,84 @@ def get_daily_template() -> str | None:
     return None
 
 
+def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
+    """Compute the next occurrence date for a recurring Shadow.md entry.
+
+    Args:
+        current_date: The current #date value (i.e. today or the last shown date).
+        tag: The #recurring-* tag string (e.g. '#recurring-weekly', '#recurring-mon-wed-thu').
+
+    Returns:
+        The next occurrence date, or None if the tag is not a known recurring format.
+    """
+    from datetime import date as _date, timedelta as _td
+    from outheis.core.i18n import RECURRING_WEEKDAY_CODES
+
+    tag = tag.strip().lower()
+
+    if tag == "#recurring-daily":
+        return current_date + _td(days=1)
+
+    if tag == "#recurring-weekly":
+        return current_date + _td(weeks=1)
+
+    if tag == "#recurring-monthly":
+        import calendar
+        year, month, day = current_date.year, current_date.month, current_date.day
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+        day = min(day, calendar.monthrange(year, month)[1])
+        return _date(year, month, day)
+
+    if tag == "#recurring-yearly":
+        import calendar
+        year = current_date.year + 1
+        day = min(current_date.day, calendar.monthrange(year, current_date.month)[1])
+        return _date(year, current_date.month, day)
+
+    # #recurring-monthly-10-22  (specific days of month)
+    if tag.startswith("#recurring-monthly-"):
+        import calendar
+        parts = tag[len("#recurring-monthly-"):].split("-")
+        try:
+            days = sorted(int(p) for p in parts)
+        except ValueError:
+            return None
+        from datetime import date as _date2
+        today = _date2.today()
+        year, month = today.year, today.month
+        for _ in range(25):  # max 25 month iterations
+            max_day = calendar.monthrange(year, month)[1]
+            for d in days:
+                if d > max_day:
+                    continue
+                candidate = _date(year, month, d)
+                if candidate > today:
+                    return candidate
+            if month == 12:
+                year, month = year + 1, 1
+            else:
+                month += 1
+        return None
+
+    # #recurring-mon-wed-thu  (specific weekdays)
+    prefix = "#recurring-"
+    if tag.startswith(prefix):
+        codes = tag[len(prefix):].split("-")
+        if all(c in RECURRING_WEEKDAY_CODES for c in codes):
+            target_weekdays = [RECURRING_WEEKDAY_CODES.index(c) for c in codes]
+            from datetime import date as _date2
+            today = _date2.today()
+            for delta in range(1, 8):
+                candidate = today + _td(days=delta)
+                if candidate.weekday() in target_weekdays:
+                    return candidate
+
+    return None
+
+
 # =============================================================================
 # AGENDA AGENT
 # =============================================================================
@@ -162,7 +240,7 @@ class AgendaAgent(BaseAgent):
             "- load_skill(topic) — load detailed skills if needed",
             "",
             "## Principles",
-            "- Agenda.md = the single daily file: ⛅ header, 🧘 Personal, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
+            "- Agenda.md = the single daily file: ⛅ header, 📌 Recurring, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
             "- 📅 Today and 🗓️ This Week are filled from Shadow.md — only what is actually there, nothing invented.",
             "  Every genuinely open item must appear — do not omit real tasks or reminders.",
             "  Filter out (not open items): completed (✓), `#done-*` entries, pure log entries, single-day public holidays (these go in 📅 Today as bold header per rules), duplicates.",
@@ -185,7 +263,7 @@ class AgendaAgent(BaseAgent):
             "  **Preserve all existing `>` annotation lines exactly as they are.** Do not process, remove,",
             "  or act on annotations during a simple add/write request — they are handled by the review cycle.",
             "- Section headers in the language from config.",
-            "- 🧘 Personal section: `- [ ]` checkboxes only. 📅/🗓️ sections: plain lines, no dashes, no checkboxes.",
+            "- 📌 Recurring section: `- [ ]` checkboxes only. 📅/🗓️ sections: plain lines, no dashes, no checkboxes.",
             "- Adopt the user's structure, don't impose one.",
             "- When uncertain, write to Exchange.md using append_file. Always use this format:",
             "  ```",
@@ -276,22 +354,25 @@ class AgendaAgent(BaseAgent):
             "",
             "## Placement rules for new items (add/write/note requests)",
             "When adding a new item, determine placement strictly as follows:",
-            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 🧘 Persönlich, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",  # noqa: i18n
-            "  If a request mentions a non-existent section (e.g. 'Aufgaben', 'Recurring'), ignore the section name and use the correct placement rule below.",
-            "- **NEVER place in the Personal section (🧘)** unless the user explicitly names it.",
-            "  Personal is for recurring habits only — not for tasks or reminders.",
+            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 📌 Recurring, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
+            "  If a request mentions a non-existent section, ignore the section name and use the correct placement rule below.",
+            "- **NEVER place in the Recurring section (📌)** unless the user explicitly names it.",
+            "  Recurring is for recurring habits only — not for tasks or reminders.",
             "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
             "- **Date = today** → add plain line to Today (📅) AND a tagged entry to Shadow.md.",
             "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry to Shadow.md.",
             "- **Date = beyond this week** → add tagged entry to Shadow.md only. It will appear in Agenda.md when due.",
             "- **Weekday named without year context** → resolve to the next occurrence from today and apply the rule above.",
             "- **Recurring items** (e.g. 'every Wednesday', 'weekly', 'jeden Mittwoch'):",
-            "  → add a `#recurring-[day]` entry to Shadow.md only. Do NOT add to Agenda.md.",
-            "  → day codes: mo di mi do fr sa so.",
+            "  → add a `#recurring-TYPE` entry to Shadow.md only. Do NOT add to Agenda.md.",
+            "  → include `#date-YYYY-MM-DD` (next occurrence) alongside the recurring tag.",
+            "  → Recurring tag formats: #recurring-daily | #recurring-weekly | #recurring-mon-wed-thu |",
+            "     #recurring-monthly | #recurring-monthly-10-22 | #recurring-yearly.",
+            "  → Weekday codes ALWAYS canonical ISO English: mon tue wed thu fri sat sun.",
             "  → Do NOT add a checkbox — recurring items in Agenda.md are plain lines.",
             "",
             "Shadow.md entry format (mandatory for all writes):",
-            "  Line 1: #date-YYYY-MM-DD   (or #action-required, or #recurring-[day])",
+            "  Line 1: #date-YYYY-MM-DD   (or #action-required, or #date-YYYY-MM-DD #recurring-TYPE)",
             "  Line 2: plain description",
             "  Blank line between entries. Never put tag and description on the same line.",
             "",
@@ -417,9 +498,10 @@ class AgendaAgent(BaseAgent):
             {
                 "name": "ask_zeno",
                 "description": (
-                    "Ask the data agent for information that requires searching the full vault. "
-                    "Use for cashflow calculation, project status summaries, or any query "
-                    "that needs data beyond the Agenda/ directory."
+                    "Delegate any data-related task to the data agent (zeno). "
+                    "Use for reading, writing, searching, or updating vault files outside Agenda/; "
+                    "cashflow calculation; project status summaries; marking items as done in source files; "
+                    "or any operation that requires access to the full vault."
                 ),
                 "input_schema": {
                     "type": "object",
@@ -528,7 +610,7 @@ class AgendaAgent(BaseAgent):
                 return "No question provided."
             # --- DONE-LOGGER BEGIN ---
             import sys as _sys
-            _done_related = any(w in question.lower() for w in ("done", "mark", "erledigt", "abgeschlossen"))
+            _done_related = any(w in question.lower() for w in ("done", "mark", "complete", "finish"))
             _sys.stderr.write(
                 f"[done-logger] ask_zeno: done_related={_done_related} q={question[:120]}\n"
             )
@@ -763,10 +845,11 @@ class AgendaAgent(BaseAgent):
         lines = [
             f"## ⛅ {day_label}, {date_str}",
             f"*{lbl['week']} {week_num} / {lbl['generated']}: {timestamp}*",
+            f"*{lbl.get('comment_hint', '')}*" if lbl.get('comment_hint') else "",
             "",
             "---",
             "",
-            f"## 🧘 {lbl['personal']}",
+            f"## 📌 {lbl['personal']}",
             "",
         ]
 
@@ -776,7 +859,7 @@ class AgendaAgent(BaseAgent):
         if agenda_path.exists():
             in_personal = False
             for line in agenda_path.read_text(encoding="utf-8").splitlines():
-                if re.match(r'^##\s+🧘', line):
+                if re.match(r'^##\s+📌', line):
                     in_personal = True
                     continue
                 if in_personal:
@@ -1091,7 +1174,7 @@ class AgendaAgent(BaseAgent):
         if not agenda_dir:
             return
 
-        filenames = ["Agenda.md", "Exchange.md"]
+        filenames = ["Agenda.md", "Exchange.md", "Shadow.md"]
         current_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
 
         agenda_path = agenda_dir / "Agenda.md"
@@ -1213,6 +1296,9 @@ class AgendaAgent(BaseAgent):
             "     - has far-future reference → assign #date-YYYY-MM-DD, mark for Shadow move.\n"
             "     - has NO date reference at all → assign #action-required.\n"
             "     Never leave an item untagged — tagging is cato's job, not the user's.\n"
+            "     PRESERVE manual edits: if the user changed the text or tags of an item directly in\n"
+            "     Agenda.md, that version is authoritative. Do NOT revert to Shadow.md or vault wording.\n"
+            "     A tag present in Agenda.md but absent in Shadow.md was added by the user — keep it.\n"
             "\n"
             "   Phase B — CARRY OVER from current Today (after Phase A, all items are tagged):\n"
             "     KEEP (mandatory, no exceptions — dropping is data loss):\n"
@@ -1221,39 +1307,62 @@ class AgendaAgent(BaseAgent):
             "     MOVE to This Week: #date within ~7 days (and item was NOT already in Today without a date).\n"
             "     MOVE to Shadow.md: far future #date — item is preserved, reappears when due.\n"
             "     REMOVE only: explicitly marked done (✓ or #done-*) or has a `>` deferral annotation.\n"
-            "     TODAY IS NEVER CAPPED: do not select a top-N subset. If Today has 20 items, show 20.\n"
             "\n"
             "   Phase C — FILL from Shadow.md (items not already in Today):\n"
-            "     Mandatory (always add, regardless of count):\n"
+            "     Mandatory (always add, no cap — these appear even if Today already has many items):\n"
             "       - #action-required with NO date → Today, mandatory.\n"
             "       - #action-required with overdue date → Today, mandatory.\n"
             "       - #date = today or past → Today, mandatory.\n"
-            "     Fill up to ~5 items total (mandatory items do not count against the cap):\n"
-            "       - #action-required with a future date → include if Today has fewer than 5 items.\n"
-            "       - #date within ~10 days → include if Today has fewer than 5 items.\n"
-            "     Do not add items further out unless they meet the above criteria.\n"
+            "     Optional fill (soft limit: stop once Today has 5 items total):\n"
+            "       Fill in chronological order, sourcing from items up to 30 days out:\n"
+            "       - #date within 30 days → candidate.\n"
+            "       - #action-required with a future date → candidate (priority for dynamic refill).\n"
+            "     Dynamic refill: if the user checked off items earlier today (Today has fewer than 5),\n"
+            "       pull next #action-required items with future dates as 'if you have time' candidates.\n"
+            "     Do not add items beyond 30 days unless they are mandatory.\n"
             "     Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
             "     Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
-            "2. 🗓️ This Week — plain lines.\n"
+            "2. 🗓️ This Week — plain lines, 7-day window only.\n"
             "   Carry over existing This Week items (unannotated) EXCEPT: any item with #action-required\n"
-            "   must be moved to Today (📅) instead — never left in This Week.\n"
-            "   Add Shadow.md items with dates in the next 7 days that do NOT have #action-required.\n"
-            "3. 🧘 Personal — carry over existing checkboxes unchanged.\n"
+            "   and NO date must be moved to Today (📅) instead — never left in This Week.\n"
+            "   Add Shadow.md items with #date in the next 7 days (including those with #action-required\n"
+            "   if they have a specific date — undated #action-required always belongs in Today).\n"
+            "3. 📌 Recurring — carry over existing checkboxes unchanged.\n"
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"
             "6. Future items the user entered directly into Agenda.md: if an item has a date beyond this week or is clearly a future appointment, add it to Shadow.md (as a new dated item) and remove it from Agenda.md. It will reappear via Shadow.md when due.\n"
+            "6b. DEDUPLICATION — active identification, not passive filtering:\n"
+            "   Before writing Agenda.md, scan ALL sources (current Today, This Week, Shadow.md, Exchange.md).\n"
+            "   Actively identify items that refer to the SAME real-world circumstance, even if phrased differently.\n"
+            "   Present only ONE consolidated entry in Agenda.md — the most complete or actionable formulation.\n"
+            "   Multiple vault files may all reference the same circumstance — this is not an error, it is normal.\n"
+            "   BACKPROPAGATION — two cases:\n"
+            "   Case A — CONSOLIDATION (item appears from multiple sources, not yet done):\n"
+            "     - In Shadow.md: add #cato-consolidated to the tag line of each absorbed entry.\n"
+            "       shadow_scan must skip entries tagged #cato-consolidated when rebuilding sections.\n"
+            "     - Via ask_zeno: add a #cato-consolidated comment to each vault source entry.\n"
+            "       Do NOT use #done-* — the item is not finished, it is just represented once in Agenda.\n"
+            "   Case B — COMPLETION (item is marked done via > annotation):\n"
+            "     - In Shadow.md: prepend #done-YYYY-MM-DD to the tag line.\n"
+            "     - Via ask_zeno: prepend #done-YYYY-MM-DD in all vault source files.\n"
+            "     - If previously #cato-consolidated: replace that tag with #done-YYYY-MM-DD.\n"
+            "   Exchange.md entries are deleted on execution — no backpropagation target exists there.\n"
+            "   SCOPE: vault files (via Shadow.md sections), Shadow.md items, Exchange.md items.\n"
             "\n"
             "SHADOW.MD FORMAT — mandatory whenever you write Shadow.md (rule 6 or rule 7):\n"
             "  Every entry is exactly two lines, blank line between entries:\n"
             "    Line 1 (tags only):  #date-YYYY-MM-DD  OR  #action-required  (plus optional extra tags)\n"
             "    Line 2 (text only):  plain description, self-contained\n"
+            "  Valid extra tags on line 1: #done-YYYY-MM-DD, #cato-consolidated, #recurring-TYPE\n"
+            "  Entries tagged #cato-consolidated or #done-* are NEVER surfaced to Agenda.md.\n"
             "  The <!-- BEGIN: filename.md --> / <!-- END: filename.md --> section markers from the\n"
             "  data agent MUST be preserved exactly — do NOT remove or reformat them.\n"
             "  NEVER write plain-text lines without a tag line above them.\n"
             "  NEVER merge the tag and description onto one line.\n"
             "\n"
             "7. Process `>` annotations — BATCH EXECUTION in ONE step:\n"
+            "   Interpret annotations by meaning, not by exact wording or language — semantic intent counts.\n"
             "   Identify ALL annotations. Then emit all tool calls in a single response:\n"
             "   a) ONE write_file(file='shadow') with ALL Shadow.md changes at once:\n"
             "      - Completion: prepend #done-YYYY-MM-DD to the matching entry's tag line.\n"

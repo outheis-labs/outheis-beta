@@ -58,7 +58,7 @@ Structure:
 
 - Contains ALL overdue items and items due today (📅 Today) and this week (🗓️ This Week)
 - Drawn entirely from Shadow briefing — do NOT invent or omit items
-- 📌 Recurring (Fixpunkte): recurring habits with checkboxes, carried over from previous version
+- 📌 Recurring: recurring habits with checkboxes, carried over from previous version
 - 💶 Cashflow section only if financial items are present
 - Update on every scheduled review
 

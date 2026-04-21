@@ -354,10 +354,10 @@ class AgendaAgent(BaseAgent):
             "",
             "## Placement rules for new items (add/write/note requests)",
             "When adding a new item, determine placement strictly as follows:",
-            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 📌 Fixpunkte, 📅 Heute, 🗓️ Diese Woche, 💶 Cashflow.",  # noqa: i18n
-            "  If a request mentions a non-existent section (e.g. 'Aufgaben', 'Recurring'), ignore the section name and use the correct placement rule below.",
+            "- **NEVER create new sections.** The only valid sections are: ⛅ header, 📌 Recurring, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
+            "  If a request mentions a non-existent section, ignore the section name and use the correct placement rule below.",
             "- **NEVER place in the Recurring section (📌)** unless the user explicitly names it.",
-            "  Recurring (Fixpunkte) is for recurring habits only — not for tasks or reminders.",  # noqa: i18n
+            "  Recurring is for recurring habits only — not for tasks or reminders.",
             "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
             "- **Date = today** → add plain line to Today (📅) AND a tagged entry to Shadow.md.",
             "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry to Shadow.md.",
@@ -1322,7 +1322,7 @@ class AgendaAgent(BaseAgent):
             "   and NO date must be moved to Today (📅) instead — never left in This Week.\n"
             "   Add Shadow.md items with #date in the next 7 days (including those with #action-required\n"
             "   if they have a specific date — undated #action-required always belongs in Today).\n"
-            "3. 📌 Recurring (Fixpunkte) — carry over existing checkboxes unchanged.\n"  # noqa: i18n
+            "3. 📌 Recurring — carry over existing checkboxes unchanged.\n"
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"

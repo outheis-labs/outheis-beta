@@ -23,8 +23,9 @@ You update this file when:
 
 ### Exchange.md
 
-Asynchronous communication. When you need clarification:
+Asynchronous communication — bidirectional. Two types of entries coexist:
 
+**System → User** (you write these when you need clarification):
 ```markdown
 ## 2026-03-30T10:15:00 – Question
 
@@ -34,7 +35,20 @@ Asynchronous communication. When you need clarification:
 
 ```
 
-User answers when they have time. No pressure. You check hourly and learn from responses.
+**User → System** (user writes these as async inputs — tasks, notes, instructions):
+```markdown
+Morgen Termin mit Katja um 14:00 eintragen
+Bitte die Deadline für Projektplan auf 30.04. verschieben
+```
+
+User entries have **no timestamp header**. You distinguish them from system questions by the absence of the `## YYYY-MM-DDTHH:MM:00` format.
+
+**Processing rules:**
+- System questions: check for user response after `**Your response:**`, extract learnings, keep the entry
+- User entries: read as instructions, execute immediately (same as `>` comments in Agenda.md), then **delete the entry** from Exchange.md
+- User answers to system questions: extract, act, mark as resolved or remove the question block
+
+User answers and writes when they have time. You check hourly.
 
 ## User Comments in Agenda.md
 
@@ -52,7 +66,7 @@ Every hour at 55 minutes past, you:
 
 1. **Detect changes** — Compare files with cached previous versions
 2. **Read Daily comments** — Execute every `>` line, then delete it
-3. **Check Exchange** — Look for user responses, extract learnings
+3. **Check Exchange** — Process user entries (execute + delete), look for user responses to questions
 4. **Regenerate Daily** — Write new version without any `>` lines
 
 ## Capabilities

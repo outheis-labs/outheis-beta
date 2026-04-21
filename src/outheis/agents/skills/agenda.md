@@ -72,9 +72,16 @@ I have no direct vault access. If Shadow.md is missing, empty, or outdated:
 
 ## Exchange.md
 
-- Async communication with user
-- My questions, user's answers
-- Format: timestamp, question, space for answer
+Bidirectional async channel. Two entry types:
+
+**System questions** (I write, user answers):
+- Format: `## YYYY-MM-DDTHH:MM:00 – Question` header, `> question text`, `**Your response:**` field
+- On review: check for filled response, extract learnings
+
+**User inputs** (user writes, I process):
+- No timestamp header — bare text, tasks, instructions
+- Treat exactly like `>` comments in Agenda.md: execute the instruction, then delete the entry
+- If unclear: move to Agenda.md with a question in a new system-format entry
 
 ## Lookup
 

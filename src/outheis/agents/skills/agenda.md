@@ -68,7 +68,8 @@ Shadow.md is my scratchpad for chronological vault entries — **populated by th
 
 I have no direct vault access. If Shadow.md is missing, empty, or outdated:
 - Inform the caller (Relay): "Shadow.md needs to be updated by the Data Agent."
-- Continue working with the available data.
+- Continue working with the available data — meaning: the existing content of Agenda.md.
+- Never pull Shadow content directly into Agenda.md. Shadow items surface only via the 🟡-filter, not as a fallback.
 
 ## Exchange.md
 

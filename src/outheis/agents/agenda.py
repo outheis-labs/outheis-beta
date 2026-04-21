@@ -417,9 +417,10 @@ class AgendaAgent(BaseAgent):
             {
                 "name": "ask_zeno",
                 "description": (
-                    "Ask the data agent for information that requires searching the full vault. "
-                    "Use for cashflow calculation, project status summaries, or any query "
-                    "that needs data beyond the Agenda/ directory."
+                    "Delegate any data-related task to the data agent (zeno). "
+                    "Use for reading, writing, searching, or updating vault files outside Agenda/; "
+                    "cashflow calculation; project status summaries; marking items as done in source files; "
+                    "or any operation that requires access to the full vault."
                 ),
                 "input_schema": {
                     "type": "object",

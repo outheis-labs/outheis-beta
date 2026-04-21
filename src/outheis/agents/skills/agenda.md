@@ -12,12 +12,12 @@
 
 ## Core Principle: Context is present
 
-I receive all files (Agenda.md, Inbox.md, Exchange.md, Shadow.md) in the system prompt.
+I receive all files (Agenda.md, Exchange.md, Shadow.md) in the system prompt.
 I do NOT need to read them first — I already HAVE them.
 
 ## My Tools (output only)
 
-- `write_file(file, content)` — rewrite a file (`agenda`, `inbox`, `exchange`)
+- `write_file(file, content)` — rewrite a file (`agenda`, `exchange`)
 - `append_file(file, content)` — append to a file
 - `load_skill(topic)` — load detail skills
 
@@ -69,14 +69,6 @@ Shadow.md is my scratchpad for chronological vault entries — **populated by th
 I have no direct vault access. If Shadow.md is missing, empty, or outdated:
 - Inform the caller (Relay): "Shadow.md needs to be updated by the Data Agent."
 - Continue working with the available data.
-
-## Inbox.md
-
-- Quick inputs from the user
-- I decide: task? appointment? note?
-- Move to Agenda.md when clear
-- After processing: write Inbox.md EMPTY — header only: `# Inbox\n\n---`
-- On ambiguity: ask via Exchange.md
 
 ## Exchange.md
 

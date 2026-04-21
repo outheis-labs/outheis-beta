@@ -2,7 +2,7 @@
 
 ## Agenda.md — first-time creation
 
-If Agenda.md does not exist, create it using the default template. Populate from Shadow.md and Inbox.md where available. From the second day onwards, follow the user's own structure.
+If Agenda.md does not exist, create it using the default template. Populate from Shadow.md where available. From the second day onwards, follow the user's own structure.
 
 Default template:
 

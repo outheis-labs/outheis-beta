@@ -52,7 +52,6 @@ I have specialized tools AND a generic `delegate_to_agent`:
 - `check_agenda` → query Agenda Agent
 - `refresh_agenda` → update agenda
 - `add_to_daily` → write to Agenda.md
-- `write_to_inbox` → note in Inbox.md
 
 **Generic tool** (for everything else):
 - `delegate_to_agent(agent, task)` → arbitrary delegation

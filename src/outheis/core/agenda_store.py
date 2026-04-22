@@ -31,14 +31,38 @@ def _agenda_json_path() -> Path:
 # Default structure
 # ---------------------------------------------------------------------------
 
-_DEFAULT_FACETS = [
-    {"id": "cato", "label": "Arbeit",   "hex": "#FF2E00"},
-    {"id": "hiro", "label": "senswork", "hex": "#FFB400"},
-    {"id": "rumi", "label": "Self",     "hex": "#460A46"},
-    {"id": "zeno", "label": "OFC",      "hex": "#97EAD2"},
-    {"id": "ou",   "label": "Privat",   "hex": "#218380"},
-    {"id": "misc", "label": "Misc",     "hex": "#7A7676"},
-]
+# Master facet definitions — keyed by the tag value used in #facet-* tags.
+# New/unknown facet IDs get a deterministic grey fallback.
+_FACET_DEFINITIONS: dict[str, dict] = {
+    "cato":      {"label": "Arbeit",   "hex": "#FF2E00"},
+    "hiro":      {"label": "senswork", "hex": "#FFB400"},
+    "senswork":  {"label": "senswork", "hex": "#FFB400"},
+    "rumi":      {"label": "Self",     "hex": "#460A46"},
+    "self":      {"label": "Self",     "hex": "#460A46"},
+    "zeno":      {"label": "OFC",      "hex": "#97EAD2"},
+    "ofc":       {"label": "OFC",      "hex": "#97EAD2"},
+    "ou":        {"label": "Privat",   "hex": "#218380"},
+    "familie":   {"label": "Familie",  "hex": "#218380"},
+    "misc":      {"label": "Misc",     "hex": "#7A7676"},
+    "schatzl":   {"label": "Schatzl",  "hex": "#FF2E00"},
+}
+
+
+def _build_facets(items: list[dict]) -> list[dict]:
+    """Return facet entries for all facet IDs present in items, ordered by first occurrence."""
+    seen: dict[str, dict] = {}
+    for it in items:
+        fid = it.get("facet") or "misc"
+        if fid not in seen:
+            defn = _FACET_DEFINITIONS.get(fid)
+            if defn:
+                seen[fid] = {"id": fid, **defn}
+            else:
+                seen[fid] = {"id": fid, "label": fid, "hex": "#7A7676"}
+    # always include misc as fallback
+    if "misc" not in seen:
+        seen["misc"] = {"id": "misc", **_FACET_DEFINITIONS["misc"]}
+    return list(seen.values())
 
 _DEFAULT_VIEW: dict[str, Any] = {
     "range": 7,
@@ -59,7 +83,7 @@ def _empty_agenda() -> dict:
             "generated": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
             "base_date": today,
         },
-        "facets": _DEFAULT_FACETS,
+        "facets": _build_facets([]),
         "view": _DEFAULT_VIEW,
         "items": [],
     }
@@ -80,12 +104,30 @@ def read_agenda_json() -> dict:
 
 
 def write_agenda_json(data: dict) -> None:
-    """Atomic write — update meta timestamps before writing."""
+    """Atomic write — update meta timestamps before writing.
+
+    If base_date changes (e.g. day boundary), all relative `day` offsets are
+    recalculated so items keep pointing to the same absolute dates.
+    """
     path = _agenda_json_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     data.setdefault("meta", {})
+    today = date.today()
+    old_base_str = data["meta"].get("base_date")
+    new_base_str  = today.isoformat()
+    if old_base_str and old_base_str != new_base_str:
+        try:
+            old_base = date.fromisoformat(old_base_str)
+            shift = (today - old_base).days
+            if shift != 0:
+                for it in data.get("items", []):
+                    if it.get("day") is not None:
+                        it["day"] = it["day"] - shift
+        except (ValueError, TypeError):
+            pass
     data["meta"]["generated"] = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    data["meta"]["base_date"] = date.today().isoformat()
+    data["meta"]["base_date"] = new_base_str
+    data["facets"] = _build_facets(data.get("items", []))
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
@@ -198,9 +240,9 @@ def parse_tag_entries_to_items(text: str, source: str) -> list[dict]:
             item["day"]  = day_offset(dates[0])
             item["size"] = size_m.group(1) if size_m else "m"
         else:
-            # Undated volatile (#action-required etc.)
+            # Undated — place on today until chronologically qualified
             item["type"] = "volatile"
-            item["day"]  = None
+            item["day"]  = 0
             item["size"] = size_m.group(1) if size_m else "m"
 
         items.append(item)
@@ -436,3 +478,42 @@ def _parse_date(s: str) -> date:
         return date.fromisoformat(s)
     except (ValueError, TypeError):
         return date.max
+
+
+# ---------------------------------------------------------------------------
+# One-time migration: Shadow.md → agenda.json
+# ---------------------------------------------------------------------------
+
+def migrate_from_shadow(shadow_path: Path) -> int:
+    """
+    Replace agenda.json items with all items from Shadow.md.
+
+    Clears all existing items, then imports every <!-- BEGIN: source -->
+    section as items with source=section_name. Normalizes facet values
+    from label names (e.g. 'senswork') to IDs (e.g. 'hiro').
+    Returns number imported.
+    """
+    if not shadow_path.exists():
+        return 0
+
+    content = shadow_path.read_text(encoding="utf-8")
+    pattern = re.compile(
+        r"<!-- BEGIN: (.+?) -->\n## .+?\n(.*?)<!-- END: .+? -->",
+        re.DOTALL,
+    )
+
+    data = read_agenda_json()
+    data["items"] = []
+
+    imported = 0
+    for match in pattern.finditer(content):
+        source = match.group(1).strip()
+        body   = match.group(2).strip()
+        if not body:
+            continue
+        items = parse_tag_entries_to_items(body, source=source)
+        data["items"].extend(items)
+        imported += len(items)
+
+    write_agenda_json(data)
+    return imported

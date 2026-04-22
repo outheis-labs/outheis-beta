@@ -535,6 +535,105 @@ async def serve_agenda_json():
     return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
 
 
+@app.get("/webui/pages/{filename:path}")
+async def serve_pages_file(filename: str):
+    """Serve files from the user pages directory (agenda-ics-*.json etc.)."""
+    path = PAGES_DIR / filename
+    if not path.exists() or not path.is_file():
+        return JSONResponse({"error": "not found"}, status_code=404)
+    return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+
+
+_ICS_CONFIG_PATH = PAGES_DIR / "agenda-ics-config.json"
+
+
+def _read_ics_config() -> dict:
+    if _ICS_CONFIG_PATH.exists():
+        try:
+            return json.loads(_ICS_CONFIG_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _write_ics_config(cfg: dict) -> None:
+    _ICS_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _ICS_CONFIG_PATH.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+@app.get("/api/agenda/ics-sources")
+async def list_ics_sources():
+    """List all agenda-ics-*.json files and their metadata."""
+    cfg = _read_ics_config()
+    sources = []
+    for p in sorted(PAGES_DIR.glob("agenda-ics-*.json")):
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+            sources.append({
+                "file":     p.name,
+                "stem":     p.stem[len("agenda-ics-"):],
+                "facet":    data.get("meta", {}).get("facet", cfg.get(p.stem, "misc")),
+                "imported": data.get("meta", {}).get("imported"),
+                "count":    len(data.get("items", [])),
+            })
+        except Exception:
+            pass
+    return sources
+
+
+@app.put("/api/agenda/ics-config")
+async def update_ics_config(data: dict):
+    """Set facet for one or more ICS sources. Body: {stem: facet, ...}"""
+    cfg = _read_ics_config()
+    cfg.update(data)
+    _write_ics_config(cfg)
+    return {"status": "ok"}
+
+
+@app.post("/api/agenda/upload-ics")
+async def upload_ics_file(file: UploadFile = File(...)):
+    """Upload an ICS file to vault/Agenda/ and immediately import it."""
+    from outheis.core.ics_import import import_ics_to_json
+    if not file.filename or not file.filename.endswith(".ics"):
+        return JSONResponse({"error": "only .ics files accepted"}, status_code=400)
+    vault = get_vault_path()
+    agenda_dir = vault / "Agenda"
+    agenda_dir.mkdir(parents=True, exist_ok=True)
+    dest = agenda_dir / file.filename
+    dest.write_bytes(await file.read())
+    stem = dest.stem
+    cfg = _read_ics_config()
+    facet = cfg.get(stem, "misc")
+    out_path = PAGES_DIR / f"agenda-ics-{stem}.json"
+    count = import_ics_to_json(dest, out_path, facet=facet)
+    return {"status": "ok", "stem": stem, "count": count}
+
+
+@app.post("/api/agenda/scan-ics")
+async def scan_ics_files():
+    """
+    Scan vault/Agenda/*.ics and write per-file agenda-ics-*.json.
+    Facets are read from agenda-ics-config.json; unknown files default to 'misc'.
+    """
+    from outheis.core.ics_import import import_ics_to_json
+    cfg = _read_ics_config()
+    vault = get_vault_path()
+    agenda_dir = vault / "Agenda"
+    if not agenda_dir.exists():
+        return {"status": "ok", "imported": {}}
+    results = {}
+    for ics_path in sorted(agenda_dir.glob("*.ics")):
+        stem = ics_path.stem
+        facet = cfg.get(stem, "misc")
+        out_path = PAGES_DIR / f"agenda-ics-{stem}.json"
+        try:
+            count = import_ics_to_json(ics_path, out_path, facet=facet)
+            results[stem] = {"count": count, "facet": facet}
+        except Exception as e:
+            results[stem] = {"error": str(e)}
+    return {"status": "ok", "imported": results}
+
+
 @app.put("/api/agenda-item")
 async def update_agenda_item(data: dict):
     """Update a single item in agenda.json by id.
@@ -579,6 +678,15 @@ async def update_agenda_item(data: dict):
 
     path.write_text(json.dumps(agenda, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"status": "updated", "id": item_id}
+
+
+@app.post("/api/agenda/migrate-from-shadow")
+async def migrate_agenda_from_shadow():
+    """Import non-vault items from Shadow.md into agenda.json (one-time migration)."""
+    from outheis.core.agenda_store import migrate_from_shadow
+    shadow_path = get_vault_path() / "Agenda" / "Shadow.md"
+    imported = migrate_from_shadow(shadow_path)
+    return {"status": "ok", "imported": imported}
 
 
 @app.get("/api/codebase")

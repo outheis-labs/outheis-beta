@@ -926,16 +926,6 @@ class Dispatcher:
             except Exception as e:
                 print(f"Agenda review failed: {e}")
 
-    def _run_backlog_generate(self) -> None:
-        """Generate Backlog.md — sorted view of all open Shadow.md items, on demand only."""
-        agent = self.get_agent("agenda")
-        if agent and hasattr(agent, "generate_backlog"):
-            try:
-                result = agent.generate_backlog()
-                print(f"[backlog_generate] {result}")
-            except Exception as e:
-                print(f"[backlog_generate] failed: {e}")
-
     def _run_agenda_midnight(self) -> None:
         """Mandatory midnight refresh — flips Agenda.md to the new day unconditionally."""
         agent = self.get_agent("agenda")
@@ -1150,7 +1140,6 @@ class Dispatcher:
                 task_map = {
                     "pattern_infer": self._run_pattern_agent,
                     "pattern_nightly": self._run_pattern_agent,  # migration alias
-                    "backlog_generate": self._run_backlog_generate,
                     "index_rebuild": self._run_index_rebuild,
                     "shadow_scan": self._run_shadow_scan,
                     "archive_rotation": self._run_archive_rotation,

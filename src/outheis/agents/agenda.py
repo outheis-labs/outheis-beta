@@ -551,7 +551,7 @@ class AgendaAgent(BaseAgent):
         if not agenda_dir:
             return "No agenda directory found."
 
-        file_map = {"agenda": "Agenda.md", "daily": "Agenda.md", "exchange": "Exchange.md", "backlog": "Backlog.md"}
+        file_map = {"agenda": "Agenda.md", "daily": "Agenda.md", "exchange": "Exchange.md"}
 
         if name == "get_weekday":
             d = inputs.get("date", "")
@@ -1400,83 +1400,6 @@ class AgendaAgent(BaseAgent):
             print(f"[{timestamp}] Agenda LLM: {result[:120]}", file=sys.stderr)
         except Exception as e:
             print(f"[{timestamp}] Agenda LLM error: {e}", file=sys.stderr)
-
-    def generate_backlog(self) -> str:
-        """
-        Generate Backlog.md — LLM-sorted view of all open agenda.json items.
-
-        The LLM receives items as tag text and writes Backlog.md.
-        Pure derivation from agenda.json — safe to delete at any time.
-        """
-        from datetime import date as _date
-
-        agenda_dir = get_agenda_dir()
-        if not agenda_dir:
-            return "No agenda directory found."
-
-        from outheis.core.agenda_store import items_to_shadow_text, read_agenda_json
-        data = read_agenda_json()
-        open_items = [it for it in data.get("items", []) if not it.get("done")]
-
-        if not open_items:
-            return "Backlog: no open items found in agenda.json."
-
-        shadow_content = items_to_shadow_text(open_items)
-        item_count = len(open_items)
-        today = _date.today()
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        from outheis.core.llm import call_llm
-        from outheis.core.memory import get_memory_context
-        memory = get_memory_context()
-        system = "\n\n".join(filter(None, [
-            "You are a priority sorter. Output ONLY valid Markdown, nothing else.",
-            f"User context (memory):\n{memory}" if memory else None,
-        ]))
-
-        header_line = f"*{now_str} — {item_count} items — derived from agenda.json, safe to delete*"
-        query = (
-            f"Today is {today.isoformat()}.\n\n"
-            "Below are open items in two-line tag format:\n\n"
-            f"{shadow_content}\n\n"
-            "---\n"
-            "Write a Backlog.md that groups these items by priority area.\n\n"
-            "Rules:\n"
-            "- Start with: # Backlog\n"
-            f"- Second line: {header_line}\n"
-            "- Then ## group headings, most urgent first\n"
-            "- Under each heading: reproduce each item in its original two-line tag format "
-            "(tags line, then text line), blank line between items\n"
-            "- Cover every item exactly once — no omissions, no additions\n"
-            "- No explanations, no commentary, only the Markdown"
-        )
-
-        response = call_llm(
-            model=self.model_alias,
-            agent=self.name,
-            system=system,
-            messages=[{"role": "user", "content": query}],
-            tools=[],
-            max_tokens=8192,
-            timeout=300.0,
-        )
-        text_parts = [b.text for b in response.content if hasattr(b, "text")]
-        markdown = "\n".join(text_parts).strip()
-
-        if not markdown.startswith("# Backlog"):
-            return f"Backlog: unexpected output. Raw: {markdown[:200]}"
-
-        # Enforce the computed header on line 2 regardless of what the LLM wrote.
-        md_lines = markdown.splitlines()
-        if len(md_lines) > 1:
-            md_lines[1] = header_line
-        else:
-            md_lines.append(header_line)
-        markdown = "\n".join(md_lines)
-
-        backlog_path = agenda_dir / "Backlog.md"
-        backlog_path.write_text(markdown + "\n", encoding="utf-8")
-        return "Backlog.md written."
 
     def refresh_daily(self) -> str:
         """Manual refresh — called by user command."""

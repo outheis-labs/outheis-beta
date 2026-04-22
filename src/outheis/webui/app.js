@@ -1072,7 +1072,6 @@ async function renderSchedulerTasks() {
           ${renderScheduleRow('pattern_infer', schedule.pattern_infer)}
           ${renderScheduleRow('memory_migrate', schedule.memory_migrate)}
           ${renderScheduleRow('index_rebuild', schedule.index_rebuild)}
-          ${renderScheduleRow('backlog_generate', schedule.backlog_generate)}
         </div>
       </div>
     </div>
@@ -1121,7 +1120,6 @@ const SCHED_DEFAULTS = {
   memory_migrate:   { time: ['04:00'] },
   index_rebuild:    { time: ['04:30'] },
   archive_rotation: { time: ['05:00'] },
-  backlog_generate: { time: [], enabled: false },
 };
 
 const SCHED_DESCRIPTIONS = {
@@ -1131,7 +1129,6 @@ const SCHED_DESCRIPTIONS = {
   memory_migrate:   'rumi reads Exchange.md decisions and adopts/rejects pending memory items',
   index_rebuild:    'zeno rebuilds the vault full-text search index from scratch',
   archive_rotation: 'moves old message log entries to the archive',
-  backlog_generate: 'generate Backlog.md — LLM-sorted view of all open Shadow.md items',
 };
 
 function renderScheduleRow(type, schedConfig) {
@@ -1143,7 +1140,7 @@ function renderScheduleRow(type, schedConfig) {
   const dur = taskDurations[type];
   const durText = dur ? `${dur.ok ? '✓' : '✗'} ${dur.seconds}s` : '';
 
-  const allOptions = ['agenda_review', 'shadow_scan', 'pattern_infer', 'memory_migrate', 'index_rebuild', 'backlog_generate'];
+  const allOptions = ['agenda_review', 'shadow_scan', 'pattern_infer', 'memory_migrate', 'index_rebuild'];
   const selectOptions = allOptions.map((v) => `<option value="${v}" ${type === v ? 'selected' : ''}>${v}</option>`).join('');
 
   let timesHtml;
@@ -1339,34 +1336,39 @@ async function renderAgendaView() {
 
   viewActions.innerHTML = `
     <button class="btn sched-run-btn" data-task="agenda_review" onclick="runTask('agenda_review', this)">Review</button>
-    <button class="btn sched-run-btn" data-task="backlog_generate" onclick="runTask('backlog_generate', this)" style="margin-left:6px">Get Backlog</button>
+    <button class="btn" id="migrate-shadow-btn" onclick="migrateFromShadow()" style="margin-left:6px" title="Import non-vault items from Shadow.md into agenda.json">Migrate Shadow</button>
   `;
   const { running = [] } = await fetchAPI('/api/scheduler/running');
-  for (const t of ['agenda_review', 'backlog_generate']) {
-    const btn = viewActions.querySelector(`.sched-run-btn[data-task="${t}"]`);
-    if (!btn) continue;
-    if (activePolls[t]) { activePolls[t].btn = btn; btn.textContent = 'Running…'; btn.disabled = true; }
-    else if (running.includes(t)) { btn.textContent = 'Running…'; btn.disabled = true; watchTask(t, btn); }
+  const reviewBtn = viewActions.querySelector('.sched-run-btn[data-task="agenda_review"]');
+  if (reviewBtn) {
+    if (activePolls['agenda_review']) { activePolls['agenda_review'].btn = reviewBtn; reviewBtn.textContent = 'Running…'; reviewBtn.disabled = true; }
+    else if (running.includes('agenda_review')) { reviewBtn.textContent = 'Running…'; reviewBtn.disabled = true; watchTask('agenda_review', reviewBtn); }
   }
 
-  const tab = (currentTab === 'agendamd') ? 'agendamd' : 'calendar';
+  const validTabs = ['calendar', 'agendamd', 'extern'];
+  const tab = validTabs.includes(currentTab) ? currentTab : 'calendar';
   viewTabs.innerHTML = `
     <div class="tab ${tab === 'calendar' ? 'active' : ''}" onclick="switchAgendaTab('calendar')">Calendar</div>
     <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Agenda.md</div>
+    <div class="tab ${tab === 'extern'   ? 'active' : ''}" onclick="switchAgendaTab('extern')">Extern</div>
   `;
   await renderAgendaTab(tab);
 }
 
 async function switchAgendaTab(tab) {
   currentTab = tab;
-  viewTabs.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (tab === 'calendar' && i === 0) || (tab === 'agendamd' && i === 1)));
+  viewTabs.querySelectorAll('.tab').forEach((t, i) =>
+    t.classList.toggle('active', (tab === 'calendar' && i === 0) || (tab === 'agendamd' && i === 1) || (tab === 'extern' && i === 2))
+  );
   await renderAgendaTab(tab);
 }
 
 async function renderAgendaTab(tab) {
   stopFileListRefresh();
   if (tab === 'calendar') {
-    viewContent.innerHTML = '<iframe src="/agenda" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe>';
+    viewContent.innerHTML = '<div style="flex:1;display:flex;padding:0 24px;overflow:hidden;"><iframe src="/agenda" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe></div>';
+  } else if (tab === 'extern') {
+    await renderExternTab();
   } else {
     currentFile = 'Agenda.md';
     fileMode = 'rendered';
@@ -1375,10 +1377,8 @@ async function renderAgendaTab(tab) {
         <div class="file-header">
           <span class="file-name">Agenda.md</span>
           <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
-            <input id="search-input" type="text" placeholder="Search…"
-              style="font-size:11px;padding:3px 7px;border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);border-radius:3px;width:140px;outline:none;"
-              onkeydown="if(event.key==='Enter')searchFiles('agenda');if(event.key==='Escape')closeSearch();">
-            <button class="btn" onclick="searchFiles('agenda')" title="Search">Search</button>
+            <input type="text" id="search-input" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchFiles('agenda');if(event.key==='Escape')closeSearch();">
+            <button class="btn" onclick="searchFiles('agenda')">Search</button>
             <button class="btn" onclick="loadFile('agenda','Agenda.md')" title="Reload from disk">Refresh</button>
             <button class="btn btn-primary" onclick="saveCurrentFile()">Save</button>
           </div>
@@ -1392,18 +1392,114 @@ async function renderAgendaTab(tab) {
   }
 }
 
+const ICS_FACETS = ['misc','cato','hiro','senswork','rumi','self','zeno','ou','familie','schatzl'];
+
+async function renderExternTab() {
+  const sources = await fetchAPI('/api/agenda/ics-sources').catch(()=>[]);
+  const facetSelect = (stem, current) =>
+    `<select id="ics-facet-${stem}" style="font-size:12px;background:var(--bg-secondary);border:0.5px solid var(--border-secondary);color:var(--text-primary);padding:2px 6px;border-radius:2px;">
+      ${ICS_FACETS.map(f=>`<option value="${f}"${f===current?' selected':''}>${f}</option>`).join('')}
+    </select>`;
+
+  const sourceRows = sources.map(s=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:0.5px solid var(--border-secondary);">
+      <span style="flex:1;font-size:13px;">${s.stem}.ics</span>
+      <span style="font-size:12px;color:var(--text-tertiary);">${s.count} Termine</span>
+      ${facetSelect(s.stem, s.facet)}
+      <button class="btn" onclick="reimportIcs('${s.stem}',this)">Importieren</button>
+    </div>`).join('');
+
+  viewContent.innerHTML = `
+    <div class="scroll" style="padding:20px;">
+      <div style="margin-bottom:24px;">
+        <div style="font-size:13px;font-weight:500;margin-bottom:10px;">ICS-Datei hochladen</div>
+        <div id="ics-drop-zone" style="border:1px dashed var(--border-secondary);border-radius:4px;padding:24px;text-align:center;cursor:pointer;color:var(--text-tertiary);font-size:13px;"
+          ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+          ondragleave="this.style.borderColor='var(--border-secondary)'"
+          ondrop="handleIcsDrop(event)">
+          ICS-Datei hierher ziehen oder <label style="color:var(--accent);cursor:pointer;text-decoration:underline;">
+            auswählen<input type="file" accept=".ics" style="display:none" onchange="handleIcsUpload(this)">
+          </label>
+        </div>
+      </div>
+      ${sources.length ? `
+      <div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:10px;">Importierte Quellen</div>
+        ${sourceRows}
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="reimportAllIcs(this)">Alle neu importieren</button>
+        </div>
+      </div>` : `<div style="font-size:13px;color:var(--text-tertiary);">Noch keine externen Quellen importiert.</div>`}
+    </div>`;
+}
+
+async function handleIcsDrop(event) {
+  event.preventDefault();
+  document.getElementById('ics-drop-zone').style.borderColor = 'var(--border-secondary)';
+  const file = event.dataTransfer.files[0];
+  if (file) await uploadIcsFile(file);
+}
+
+async function handleIcsUpload(input) {
+  const file = input.files[0];
+  if (file) await uploadIcsFile(file);
+}
+
+async function uploadIcsFile(file) {
+  const form = new FormData();
+  form.append('file', file);
+  const zone = document.getElementById('ics-drop-zone');
+  if (zone) zone.textContent = 'Lade hoch…';
+  const res = await fetch('/api/agenda/upload-ics', { method: 'POST', body: form }).then(r=>r.json()).catch(()=>null);
+  if (res && res.status === 'ok') {
+    await renderExternTab();
+  } else {
+    if (zone) zone.textContent = 'Fehler beim Hochladen.';
+  }
+}
+
+async function reimportIcs(stem, btn) {
+  const sel = document.getElementById('ics-facet-'+stem);
+  if (sel) await fetchAPI('/api/agenda/ics-config', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({[stem]: sel.value}) });
+  btn.textContent = 'Importiere…'; btn.disabled = true;
+  await fetchAPI('/api/agenda/scan-ics', { method: 'POST' });
+  await renderExternTab();
+}
+
+async function reimportAllIcs(btn) {
+  const cfg = {};
+  document.querySelectorAll('[id^="ics-facet-"]').forEach(sel => {
+    cfg[sel.id.replace('ics-facet-','')] = sel.value;
+  });
+  if (Object.keys(cfg).length) await fetchAPI('/api/agenda/ics-config', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(cfg) });
+  btn.textContent = 'Importiere…'; btn.disabled = true;
+  await fetchAPI('/api/agenda/scan-ics', { method: 'POST' });
+  await renderExternTab();
+}
+
+async function migrateFromShadow() {
+  const btn = document.getElementById('migrate-shadow-btn');
+  if (btn) { btn.textContent = 'Migrating…'; btn.disabled = true; }
+  try {
+    const res = await fetchAPI('/api/agenda/migrate-from-shadow', { method: 'POST' });
+    const msg = res.error ? `Error: ${res.error}` : `Done — ${res.imported} item(s) imported`;
+    if (btn) { btn.textContent = msg; }
+    setTimeout(() => { if (btn) { btn.textContent = 'Migrate Shadow'; btn.disabled = false; } }, 3000);
+  } catch (e) {
+    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
+  }
+}
+
 async function renderFileView(type, pathPrefix) {
   viewTitle.textContent = type.charAt(0).toUpperCase() + type.slice(1);
   viewPath.textContent = pathPrefix;
   const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate', files: 'shadow_scan' }[type];
-  const extraTask = type === 'agenda' ? 'backlog_generate' : null;
   const taskLabel = { files: 'Scan' }[type] || 'Review';
   viewActions.innerHTML = taskForView
     ? `<button class="btn sched-run-btn" data-task="${taskForView}" onclick="runTask('${taskForView}', this)">${taskLabel}</button>`
-      + (extraTask ? `<button class="btn sched-run-btn" data-task="${extraTask}" onclick="runTask('${extraTask}', this)" style="margin-left:6px">Get Backlog</button>` : '')
     : '';
   if (taskForView) {
-    const tasks = [taskForView, ...(extraTask ? [extraTask] : [])];
+    const tasks = [taskForView];
     const { running = [] } = await fetchAPI('/api/scheduler/running');
     for (const t of tasks) {
       const btn = viewActions.querySelector(`.sched-run-btn[data-task="${t}"]`);
@@ -2553,6 +2649,19 @@ document.getElementById('agenda-count').textContent = String(agenda.length || 0)
 
   await renderTokenChart();
   setInterval(renderTokenChart, 60000);
+
+  async function pollDaemonStatus() {
+    const s = await fetchAPI('/api/status');
+    if (s.running) {
+      statusEl.classList.add('running');
+      statusEl.classList.toggle('fallback', s.system_mode === 'fallback');
+    } else {
+      statusEl.classList.remove('running');
+      statusEl.classList.remove('fallback');
+    }
+  }
+  await pollDaemonStatus();
+  setInterval(pollDaemonStatus, 15000);
 
   checkForUpdate();
 }

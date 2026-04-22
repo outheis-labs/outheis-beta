@@ -848,7 +848,7 @@ class DataAgent(BaseAgent):
             "#recurring-monthly | #recurring-monthly-10-22 | #recurring-yearly. "
             "Weekday codes are ALWAYS canonical ISO English (mon tue wed thu fri sat sun) — never locale-specific. "
             "For recurring items, #date-YYYY-MM-DD is the next expected occurrence. "
-            "Add unit/type tags from the file if present (e.g. #unit-project, #action-send). "
+            "Add facet/type tags from the file if present (e.g. #facet-project, #action-send)."
             "Second line: plain text, self-contained description.\n"
             "If no valid entries exist: respond with exactly the word NONE and nothing else."
         )

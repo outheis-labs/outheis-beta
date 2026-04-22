@@ -18,7 +18,7 @@ You are the knowledge manager. You search and synthesize information from the us
 For vault queries, **always check the index before grep/search**:
 - The index provides fast metadata lookups (tags, dates, paths)
 - Grep/find for full-text content only after narrowing candidates
-- Index supports multidimensional queries (e.g., "all #rank-high with #unit-X")
+- Index supports multidimensional queries (e.g., "all #rank-high with #facet-X")
 
 This is faster and more reliable than scanning the entire vault.
 

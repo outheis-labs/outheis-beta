@@ -101,7 +101,7 @@ class TestParseShadowSections:
         agent = make_agent()
         with tempfile.TemporaryDirectory() as d:
             shadow = Path(d) / "Shadow.md"
-            body = "#date-2026-05-01 #action-required #unit-project\nSend quarterly report to accountant"
+            body = "#date-2026-05-01 #action-required #facet-project\nSend quarterly report to accountant"
             agent._write_shadow(shadow, {"just.md": body})
             parsed = agent._parse_shadow_sections(shadow)
         assert parsed["just.md"] == body

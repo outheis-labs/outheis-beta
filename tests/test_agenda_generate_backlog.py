@@ -18,10 +18,10 @@ SHADOW_TWO_ITEMS = """\
 
 <!-- BEGIN: project.md -->
 ## project.md
-#date-2026-03-20 #action-required #unit-project
+#date-2026-03-20 #action-required #facet-project
 Send quarterly report to accountant
 
-#action-required #unit-startup
+#action-required #facet-startup
 Complete business registration
 <!-- END: project.md -->
 """

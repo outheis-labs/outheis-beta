@@ -43,7 +43,7 @@ class TestOutputFormat:
         raw = (
             "#date-2026-03-20 #action-required\n"
             "Send quarterly report to accountant\n\n"
-            "#action-required #unit-project\n"
+            "#action-required #facet-project\n"
             "Follow-up with project lead on deliverables"
         )
         with patch("outheis.core.llm.call_llm", return_value=fake_llm_response(raw)):

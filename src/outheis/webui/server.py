@@ -500,6 +500,87 @@ async def delete_agenda_file(filename: str):
     return {"status": "deleted"}
 
 
+PAGES_DIR = HUMAN_DIR / "webui" / "pages"
+
+
+@app.get("/pages/{filename:path}")
+async def serve_page(filename: str):
+    """Serve user-defined pages from ~/.outheis/human/webui/pages/."""
+    path = PAGES_DIR / filename
+    if not path.exists() or not path.is_file():
+        return HTMLResponse("<p>Not found</p>", status_code=404)
+    suffix = path.suffix.lower()
+    if suffix == ".html":
+        return HTMLResponse(path.read_text(encoding="utf-8"))
+    if suffix == ".json":
+        return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+    return FileResponse(str(path))
+
+
+@app.get("/agenda")
+async def serve_agenda_html():
+    """Serve agenda.html from user pages directory."""
+    path = PAGES_DIR / "agenda.html"
+    if not path.exists():
+        return HTMLResponse("<p>agenda.html not found in ~/.outheis/human/webui/pages/</p>", status_code=404)
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+@app.get("/agenda.json")
+async def serve_agenda_json():
+    """Serve agenda.json so agenda.html's fetch('agenda.json') resolves correctly."""
+    path = PAGES_DIR / "agenda.json"
+    if not path.exists():
+        return JSONResponse({"error": "agenda.json not found"}, status_code=404)
+    return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+
+
+@app.put("/api/agenda-item")
+async def update_agenda_item(data: dict):
+    """Update a single item in agenda.json by id.
+
+    Accepts: {id, day?, start?, end?, base_date?}
+    Updates the matching item in vault/Codebase/agenda.json.
+    """
+    import re
+    from datetime import date, timedelta
+
+    item_id = data.get("id")
+    if not item_id:
+        return {"error": "id required"}
+
+    path = PAGES_DIR / "agenda.json"
+    if not path.exists():
+        return {"error": "agenda.json not found"}
+
+    agenda = json.loads(path.read_text(encoding="utf-8"))
+    items = agenda.get("items", [])
+    target = next((it for it in items if it.get("id") == item_id), None)
+    if target is None:
+        return {"error": f"item {item_id} not found"}
+
+    if "day" in data:
+        base_str = data.get("base_date", agenda.get("meta", {}).get("base_date", date.today().isoformat()))
+        try:
+            new_date = date.fromisoformat(base_str) + timedelta(days=int(data["day"]))
+            target["day"] = int(data["day"])
+        except (ValueError, TypeError):
+            return {"error": "invalid day or base_date"}
+
+    if "start" in data:
+        target["start"] = data["start"]
+    if "end" in data:
+        target["end"] = data["end"]
+    if "type" in data:
+        target["type"] = data["type"]
+    if "pos" in data:
+        target["pos"] = data["pos"]
+    target["source"] = "webui"
+
+    path.write_text(json.dumps(agenda, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"status": "updated", "id": item_id}
+
+
 @app.get("/api/codebase")
 async def get_codebase_files():
     return list_files(get_vault_path() / "Codebase")

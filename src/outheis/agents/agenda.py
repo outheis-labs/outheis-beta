@@ -423,31 +423,34 @@ class AgendaAgent(BaseAgent):
         if not agenda_dir:
             return "(No agenda directory)"
 
+        import re as _re
+        from outheis.core.agenda_store import items_to_shadow_text, read_agenda_json
+
         parts = []
 
-        for filename in ["Agenda.md", "Exchange.md", "Shadow.md"]:
+        for filename in ["Agenda.md", "Exchange.md"]:
             filepath = agenda_dir / filename
             if filepath.exists():
                 content = filepath.read_text(encoding="utf-8")
                 if filename == "Exchange.md":
-                    import re
-                    content = re.sub(
+                    content = _re.sub(
                         r'\n*<!-- outheis:migration:start -->.*?<!-- outheis:migration:end -->\n*',
                         '\n',
                         content,
-                        flags=re.DOTALL,
+                        flags=_re.DOTALL,
                     ).strip()
                 parts.append(f"### {filename}\n\n```markdown\n{content}\n```")
             else:
                 parts.append(f"### {filename}\n\n(does not exist)")
 
-        # If Shadow.md is absent or sparse, trigger a background scan via zeno
-        shadow_path = agenda_dir / "Shadow.md"
-        shadow_sparse = (
-            not shadow_path.exists()
-            or len(shadow_path.read_text(encoding="utf-8").strip()) < 200
-        )
-        if shadow_sparse:
+        # agenda.json replaces Shadow.md — render items as tag text for LLM context
+        agenda_data = read_agenda_json()
+        items = agenda_data.get("items", [])
+        if items:
+            shadow_text = items_to_shadow_text(items)
+            parts.append(f"### agenda.json (Shadow)\n\n```markdown\n{shadow_text}\n```")
+        else:
+            parts.append("### agenda.json (Shadow)\n\n(no items)")
             self._trigger_shadow_scan()
 
         return "\n\n".join(parts)
@@ -548,7 +551,7 @@ class AgendaAgent(BaseAgent):
         if not agenda_dir:
             return "No agenda directory found."
 
-        file_map = {"agenda": "Agenda.md", "daily": "Agenda.md", "exchange": "Exchange.md", "shadow": "Shadow.md", "backlog": "Backlog.md"}
+        file_map = {"agenda": "Agenda.md", "daily": "Agenda.md", "exchange": "Exchange.md", "backlog": "Backlog.md"}
 
         if name == "get_weekday":
             d = inputs.get("date", "")
@@ -573,24 +576,34 @@ class AgendaAgent(BaseAgent):
             return self._tool_get_daily()
 
         elif name == "write_file":
-            filename = file_map.get(inputs.get("file", "").lower())
-            if not filename:
-                return "Invalid file. Choose: agenda, daily, exchange"
+            file_key = inputs.get("file", "").lower()
             content = inputs.get("content", "")
             if not content.strip():
                 return "Error: content is required and must not be empty."
-            # --- DONE-LOGGER BEGIN ---
-            import sys as _sys
-            if inputs.get("file", "").lower() == "shadow":
+
+            if file_key == "shadow":
+                # Shadow writes go to agenda.json — merge tag-format content
+                import sys as _sys
+                from outheis.core.agenda_store import merge_shadow_write, read_agenda_json, write_agenda_json
                 _has_done = "#done-" in content
                 _sys.stderr.write(
-                    f"[done-logger] write_file(shadow): #done present={_has_done}\n"
+                    f"[done-logger] write_file(shadow→agenda.json): #done present={_has_done}\n"
                 )
                 if _has_done:
                     for _ln in content.splitlines():
                         if "#done-" in _ln:
                             _sys.stderr.write(f"[done-logger]   done-line: {_ln[:120]}\n")
-            # --- DONE-LOGGER END ---
+                try:
+                    data = read_agenda_json()
+                    data = merge_shadow_write(data, content, default_source="cato")
+                    write_agenda_json(data)
+                    return "✓ agenda.json updated"
+                except Exception as _e:
+                    return f"Error writing agenda.json: {_e}"
+
+            filename = file_map.get(file_key)
+            if not filename:
+                return "Invalid file. Choose: agenda, daily, exchange, shadow"
             return self._write_file(agenda_dir / filename, content)
 
         elif name == "append_file":
@@ -773,25 +786,22 @@ class AgendaAgent(BaseAgent):
         if today_count >= 5:
             return False  # already at capacity
 
-        # Check Shadow.md for any items that qualify for Today
-        # Matches priority 1 + 2 from the query rule: overdue, due today,
-        # #action-required, or within ~10 days (near deadline).
-        shadow_path = agenda_dir / "Shadow.md"
-        if not shadow_path.exists():
-            return False
+        # Check agenda.json for items that qualify for Today
+        from outheis.core.agenda_store import read_agenda_json
         near_limit = today + timedelta(days=10)
-        shadow_text = shadow_path.read_text(encoding="utf-8")
-        for line in shadow_text.splitlines():
-            if "✓" in line:
+        data = read_agenda_json()
+        for it in data.get("items", []):
+            if it.get("done"):
                 continue
-            if "#action-required" in line:
-                return True
-            m = DATE_RE.search(line)
-            if m:
+            if it.get("type") == "volatile" and it.get("day") is None:
+                return True  # undated #action-required type
+            d = it.get("day")
+            if d is not None:
                 try:
-                    if date.fromisoformat(m.group(1)) <= near_limit:
+                    item_date = today.__class__.fromordinal(today.toordinal() + d)
+                    if item_date <= near_limit:
                         return True
-                except ValueError:
+                except Exception:
                     pass
         return False
 
@@ -809,7 +819,6 @@ class AgendaAgent(BaseAgent):
 
         from outheis.core.config import load_config
 
-        agenda_dir / "Shadow.md"
         now = dt.now()
         today_d = date.today()
         today_d.isoformat()
@@ -1174,8 +1183,10 @@ class AgendaAgent(BaseAgent):
         if not agenda_dir:
             return
 
-        filenames = ["Agenda.md", "Exchange.md", "Shadow.md"]
+        filenames = ["Agenda.md", "Exchange.md"]
         current_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
+        from outheis.core.agenda_store import _agenda_json_path
+        current_hashes["agenda.json"] = self._compute_hash(_agenda_json_path())
 
         agenda_path = agenda_dir / "Agenda.md"
         daily_text = agenda_path.read_text(encoding="utf-8") if agenda_path.exists() else ""
@@ -1392,36 +1403,28 @@ class AgendaAgent(BaseAgent):
 
     def generate_backlog(self) -> str:
         """
-        Generate Backlog.md — LLM-sorted view of all open Shadow.md items.
+        Generate Backlog.md — LLM-sorted view of all open agenda.json items.
 
-        The LLM receives all Shadow.md items and writes the complete Backlog.md
-        directly in Markdown — no JSON intermediate. Groups items by priority,
-        preserves the two-line tag format from Shadow.md.
-        Pure derivation from Shadow.md — safe to delete at any time.
+        The LLM receives items as tag text and writes Backlog.md.
+        Pure derivation from agenda.json — safe to delete at any time.
         """
         from datetime import date as _date
 
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
             return "No agenda directory found."
-        shadow_path = agenda_dir / "Shadow.md"
-        if not shadow_path.exists():
-            return "Shadow.md not found."
 
-        shadow_content = shadow_path.read_text(encoding="utf-8")
+        from outheis.core.agenda_store import items_to_shadow_text, read_agenda_json
+        data = read_agenda_json()
+        open_items = [it for it in data.get("items", []) if not it.get("done")]
+
+        if not open_items:
+            return "Backlog: no open items found in agenda.json."
+
+        shadow_content = items_to_shadow_text(open_items)
+        item_count = len(open_items)
         today = _date.today()
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-        # Count items: tag lines (starting with #[a-z]) followed by a text line
-        import re as _re
-        lines = shadow_content.splitlines()
-        item_count = 0
-        for idx in range(len(lines) - 1):
-            if _re.match(r"^#[a-z]", lines[idx]) and lines[idx + 1].strip() and not lines[idx + 1].startswith("#"):
-                item_count += 1
-
-        if item_count == 0:
-            return "Backlog: no open items found in Shadow.md."
 
         from outheis.core.llm import call_llm
         from outheis.core.memory import get_memory_context
@@ -1431,10 +1434,10 @@ class AgendaAgent(BaseAgent):
             f"User context (memory):\n{memory}" if memory else None,
         ]))
 
-        header_line = f"*{now_str} — {item_count} items — derived from Shadow.md, safe to delete*"
+        header_line = f"*{now_str} — {item_count} items — derived from agenda.json, safe to delete*"
         query = (
             f"Today is {today.isoformat()}.\n\n"
-            "Below is Shadow.md — a list of open items in two-line tag format:\n\n"
+            "Below are open items in two-line tag format:\n\n"
             f"{shadow_content}\n\n"
             "---\n"
             "Write a Backlog.md that groups these items by priority area.\n\n"

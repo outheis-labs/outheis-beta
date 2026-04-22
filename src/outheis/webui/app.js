@@ -194,7 +194,7 @@ async function renderView() {
       await renderFileView('rules', '~/.outheis/human/rules/');
       break;
 case 'agenda':
-      await renderFileView('agenda', 'vault/Agenda/');
+      await renderAgendaView();
       break;
     case 'codebase':
       await renderFileView('codebase', 'vault/Codebase/');
@@ -1333,6 +1333,65 @@ async function saveSchedule() {
 }
 
 // File view
+async function renderAgendaView() {
+  viewTitle.textContent = 'Agenda';
+  viewPath.textContent = 'vault/Agenda/';
+
+  viewActions.innerHTML = `
+    <button class="btn sched-run-btn" data-task="agenda_review" onclick="runTask('agenda_review', this)">Review</button>
+    <button class="btn sched-run-btn" data-task="backlog_generate" onclick="runTask('backlog_generate', this)" style="margin-left:6px">Get Backlog</button>
+  `;
+  const { running = [] } = await fetchAPI('/api/scheduler/running');
+  for (const t of ['agenda_review', 'backlog_generate']) {
+    const btn = viewActions.querySelector(`.sched-run-btn[data-task="${t}"]`);
+    if (!btn) continue;
+    if (activePolls[t]) { activePolls[t].btn = btn; btn.textContent = 'Running…'; btn.disabled = true; }
+    else if (running.includes(t)) { btn.textContent = 'Running…'; btn.disabled = true; watchTask(t, btn); }
+  }
+
+  const tab = (currentTab === 'agendamd') ? 'agendamd' : 'calendar';
+  viewTabs.innerHTML = `
+    <div class="tab ${tab === 'calendar' ? 'active' : ''}" onclick="switchAgendaTab('calendar')">Calendar</div>
+    <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Agenda.md</div>
+  `;
+  await renderAgendaTab(tab);
+}
+
+async function switchAgendaTab(tab) {
+  currentTab = tab;
+  viewTabs.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', (tab === 'calendar' && i === 0) || (tab === 'agendamd' && i === 1)));
+  await renderAgendaTab(tab);
+}
+
+async function renderAgendaTab(tab) {
+  stopFileListRefresh();
+  if (tab === 'calendar') {
+    viewContent.innerHTML = '<iframe src="/agenda" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe>';
+  } else {
+    currentFile = 'Agenda.md';
+    fileMode = 'rendered';
+    viewContent.innerHTML = `
+      <div class="file-view" style="flex:1;display:flex;flex-direction:column;height:100%;">
+        <div class="file-header">
+          <span class="file-name">Agenda.md</span>
+          <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
+            <input id="search-input" type="text" placeholder="Search…"
+              style="font-size:11px;padding:3px 7px;border:1px solid var(--border-primary);background:var(--bg-secondary);color:var(--text-primary);border-radius:3px;width:140px;outline:none;"
+              onkeydown="if(event.key==='Enter')searchFiles('agenda');if(event.key==='Escape')closeSearch();">
+            <button class="btn" onclick="searchFiles('agenda')" title="Search">Search</button>
+            <button class="btn" onclick="loadFile('agenda','Agenda.md')" title="Reload from disk">Refresh</button>
+            <button class="btn btn-primary" onclick="saveCurrentFile()">Save</button>
+          </div>
+        </div>
+        <div id="search-results" style="display:none;"></div>
+        <div class="file-body" id="file-body" style="flex:1;overflow:auto;"></div>
+      </div>
+    `;
+    await loadFile('agenda', 'Agenda.md');
+    startFileRefresh('agenda', 'Agenda.md');
+  }
+}
+
 async function renderFileView(type, pathPrefix) {
   viewTitle.textContent = type.charAt(0).toUpperCase() + type.slice(1);
   viewPath.textContent = pathPrefix;

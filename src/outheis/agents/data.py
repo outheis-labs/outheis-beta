@@ -15,6 +15,14 @@ from datetime import datetime
 from pathlib import Path
 
 from outheis.agents.base import BaseAgent
+from outheis.core.agenda_store import (
+    parse_tag_entries_to_items,
+    prune_done_items,
+    read_agenda_json,
+    remove_items_by_source,
+    replace_items_by_source,
+    write_agenda_json,
+)
 from outheis.core.config import AgentConfig, get_human_dir, load_config
 from outheis.core.index import SearchIndex, create_index
 from outheis.core.message import Message
@@ -413,36 +421,34 @@ class DataAgent(BaseAgent):
             return f"Section '{topic}' not found. Available:\n{content[:500]}..."
 
     def _tool_update_shadow(self, vault: Path, path: str) -> str:
-        """Re-extract Shadow.md entries for a single vault file and update its section."""
+        """Re-extract agenda.json items for a single vault file."""
         if not path:
             return "No path provided."
         full_path = vault / path
         if not full_path.exists():
             return f"File not found: {path}"
 
-        config = load_config()
-        primary_vault = config.human.primary_vault()
-        shadow_path = primary_vault / "Agenda" / "Shadow.md"
         cache_path = get_human_dir() / "cache" / "shadow" / "file_state.json"
 
         try:
             content = full_path.read_text(encoding="utf-8")
             entries = self._extract_chronological_entries(path, content)
-            sections = self._parse_shadow_sections(shadow_path)
+            data = read_agenda_json()
             if entries:
-                sections[path] = entries
+                items = parse_tag_entries_to_items(entries, source=path)
+                data = replace_items_by_source(data, path, items)
             else:
-                sections.pop(path, None)
-            self._write_shadow(shadow_path, sections)
+                data = remove_items_by_source(data, path)
+            write_agenda_json(data)
 
-            # Update shadow cache for this file so batch scan won't re-process it
+            # Update cache so batch scan won't re-process this file
             hashes = self._load_shadow_cache(cache_path)
             hashes[path] = self._hash_file(full_path)
             self._save_shadow_cache(cache_path, hashes)
 
-            return f"✓ Shadow.md updated for {path}"
+            return f"✓ agenda.json updated for {path}"
         except Exception as e:
-            return f"Error updating shadow: {e}"
+            return f"Error updating agenda.json: {e}"
 
     # =========================================================================
     # INDEX MANAGEMENT
@@ -604,18 +610,16 @@ class DataAgent(BaseAgent):
 
     def scan_chronological_entries(self) -> int:
         """
-        Scan vault for chronological entries, write to Shadow.md.
+        Scan vault for chronological entries, write items to agenda.json.
 
-        Uses a file-state cache (name → size + mtime) to process only new or
-        changed files.  Shadow.md is organised by source file with
-        <!-- BEGIN/END --> section markers so individual sections can be
-        replaced or removed without touching the rest.
+        Uses a file-state cache (name → md5) to process only new or changed
+        files. Items in agenda.json are keyed by source=filepath so each
+        source's items can be replaced or removed independently.
 
         Returns the number of files actually processed this run.
         """
         config = load_config()
         primary_vault = config.human.primary_vault()
-        shadow_path = primary_vault / "Agenda" / "Shadow.md"
         cache_path = get_human_dir() / "cache" / "shadow" / "file_state.json"
 
         old_hashes = self._load_shadow_cache(cache_path)
@@ -636,16 +640,15 @@ class DataAgent(BaseAgent):
         files_to_process = {**new_files, **changed_files}
 
         retention_days = (config.agents.get("agenda") or AgentConfig("cato")).retention
-        sections_changed = bool(files_to_process or deleted_names)
+        anything_changed = bool(files_to_process or deleted_names)
 
-        # Always load sections when retention cleanup may be needed
-        if not sections_changed and retention_days is None:
+        if not anything_changed and retention_days is None:
             return 0
 
-        sections = self._parse_shadow_sections(shadow_path)
+        data = read_agenda_json()
 
         for name in deleted_names:
-            sections.pop(name, None)
+            data = remove_items_by_source(data, name)
 
         processed = 0
         for name, path in files_to_process.items():
@@ -653,50 +656,22 @@ class DataAgent(BaseAgent):
                 content = path.read_text(encoding="utf-8")
                 entries = self._extract_chronological_entries(name, content)
                 if entries:
-                    sections[name] = entries
+                    items = parse_tag_entries_to_items(entries, source=name)
+                    data = replace_items_by_source(data, name, items)
                 else:
-                    sections.pop(name, None)
+                    data = remove_items_by_source(data, name)
                 processed += 1
             except Exception as e:
                 print(f"Shadow scan: error processing {name}: {e}")
 
-        # Remove expired #done-* entries across all sections
         if retention_days is not None:
-            import re as _re
-            from datetime import date as _date
-            from datetime import timedelta as _td
-            cutoff = _date.today() - _td(days=retention_days)
-            _done_re = _re.compile(r"^#done-(\d{4}-\d{2}-\d{2})")
-            pruned = 0
-            for name in list(sections):
-                lines = sections[name].splitlines()
-                kept: list[str] = []
-                i = 0
-                while i < len(lines):
-                    m = _done_re.match(lines[i].strip())
-                    if m:
-                        try:
-                            done_date = _date.fromisoformat(m.group(1))
-                            if done_date < cutoff:
-                                # Skip tag line + description line + optional blank
-                                i += 1  # skip tag line
-                                if i < len(lines) and lines[i].strip():
-                                    i += 1  # skip description line
-                                if i < len(lines) and not lines[i].strip():
-                                    i += 1  # skip blank separator
-                                pruned += 1
-                                continue
-                        except ValueError:
-                            pass
-                    kept.append(lines[i])
-                    i += 1
-                sections[name] = "\n".join(kept)
+            pruned = prune_done_items(data, retention_days)
             if pruned:
-                print(f"Shadow scan: pruned {pruned} expired #done-* entries")
-                sections_changed = True
+                print(f"Shadow scan: pruned {pruned} expired done items")
+                anything_changed = True
 
-        if sections_changed:
-            self._write_shadow(shadow_path, sections)
+        if anything_changed:
+            write_agenda_json(data)
         self._save_shadow_cache(cache_path, current_hashes)
 
         return processed
@@ -738,37 +713,6 @@ class DataAgent(BaseAgent):
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
 
-    def _parse_shadow_sections(self, shadow_path: Path) -> dict[str, str]:
-        """Parse Shadow.md into {filename: body} using BEGIN/END markers."""
-        import re
-        sections: dict[str, str] = {}
-        if not shadow_path.exists():
-            return sections
-        content = shadow_path.read_text(encoding="utf-8")
-        pattern = re.compile(
-            r"<!-- BEGIN: (.+?) -->\n## .+?\n(.*?)<!-- END: .+? -->",
-            re.DOTALL,
-        )
-        for match in pattern.finditer(content):
-            sections[match.group(1)] = match.group(2).rstrip()
-        return sections
-
-    def _write_shadow(self, shadow_path: Path, sections: dict[str, str]) -> None:
-        """Write Shadow.md from {filename: body} dict, sorted by filename."""
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-        lines = [
-            "# Shadow — Vault Chronological Index",
-            f"*Last updated: {timestamp}*",
-            "",
-        ]
-        for name in sorted(sections):
-            lines.append(f"<!-- BEGIN: {name} -->")
-            lines.append(f"## {name}")
-            lines.append(sections[name])
-            lines.append(f"<!-- END: {name} -->")
-            lines.append("")
-        shadow_path.parent.mkdir(parents=True, exist_ok=True)
-        shadow_path.write_text("\n".join(lines), encoding="utf-8")
 
     def _extract_chronological_entries(self, filename: str, content: str) -> str:
         """

@@ -79,15 +79,16 @@ Dropping a mandatory item is data loss — no exceptions.
 - `#date` = today or past
 
 ### Optional fill (soft limit)
-Stop once Today has **5 items total**. Fill in chronological order from items up to 30 days out:
-- `#date` within 30 days
-- `#action-required` with future date
+Stop once Today has **5 items total**. Fill in chronological order from Shadow:
+- `#date` within 30 days (past or today already mandatory above)
 
 Items beyond 30 days stay in Shadow unless mandatory.
+Future-dated `#action-required` items do **not** appear in Today — they surface when their date arrives.
 
 ### Dynamic refill
 If the user checked off items during the day and Today drops below 5, the next run pulls
-chronological `#action-required` items with future dates as additional candidates.
+undated `#action-required` items (no `#date-*` tag) from Shadow as additional candidates.
+Future-dated items are never used for refill.
 
 ### Exclusions
 - Completed items (`✓`, `#done-*`, `#cato-consolidated`)

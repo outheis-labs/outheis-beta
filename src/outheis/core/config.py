@@ -677,3 +677,15 @@ def init_directories() -> None:
                 if not dst_file.exists():
                     import shutil
                     shutil.copy2(src_file, dst_file)
+
+    # Seed default webui pages on first run (never overwrite user-modified versions)
+    pages_src = Path(__file__).parent.parent / "webui" / "pages"
+    pages_dst = human_dir / "webui" / "pages"
+    if pages_src.exists():
+        import shutil
+        pages_dst.mkdir(parents=True, exist_ok=True)
+        for src_file in pages_src.iterdir():
+            if src_file.is_file():
+                dst_file = pages_dst / src_file.name
+                if not dst_file.exists():
+                    shutil.copy2(src_file, dst_file)

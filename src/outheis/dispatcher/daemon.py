@@ -1418,16 +1418,21 @@ class Dispatcher:
             watcher.stop()
             lock_manager.stop()
 
-            # Stop WebUI explicitly so the port is released before the process exits
+            # Stop WebUI — force_exit skips graceful connection drain so the
+            # port is released immediately (avoids blocking on SSE keep-alives).
             if self._webui_server is not None:
                 self._webui_server.should_exit = True
+                self._webui_server.force_exit = True
 
-            # Stop Ollama if we started it
+            # Stop Ollama if we started it — proc.wait() can take up to 5s,
+            # so run it in a short-wait thread instead of blocking the main thread.
             from outheis.core.ollama_server import get_server
             ollama = get_server()
             if ollama.owns_process():
                 print("[ollama] stopping server", file=sys.stderr)
-                ollama.stop()
+                _ot = threading.Thread(target=ollama.stop, daemon=True, name="ollama-stop")
+                _ot.start()
+                _ot.join(timeout=2.0)  # wait max 2s; if still running it dies with process
 
             # Close wakeup pipe
             if self._wakeup_read:
@@ -1559,7 +1564,10 @@ def start_daemon(foreground: bool = False) -> bool:
                         break
                     except OSError:
                         pass
-                suffix = "" if webui_ready else " (still starting — retry in a moment)"
+                if not webui_ready:
+                    print(f"  {RED}✗{RESET} Web UI did not come online after 30s (port {port}).")
+                    print(f"       Check log for errors: {log_path}")
+                    return False
                 if configured_host in ("0.0.0.0", "::", ""):
                     # Enumerate all non-loopback IPs plus loopback
                     addrs = []
@@ -1575,9 +1583,9 @@ def start_daemon(foreground: bool = False) -> bool:
                     if "127.0.0.1" not in addrs:
                         addrs.insert(0, "127.0.0.1")
                     for ip in addrs:
-                        print(f"  {GREEN}✓{RESET} Web UI: http://{ip}:{port}{suffix}")
+                        print(f"  {GREEN}✓{RESET} Web UI: http://{ip}:{port}")
                 else:
-                    print(f"  {GREEN}✓{RESET} Web UI: http://{configured_host}:{port}{suffix}")
+                    print(f"  {GREEN}✓{RESET} Web UI: http://{configured_host}:{port}")
             if config.signal.enabled:
                 print(f"  {GREEN}✓{RESET} Signal transport enabled (bot: {config.signal.bot_phone})")
                 try:
@@ -1757,8 +1765,8 @@ def stop_daemon() -> bool:
 
     try:
         os.kill(pid, signal.SIGTERM)
-        # Wait for process to exit
-        for _ in range(50):  # 5 seconds max
+        # Wait for process to exit — 15s: lock_manager(≤2s) + ollama(≤2s) + headroom
+        for _ in range(150):
             time.sleep(0.1)
             try:
                 os.kill(pid, 0)

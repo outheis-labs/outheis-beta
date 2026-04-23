@@ -762,14 +762,25 @@ def migrate(
         return
 
     if apply:
-        if total_outdated == 0:
+        from outheis.core.agenda_store import migrate_to_tag_schema, read_agenda_json, write_agenda_json
+
+        data = read_agenda_json()
+        n = migrate_to_tag_schema(data)
+        if n:
+            write_agenda_json(data)
+            if not quiet:
+                typer.echo(f"agenda.json: converted {n} items to tag schema (v0.2).")
+        elif not quiet:
+            typer.echo("agenda.json: already up to date.")
+
+        if total_outdated == 0 and n == 0:
             if not quiet:
                 typer.echo("Nothing to migrate.")
             return
 
-        # TODO: Implement actual migration
-        typer.echo("Migration not yet implemented.")
-        typer.echo("Records will be migrated on-the-fly when read.")
+        # TODO: Message/Insight schema migrations (on-the-fly for now)
+        if total_outdated > 0 and not quiet:
+            typer.echo("Message/Insight records will be migrated on-the-fly when read.")
 
 
 # =============================================================================

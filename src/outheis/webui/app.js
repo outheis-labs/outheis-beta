@@ -1345,20 +1345,31 @@ async function renderAgendaView() {
     else if (running.includes('agenda_review')) { reviewBtn.textContent = 'Running…'; reviewBtn.disabled = true; watchTask('agenda_review', reviewBtn); }
   }
 
-  const validTabs = ['calendar', 'agendamd', 'extern'];
+  const validTabs = ['calendar', 'agendamd', 'source', 'extern'];
   const tab = validTabs.includes(currentTab) ? currentTab : 'calendar';
   viewTabs.innerHTML = `
     <div class="tab ${tab === 'calendar' ? 'active' : ''}" onclick="switchAgendaTab('calendar')">Calendar</div>
-    <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Agenda.md</div>
-    <div class="tab ${tab === 'extern'   ? 'active' : ''}" onclick="switchAgendaTab('extern')">Extern</div>
+    <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Agenda</div>
+    <div class="tab ${tab === 'source'   ? 'active' : ''}" onclick="switchAgendaTab('source')">Source</div>
+    <div class="tab ${tab === 'extern'   ? 'active' : ''}" onclick="switchAgendaTab('extern')">External</div>
   `;
   await renderAgendaTab(tab);
 }
 
 async function switchAgendaTab(tab) {
+  if (currentTab === 'source' && tab !== 'source') {
+    const raw = document.querySelector('.file-raw');
+    if (raw) {
+      try { JSON.parse(raw.textContent); }
+      catch (e) {
+        if (!confirm(`agenda.json hat einen Syntaxfehler:\n${e.message}\n\nTrotzdem verlassen?`)) return;
+      }
+    }
+  }
   currentTab = tab;
+  const tabOrder = ['calendar', 'agendamd', 'source', 'extern'];
   viewTabs.querySelectorAll('.tab').forEach((t, i) =>
-    t.classList.toggle('active', (tab === 'calendar' && i === 0) || (tab === 'agendamd' && i === 1) || (tab === 'extern' && i === 2))
+    t.classList.toggle('active', tabOrder[i] === tab)
   );
   await renderAgendaTab(tab);
 }
@@ -1367,6 +1378,8 @@ async function renderAgendaTab(tab) {
   stopFileListRefresh();
   if (tab === 'calendar') {
     viewContent.innerHTML = '<div style="flex:1;display:flex;padding:0 24px;overflow:hidden;"><iframe src="/agenda" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe></div>';
+  } else if (tab === 'source') {
+    await renderSourceTab();
   } else if (tab === 'extern') {
     await renderExternTab();
   } else {
@@ -1390,6 +1403,92 @@ async function renderAgendaTab(tab) {
     await loadFile('agenda', 'Agenda.md');
     startFileRefresh('agenda', 'Agenda.md');
   }
+}
+
+async function renderSourceTab() {
+  currentFile = null;
+  fileMode = 'raw';
+  viewContent.innerHTML = `
+    <div class="file-view" style="flex:1;display:flex;flex-direction:column;height:100%;">
+      <div class="file-header">
+        <span class="file-name">agenda.json</span>
+        <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
+          <input type="text" id="search-input" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchSourceJson();if(event.key==='Escape')closeSearch();">
+          <button class="btn" onclick="searchSourceJson()">Search</button>
+          <button class="btn" onclick="loadSourceJson()">Refresh</button>
+          <button class="btn btn-primary" onclick="saveSourceJson()">Save</button>
+        </div>
+      </div>
+      <div id="search-results" style="display:none;"></div>
+      <div class="file-body" id="file-body" style="flex:1;overflow:auto;"></div>
+    </div>
+  `;
+  await loadSourceJson();
+}
+
+async function loadSourceJson() {
+  const body = document.getElementById('file-body');
+  if (!body) return;
+  try {
+    const res = await fetch('/agenda.json?_=' + Date.now());
+    const text = await res.text();
+    const parsed = JSON.parse(text);
+    currentFileContent = JSON.stringify(parsed, null, 2);
+    body.innerHTML = `<div class="file-raw" contenteditable spellcheck="false">${escapeHtml(currentFileContent)}</div>`;
+  } catch (e) {
+    body.innerHTML = `<div style="padding:16px;color:var(--accent-danger);">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function saveSourceJson() {
+  const raw = document.querySelector('.file-raw');
+  if (!raw) return;
+  const content = raw.textContent;
+  try {
+    JSON.parse(content);
+  } catch (e) {
+    showToast('Invalid JSON: ' + e.message);
+    return;
+  }
+  const res = await fetch('/agenda.json', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  if (res.ok) showToast('agenda.json saved');
+  else showToast('Save failed');
+}
+
+function searchSourceJson() {
+  const input = document.getElementById('search-input');
+  const panel = document.getElementById('search-results');
+  if (!input || !panel) return;
+  const q = input.value.trim();
+  if (!q) { panel.style.display = 'none'; return; }
+  let pattern;
+  try { pattern = new RegExp(q, 'i'); }
+  catch (e) {
+    panel.style.display = 'block';
+    panel.innerHTML = `<div class="search-error">Invalid regex: ${escapeHtml(e.message)} <button class="search-close" onclick="closeSearch()">✕</button></div>`;
+    return;
+  }
+  const raw = document.querySelector('.file-raw');
+  const text = raw ? raw.textContent : (currentFileContent || '');
+  const matches = [];
+  text.split('\n').forEach((line, i) => {
+    if (pattern.test(line)) matches.push({ line: i + 1, content: line.trim().slice(0, 200) });
+  });
+  panel.style.display = 'block';
+  if (!matches.length) {
+    panel.innerHTML = `<div class="search-empty">No matches <button class="search-close" onclick="closeSearch()">✕</button></div>`;
+    return;
+  }
+  const rows = matches.map(({ line, content }) =>
+    `<div class="search-match"><span class="search-line">:${line}</span><span class="search-content">${escapeHtml(content)}</span></div>`
+  ).join('');
+  panel.innerHTML = `
+    <div class="search-header"><span>${matches.length} match${matches.length !== 1 ? 'es' : ''}</span><button class="search-close" onclick="closeSearch()">✕</button></div>
+    <div class="search-list">${rows}</div>`;
 }
 
 const ICS_FACETS = ['misc','cato','hiro','senswork','rumi','self','zeno','ou','familie','schatzl'];
@@ -2236,7 +2335,6 @@ function cancelActivePolls() {
 }
 
 // WebSocket
-let _wsFailCount = 0;
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   // Force IPv4 loopback — localhost resolves to ::1 first on macOS, but uvicorn binds 127.0.0.1 only
@@ -2247,8 +2345,6 @@ function connectWebSocket() {
   ws.onopen = () => {
     connectionStatus.classList.add('running');
     connectionStatus.title = 'Connected';
-    _wsFailCount = 0;
-    document.getElementById('offline-banner')?.remove();
   };
   ws.onmessage = (event) => {
     const data = JSON.parse(event.data);
@@ -2260,13 +2356,6 @@ function connectWebSocket() {
   ws.onclose = () => {
     connectionStatus.classList.remove('running');
     connectionStatus.title = 'Disconnected';
-    _wsFailCount++;
-    if (_wsFailCount >= 3 && !document.getElementById('offline-banner')) {
-      const banner = document.createElement('div');
-      banner.id = 'offline-banner';
-      banner.innerHTML = `<strong>Dispatcher offline.</strong> Run <code>outheis start</code> in the terminal to restart.`;
-      document.body.appendChild(banner);
-    }
     setTimeout(connectWebSocket, 3000);
   };
   ws.onerror = () => { connectionStatus.classList.remove('running'); connectionStatus.title = 'Disconnected'; };
@@ -2655,9 +2744,16 @@ document.getElementById('agenda-count').textContent = String(agenda.length || 0)
     if (s.running) {
       statusEl.classList.add('running');
       statusEl.classList.toggle('fallback', s.system_mode === 'fallback');
+      document.getElementById('offline-banner')?.remove();
     } else {
       statusEl.classList.remove('running');
       statusEl.classList.remove('fallback');
+      if (!document.getElementById('offline-banner')) {
+        const banner = document.createElement('div');
+        banner.id = 'offline-banner';
+        banner.innerHTML = `<strong>Dispatcher offline.</strong> Run <code>outheis start</code> in the terminal to restart.`;
+        document.body.appendChild(banner);
+      }
     }
   }
   await pollDaemonStatus();

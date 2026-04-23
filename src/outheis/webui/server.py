@@ -535,6 +535,19 @@ async def serve_agenda_json():
     return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
 
 
+@app.put("/agenda.json")
+async def save_agenda_json(data: dict):
+    """Save agenda.json from the Source tab editor."""
+    path = PAGES_DIR / "agenda.json"
+    content = data.get("content", "")
+    try:
+        json.loads(content)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+    path.write_text(content, encoding="utf-8")
+    return {"status": "saved"}
+
+
 @app.get("/webui/pages/{filename:path}")
 async def serve_pages_file(filename: str):
     """Serve files from the user pages directory (agenda-ics-*.json etc.)."""

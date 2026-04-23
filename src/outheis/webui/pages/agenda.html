@@ -1874,7 +1874,7 @@ function renderStream(){
       vt.style.bottom='auto';
 
       if(ev.duration){
-        const wF=Math.max(0.04, Math.min(1-pos.x, parseDuration(ev.duration)));
+        const wF=Math.min(1-pos.x, parseDuration(ev.duration));
         vt.style.width=(wF*100)+'%';
         vt.style.height=rowH+'px';
         vt.style.top='0';

@@ -244,6 +244,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
     <button class="btn" id="saveBtn" onclick="saveAgenda()">Save</button>
     <button class="btn" onclick="cycleColors()" title="Cycle colors">Colors</button>
     <button class="btn" id="gradBtn" onclick="toggleGrad()">Gradients</button>
+    <button class="btn" id="spreadBtn" onclick="toggleSpread()">Spread</button>
   </div>
   <div id="gradPanel" style="display:none;margin-bottom:1rem;padding-left:64px;flex-wrap:wrap;gap:18px;align-items:center;">
     <div style="display:flex;align-items:center;gap:6px;">
@@ -257,11 +258,6 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
       <span id="decayVal" style="font-size:11px;color:var(--text);min-width:34px;font-family:'IBM Plex Sans',sans-serif;">10.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
-      <span style="font-size:13px;color:var(--text);letter-spacing:.05em;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;">Tag ab</span>
-      <input type="time" id="dayStartInput" step="3600" value="05:00" style="width:68px;font-family:'IBM Plex Mono',monospace;font-size:12px;background:transparent;border:none;border-bottom:1px solid var(--bg2);color:var(--text);outline:none;padding:1px 0;"
-        oninput="const h=+this.value.split(':')[0];if(!isNaN(h)){DAY_START=h;buildTimeAxis(TIME_AXIS_CFG,h);markDirty();render();}">
-    </div>
-    <div style="display:flex;align-items:center;gap:6px;">
       <span style="font-size:13px;color:var(--text);letter-spacing:.05em;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;">Ghost pull</span>
       <input type="range" id="ghostSlider" min="0.01" max="1.0" value="0.04" step="0.01" style="width:110px;accent-color:#218380;" oninput="GHOST_PULL=+this.value;document.getElementById('ghostVal').textContent=(+this.value).toFixed(2);markDirty();renderStream()">
       <span id="ghostVal" style="font-size:11px;color:var(--text);min-width:34px;font-family:'IBM Plex Sans',sans-serif;">0.04</span>
@@ -272,6 +268,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
       <span id="overlayVal" style="font-size:11px;color:var(--text);min-width:34px;font-family:'IBM Plex Sans',sans-serif;">0.09</span>
     </div>
   </div>
+  <div id="spreadPanel" style="display:none;margin-bottom:1rem;padding-left:64px;flex-direction:column;gap:10px;"></div>
   <div class="legend" id="leg"></div>
   <div class="tax-row">
     <div class="time-axis" id="tax"></div>
@@ -1168,6 +1165,69 @@ function toggleGrad(){
   b.style.borderColor=open?'':'var(--accent)';
   b.style.color=open?'':'var(--accent)';
 }
+function defaultTimeAxis(ds){
+  const cfg=[];
+  for(let i=0;i<6;i++){
+    const h0=(ds+i*4)%24, h1=(ds+i*4+4)%24;
+    const fmt=h=>String(h).padStart(2,'0')+':00';
+    cfg.push({from:fmt(h0),to:fmt(h1),weight:1.0});
+  }
+  return cfg;
+}
+function renderSpreadPanel(){
+  const panel=document.getElementById('spreadPanel');
+  if(!panel) return;
+  const cfg=TIME_AXIS_CFG.length?TIME_AXIS_CFG:defaultTimeAxis(DAY_START);
+  const S='font-family:\'IBM Plex Sans\',sans-serif;';
+  const SM='font-family:\'IBM Plex Mono\',monospace;';
+  panel.innerHTML='';
+  /* day start row */
+  const dsRow=document.createElement('div');
+  dsRow.style.cssText='display:flex;align-items:center;gap:8px;';
+  dsRow.innerHTML=`<span style="font-size:13px;${S}color:var(--text);letter-spacing:.05em;min-width:90px;">Tag ab</span>`+
+    `<input id="dayStartInput" type="time" step="3600" value="${String(DAY_START).padStart(2,'0')}:00" `+
+    `style="width:72px;${SM}font-size:12px;background:transparent;border:none;border-bottom:1px solid var(--bg2);color:var(--text);outline:none;padding:1px 0;">`;
+  dsRow.querySelector('#dayStartInput').addEventListener('input',function(){
+    const h=+this.value.split(':')[0];
+    if(isNaN(h)) return;
+    const weights=(TIME_AXIS_CFG.length?TIME_AXIS_CFG:defaultTimeAxis(DAY_START)).map(s=>s.weight);
+    DAY_START=h;
+    TIME_AXIS_CFG=defaultTimeAxis(h).map((s,i)=>({...s,weight:weights[i]??1.0}));
+    buildTimeAxis(TIME_AXIS_CFG,h);
+    renderSpreadPanel();
+    markDirty(); render();
+  });
+  panel.appendChild(dsRow);
+  /* segment rows */
+  cfg.forEach((seg,i)=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;';
+    const label=`${seg.from.slice(0,5)}–${seg.to.slice(0,5)}`;
+    const valId=`spw-val-${i}`;
+    row.innerHTML=`<span style="font-size:12px;${SM}color:var(--text);min-width:90px;">${label}</span>`+
+      `<input type="range" min="0.1" max="5.0" value="${seg.weight}" step="0.1" style="width:160px;accent-color:#218380;">`+
+      `<span id="${valId}" style="font-size:11px;${S}color:var(--text);min-width:28px;">${seg.weight.toFixed(1)}</span>`;
+    row.querySelector('input[type=range]').addEventListener('input',function(){
+      const w=+this.value;
+      document.getElementById(valId).textContent=w.toFixed(1);
+      if(!TIME_AXIS_CFG.length) TIME_AXIS_CFG=defaultTimeAxis(DAY_START);
+      TIME_AXIS_CFG[i].weight=w;
+      buildTimeAxis(TIME_AXIS_CFG,DAY_START);
+      markDirty(); render();
+    });
+    panel.appendChild(row);
+  });
+}
+function toggleSpread(){
+  const p=document.getElementById('spreadPanel');
+  const b=document.getElementById('spreadBtn');
+  if(!p) return;
+  const open=p.style.display!=='none'&&p.style.display!=='';
+  p.style.display=open?'none':'flex';
+  b.style.borderColor=open?'':'var(--accent)';
+  b.style.color=open?'':'var(--accent)';
+  if(!open) renderSpreadPanel();
+}
 
 function makeResizable(block, lh, rh, key, tl, ev, f1orig, f2orig){
   const pad=n=>String(Math.round(n)).padStart(2,'0');
@@ -1297,7 +1357,11 @@ function applyAgendaData(data){
         const sv=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
         sv('peakSlider',PEAK_AMP); sv('decaySlider',DECAY);
         sv('ghostSlider',GHOST_PULL); sv('overlaySlider',OVERLAY_ALPHA);
-        sv('dayStartInput',String(DAY_START).padStart(2,'0')+':00');
+        /* spread panel re-renders if open, otherwise just update input if present */
+        const dsEl=document.getElementById('dayStartInput');
+        if(dsEl) dsEl.value=String(DAY_START).padStart(2,'0')+':00';
+        const sp=document.getElementById('spreadPanel');
+        if(sp&&sp.style.display!=='none') renderSpreadPanel();
       }
       /* convert items → EVENTS format — support both tag-based and legacy explicit-fields schema */
       EVENTS=(data.items||[]).map(item=>{

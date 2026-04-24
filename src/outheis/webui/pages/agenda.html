@@ -304,6 +304,7 @@ function hexToHsl(hex){
   }
   return {h:Math.round(hue*360), s:Math.round(s*100), l:Math.round(l*100)};
 }
+function strHash(s){let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}return Math.abs(h);}
 function rebuildFM(){
   FM={};
   FACETS.forEach(f=>{
@@ -313,10 +314,12 @@ function rebuildFM(){
     }
     FM[f.id]=f;
   });
+  /* fallback for items with facet='none' or unknown facet */
+  if(!FM.none){ const c=CI_PALETTE[3]; FM.none={h:c.h,s:c.s,id:'none',label:''}; }
 }
 
-/* CI color palette — exact hues from _FACET_DEFINITIONS */
-const CI_PALETTE=['#FF2E00','#FFB400','#460A46','#97EAD2','#218380','#7A7676'].map(hexToHsl);
+/* CI color palette — outheis brand colors, no grey */
+const CI_PALETTE=['#FF2E00','#FFB400','#460A46','#C490D1','#97EAD2','#218380'].map(hexToHsl);
 let _colorStep=+(localStorage.getItem('ou-cal-colorstep')||0);
 function _applyColorStep(){
   if(!_colorStep) return;
@@ -632,22 +635,17 @@ function buildGlowCanvas(evs, W, H){
     const [r2,g2,b2]=hslToRgb((fc.h+16)/360, Math.min(sat+14,100)/100, litB/100);
     const sk=ev._storeKey;
     const pos=sk?volPositions[sk]:null;
+    const seed=strHash(ev.title+String(ev.day??0));
     if(ev.duration){
-      /* duration volatile → line segment mass identical to fixed rendering */
-      const f1=pos!=null?pos.x:VOL_ANCHORS[vi%VOL_ANCHORS.length];
+      const f1=pos!=null?pos.x:VOL_ANCHORS[seed%VOL_ANCHORS.length];
       const f2=Math.min(1, f1+parseDuration(ev.duration));
-      const dur=f2-f1;
-      const dw=dur*densityW;
-      const soft=Math.max(0.004,0.08/DECAY);
-      masses.push({f1,f2,weight:dw,soft,r,g,b,r2,g2,b2});
+      const dw=(f2-f1)*densityW;
+      masses.push({f1,f2,weight:dw,soft:Math.max(0.004,0.08/DECAY),r,g,b,r2,g2,b2});
     } else {
-      /* plain volatile → point mass */
       const sizeW=ev.size==='l'?1.8:ev.size==='s'?0.7:1.1;
-      const dw=sizeW*densityW;
-      const soft=Math.max(0.004,0.05/DECAY);
-      const xf=pos!=null?pos.x:VOL_ANCHORS[vi%VOL_ANCHORS.length];
-      const yf=pos!=null?pos.y:VOL_Y[vi%VOL_Y.length];
-      pointMassesXY.push({xf,yf,weight:dw,soft,r,g,b,r2,g2,b2});
+      const xf=pos!=null?pos.x:VOL_ANCHORS[seed%VOL_ANCHORS.length];
+      const yf=pos!=null?pos.y:VOL_Y[(seed*1664525+1)%VOL_Y.length];
+      pointMassesXY.push({xf,yf,weight:sizeW*densityW,soft:Math.max(0.004,0.05/DECAY),r,g,b,r2,g2,b2});
     }
     vi++;
   });
@@ -1493,8 +1491,14 @@ function saveAgenda(){
     .then(serverData=>{
       const frontendItems=EVENTS.map(_buildItem);
       const frontendIds=new Set(frontendItems.map(it=>it.id).filter(Boolean));
-      /* keep server items that are not represented in EVENTS (server-side additions) */
-      const serverOnly=(serverData&&serverData.items||[]).filter(it=>it.id&&!frontendIds.has(it.id));
+      /* recurring item titles — server-side instances of these should not be re-added */
+      const recurringTitles=new Set(EVENTS.filter(e=>(e.tags||[]).some(t=>t.startsWith('#recurring-'))).map(e=>e.title));
+      /* keep server items not in EVENTS, but skip instances of known recurring events */
+      const serverOnly=(serverData&&serverData.items||[]).filter(it=>{
+        if(!it.id||frontendIds.has(it.id)) return false;
+        if((it.tags||[]).some(t=>t.startsWith('#recurring-'))) return true;
+        return !recurringTitles.has(it.title);
+      });
       const items=[...frontendItems,...serverOnly];
       const data={
         meta:{version:'0.2',generated:new Date().toISOString().replace(/\.\d{3}Z$/,'Z')},
@@ -1980,7 +1984,8 @@ function renderStream(){
     volEvs.forEach((ev,vi)=>{
       const fc=FM[ev.facet]||FM.none;
       const storeKey=ev._storeKey;
-      const pos=volPositions[storeKey]||{x:(vi%8)*0.12,y:0.5};
+      const seed=strHash(ev.title+String(ev.day??0));
+      const pos=volPositions[storeKey]||{x:VOL_ANCHORS[seed%VOL_ANCHORS.length],y:VOL_Y[(seed*1664525+1)%VOL_Y.length]};
       const vt=document.createElement('div');
       vt.className='vol-text';
       vt.style.left=(pos.x*100)+'%';

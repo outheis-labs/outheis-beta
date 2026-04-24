@@ -28,7 +28,7 @@
   --text2: #7A7676;
   --text3: #B8B4B4;
   --accent: #218380;
-  --label-w: 64px;
+  --label-w: 48px;
 }
 /* dark mode preserved but disabled — force light mode always
 @media (prefers-color-scheme: dark) {
@@ -856,7 +856,7 @@ function renderMultiDayEvents(con, allEventsFlat){
 
   const rows=[...con.querySelectorAll('.day-row')];
   if(!rows.length) return;
-  const labelW=64;
+  const labelW=48;
 
   /* snapshot all row geometries before appending anything */
   const sr=con.getBoundingClientRect();
@@ -1722,10 +1722,10 @@ function renderLeg(){
 
 function renderAxis(){
   const el=document.getElementById('tax'); el.innerHTML='';
-  const labelW=64;
+  const labelW=48;
   const totalW=el.offsetWidth||900;
   const tlW=totalW-labelW;
-  for(let i=0;i<=24;i+=2){
+  for(let i=0;i<24;i+=2){
     const abs=DAY_START+i;
     const frac=t2fAbs(abs);
     if(frac<0||frac>1.001) continue;
@@ -1815,7 +1815,7 @@ function renderStream(){
     tl.style.minHeight=rowH+'px';
 
     /* hour lines */
-    for(let i=0;i<=24;i+=2){
+    for(let i=0;i<24;i+=2){
       const abs=DAY_START+i;
       const frac=t2fAbs(abs);
       if(frac<0||frac>1.001) continue;
@@ -1826,7 +1826,7 @@ function renderStream(){
     }
 
     /* canvas glow layer — tl not yet in DOM so use app width minus label */
-    const labelW=64;
+    const labelW=48;
     const appW=document.getElementById('app').offsetWidth||900;
     const tlW=Math.max(appW-labelW, 200);
 

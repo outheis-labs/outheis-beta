@@ -257,6 +257,11 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
       <span id="decayVal" style="font-size:11px;color:var(--text);min-width:34px;font-family:'IBM Plex Sans',sans-serif;">10.0</span>
     </div>
     <div style="display:flex;align-items:center;gap:6px;">
+      <span style="font-size:13px;color:var(--text);letter-spacing:.05em;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;">Tag ab</span>
+      <input type="time" id="dayStartInput" step="3600" value="05:00" style="width:68px;font-family:'IBM Plex Mono',monospace;font-size:12px;background:transparent;border:none;border-bottom:1px solid var(--bg2);color:var(--text);outline:none;padding:1px 0;"
+        oninput="const h=+this.value.split(':')[0];if(!isNaN(h)){DAY_START=h;buildTimeAxis(TIME_AXIS_CFG,h);markDirty();render();}">
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
       <span style="font-size:13px;color:var(--text);letter-spacing:.05em;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;">Ghost pull</span>
       <input type="range" id="ghostSlider" min="0.01" max="1.0" value="0.04" step="0.01" style="width:110px;accent-color:#218380;" oninput="GHOST_PULL=+this.value;document.getElementById('ghostVal').textContent=(+this.value).toFixed(2);markDirty();renderStream()">
       <span id="ghostVal" style="font-size:11px;color:var(--text);min-width:34px;font-family:'IBM Plex Sans',sans-serif;">0.04</span>
@@ -333,7 +338,9 @@ function cycleColors(){
 }
 const DK = false; /* dark mode disabled — light only */
 
-const DAY_START=5, DAY_HOURS=21;
+let DAY_START=5;
+let TIME_SEGMENTS=[];  /* built by buildTimeAxis() */
+let TIME_AXIS_CFG=[];  /* raw config, preserved for save */
 const SIZE_W={s:52,m:88,l:130};
 const MONTHS=['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
 const WDAYS=['So','Mo','Di','Mi','Do','Fr','Sa'];
@@ -362,12 +369,55 @@ function parseDateTime(s){
   }
   return {date: null, hhmm: s};
 }
+function parseHHMMabs(hhmm, dayStart){
+  const [h,m]=(hhmm||'0:0').split(':').map(Number);
+  return (h<dayStart?h+24:h)+m/60;
+}
+function buildTimeAxis(segments, dayStart){
+  DAY_START=dayStart??5;
+  TIME_AXIS_CFG=segments||[];
+  if(!segments||!segments.length){TIME_SEGMENTS=[];return;}
+  const ds=DAY_START;
+  const totalW=segments.reduce((a,s)=>{
+    const h0=parseHHMMabs(s.from,ds), h1=parseHHMMabs(s.to,ds);
+    const dur=((h1-h0)+24)%24||24;
+    return a+s.weight*dur;
+  },0);
+  let x=0;
+  TIME_SEGMENTS=segments.map(s=>{
+    const t0=parseHHMMabs(s.from,ds), t1=parseHHMMabs(s.to,ds);
+    const dur=((t1-t0)+24)%24||24;
+    const frac=s.weight*dur/totalW;
+    const seg={t0,t1,dur,x0:x,x1:x+frac};
+    x+=frac;
+    return seg;
+  });
+}
+function t2fAbs(abs){
+  /* absolute hour → visual fraction [0,1] */
+  if(!TIME_SEGMENTS.length) return Math.max(0,Math.min(1,(abs-DAY_START)/24));
+  for(const seg of TIME_SEGMENTS){
+    if(abs>=seg.t0&&abs<=seg.t1){
+      return seg.x0+(abs-seg.t0)/seg.dur*(seg.x1-seg.x0);
+    }
+  }
+  return abs<DAY_START?0:1;
+}
+function f2t(frac){
+  /* visual fraction → absolute hour */
+  if(!TIME_SEGMENTS.length) return frac*24+DAY_START;
+  for(const seg of TIME_SEGMENTS){
+    if(frac>=seg.x0&&frac<=seg.x1){
+      return seg.t0+(frac-seg.x0)/(seg.x1-seg.x0)*seg.dur;
+    }
+  }
+  return DAY_START;
+}
 function t2f(hhmm){
   if(!hhmm) return 0;
   const timeStr=hhmm.includes('T')?hhmm.split('T')[1]:hhmm;
   const [h,m]=timeStr.split(':').map(Number);
-  const abs=h<DAY_START?h+24:h;
-  return (abs-DAY_START+m/60)/DAY_HOURS;
+  return t2fAbs((h<DAY_START?h+24:h)+m/60);
 }
 const WEEKDAY_JS={mon:1,tue:2,wed:3,thu:4,fri:5,sat:6,sun:0};
 function matchesRecurrence(date,baseDate,tag){
@@ -470,11 +520,11 @@ function applyTagsToEvent(ev, tags){
   const idx=EVENTS.indexOf(ev); if(idx>=0) EVENTS[idx]={...EVENTS[idx],...ev};
 }
 function parseDuration(s){
-  /* "HH:MM" → fractional day width */
+  /* "HH:MM" → visual fraction width (approximated from DAY_START) */
   if(!s) return 0;
   const p=s.split(':');
   const mins=parseInt(p[0],10)*60+(parseInt(p[1],10)||0);
-  return mins/60/DAY_HOURS;
+  return Math.max(0, t2fAbs(DAY_START+mins/60)-t2fAbs(DAY_START));
 }
 function dayOffset(dateStr){
   /* days from today for a date string "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM" */
@@ -809,68 +859,62 @@ function renderMultiDayEvents(con, allEventsFlat){
 
   const rows=[...con.querySelectorAll('.day-row')];
   if(!rows.length) return;
-  const streamRect=con.getBoundingClientRect();
   const labelW=64;
+
+  /* snapshot all row geometries before appending anything */
+  const sr=con.getBoundingClientRect();
+  const rowGeo=rows.map(row=>{
+    const rr=row.getBoundingClientRect();
+    const tl=row.querySelector('.tl');
+    const tlW=tl?tl.getBoundingClientRect().width:0;
+    return {top:rr.top-sr.top+con.scrollTop, height:rr.height, tlW};
+  });
+
+  const frag=document.createDocumentFragment();
 
   multiEvs.forEach(ev=>{
     const startDay=dayOffset(ev.start);
     const endDay=dayOffset(ev.end);
     if(startDay==null||endDay==null) return;
 
-    /* find affected rows */
-    const firstRow=rows[Math.max(startDay,0)];
-    const lastRow =rows[Math.min(endDay, rows.length-1)];
-    if(!firstRow||!lastRow) return;
-
-    const fr=firstRow.getBoundingClientRect();
-    const lr=lastRow.getBoundingClientRect();
-    const sr=con.getBoundingClientRect();
-
-    /* x: time fractions within the day */
-    const startF=startDay>=0?t2f(ev.start.split('T')[1]||'00:00'):0;
-    const endF  =endDay<rows.length?t2f(ev.end.split('T')[1]||'23:59'):1;
-
-    /* find tl within first/last row for x positioning */
-    const firstTl=firstRow.querySelector('.tl');
-    const lastTl =lastRow.querySelector('.tl');
-    if(!firstTl||!lastTl) return;
-    const ftlR=firstTl.getBoundingClientRect();
-    const ltlR=lastTl.getBoundingClientRect();
-
-    /* top/height in stream coords */
-    const top   =fr.top - sr.top + con.scrollTop;
-    const bottom=lr.bottom - sr.top + con.scrollTop;
-    const height=bottom-top;
-
-    /* left/width: start position in first row, end position in last row
-       For simplicity: block spans from startF in first row to 100% of last row
-       Left edge = labelW + startF * tlWidth */
-    const tlW=ftlR.width;
-    const left  =labelW + startF*tlW;
-    const right =labelW + endF*ltlR.width;
-    const width =right-left;
-
-    const fc=FM[ev.facet]||FM.none;
-    const block=document.createElement('div');
-    block.className='multiday';
-    block.style.cssText=`top:${top}px;left:${left}px;width:${width}px;height:${height}px;`;
-
-    const fill=document.createElement('div');
-    fill.className='md-fill';
-    fill.style.background=evGrad(ev);
-    fill.style.opacity=Math.max(OVERLAY_ALPHA, 0.15);
-    block.appendChild(fill);
-
-    const inner=document.createElement('div');
-    inner.className='md-inner';
     const startLbl=ev.start.replace('T',' ');
     const endLbl  =ev.end.replace('T',' ');
-    inner.innerHTML=`<div class="md-t">${ev.title}</div><div class="md-s">${startLbl} → ${endLbl}</div>`;
-    block.appendChild(inner);
+    const diStart=Math.max(startDay,0);
+    const diEnd  =Math.min(endDay,rows.length-1);
 
-    addTip(block,ev);
-    con.appendChild(block);
+    for(let di=diStart; di<=diEnd; di++){
+      const geo=rowGeo[di];
+      if(!geo||!geo.tlW) continue;
+
+      const isFirst=di===diStart;
+      const isLast =di===diEnd;
+      const f1=isFirst?t2f(ev.start.split('T')[1]||'00:00'):0;
+      const f2=isLast ?t2f(ev.end.split('T')[1]  ||'23:59'):1;
+      if(f2<=f1) continue;
+
+      const block=document.createElement('div');
+      block.className='multiday';
+      block.style.cssText=`top:${geo.top}px;left:${labelW+f1*geo.tlW}px;width:${(f2-f1)*geo.tlW}px;height:${geo.height}px;`;
+
+      const fill=document.createElement('div');
+      fill.className='md-fill';
+      fill.style.background=evGrad(ev);
+      fill.style.opacity=Math.max(OVERLAY_ALPHA,0.18);
+      block.appendChild(fill);
+
+      if(isFirst){
+        const inner=document.createElement('div');
+        inner.className='md-inner';
+        inner.innerHTML=`<div class="md-t">${ev.title}</div><div class="md-s">${startLbl} → ${endLbl}</div>`;
+        block.appendChild(inner);
+      }
+
+      addTip(block,ev);
+      frag.appendChild(block);
+    }
   });
+
+  con.appendChild(frag);
 }
 
 function makeFixedDraggable(el, key, container, ev, dayIdx){
@@ -895,8 +939,8 @@ function makeFixedDraggable(el, key, container, ev, dayIdx){
     let currentTl=container;
 
     const applyShift=(tl, nx)=>{
-      const ns=nx*DAY_HOURS+DAY_START;
-      const ne=(nx+evWidth)*DAY_HOURS+DAY_START;
+      const ns=f2t(nx);
+      const ne=f2t(nx+evWidth);
       const sh=Math.floor(ns)%24, sm=Math.round((ns%1)*60);
       const eh=Math.floor(ne)%24, em=Math.round((ne%1)*60);
       const ss=`${pad(sh)}:${pad(sm)}`, es=`${pad(eh)}:${pad(em)}`;
@@ -989,7 +1033,7 @@ function makeFixedDraggable(el, key, container, ev, dayIdx){
         });
         const idx=EVENTS.indexOf(ev);
         /* cross-day: compute new times from drop position */
-        const ns2=nx*DAY_HOURS+DAY_START, ne2=(nx+evWidth)*DAY_HOURS+DAY_START;
+        const ns2=f2t(nx), ne2=f2t(nx+evWidth);
         const newStart=`${pad(Math.floor(ns2)%24)}:${pad(Math.round((ns2%1)*60))}`;
         const newEnd=`${pad(Math.floor(ne2)%24)}:${pad(Math.round((ne2%1)*60))}`;
         if(idx>=0){
@@ -1150,8 +1194,8 @@ function makeResizable(block, lh, rh, key, tl, ev, f1orig, f2orig){
       block.style.left=(nf1*100)+'%';
       block.style.width=((nf2-nf1)*100)+'%';
       /* update time label */
-      const ns=nf1*DAY_HOURS+DAY_START;
-      const ne=nf2*DAY_HOURS+DAY_START;
+      const ns=f2t(nf1);
+      const ne=f2t(nf2);
       const ss=fmt(ns), es=fmt(ne);
       const timeEl=block.querySelector('.ev-s');
       if(timeEl) timeEl.textContent=`${ss}–${es}`;
@@ -1243,15 +1287,17 @@ function applyAgendaData(data){
       /* apply view params */
       if(data.view){
         if(data.view.range)  RANGE=data.view.range;
+        buildTimeAxis(data.view.time_axis||[], data.view.day_start??5);
         const p=data.view.params||{};
         if(p.peak_amp!=null)      PEAK_AMP=p.peak_amp;
         if(p.decay!=null)         DECAY=p.decay;
         if(p.ghost_pull!=null)    GHOST_PULL=p.ghost_pull;
         if(p.overlay_alpha!=null) OVERLAY_ALPHA=p.overlay_alpha;
-        /* sync sliders */
-        const sv=(id,v,dp)=>{ const el=document.getElementById(id); if(el){el.value=v;} };
+        /* sync sliders + day_start input */
+        const sv=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v; };
         sv('peakSlider',PEAK_AMP); sv('decaySlider',DECAY);
         sv('ghostSlider',GHOST_PULL); sv('overlaySlider',OVERLAY_ALPHA);
+        sv('dayStartInput',String(DAY_START).padStart(2,'0')+':00');
       }
       /* convert items → EVENTS format — support both tag-based and legacy explicit-fields schema */
       EVENTS=(data.items||[]).map(item=>{
@@ -1389,7 +1435,7 @@ function saveAgenda(){
       const data={
         meta:{version:'0.2',generated:new Date().toISOString().replace(/\.\d{3}Z$/,'Z')},
         facets:FACETS,
-        view:{range:RANGE,params:{peak_amp:PEAK_AMP,decay:DECAY,ghost_pull:GHOST_PULL,overlay_alpha:OVERLAY_ALPHA}},
+        view:{range:RANGE,day_start:DAY_START,...(TIME_AXIS_CFG.length?{time_axis:TIME_AXIS_CFG}:{}),params:{peak_amp:PEAK_AMP,decay:DECAY,ghost_pull:GHOST_PULL,overlay_alpha:OVERLAY_ALPHA}},
         items
       };
       return fetch('agenda.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:JSON.stringify(data,null,2)})});
@@ -1615,14 +1661,15 @@ function renderAxis(){
   const labelW=64;
   const totalW=el.offsetWidth||900;
   const tlW=totalW-labelW;
-  for(let h=0;h<=DAY_HOURS;h+=2){
-    const hour=(DAY_START+h)%24;
-    const frac=h/DAY_HOURS;
-    const xpx=labelW+frac*tlW;
+  for(let i=0;i<=24;i+=2){
+    const abs=DAY_START+i;
+    const frac=t2fAbs(abs);
+    if(frac<0||frac>1.001) continue;
+    const hour=abs%24;
+    const xpx=labelW+Math.min(frac,1)*tlW;
     const s=document.createElement('span');
     s.className='t-tick';
-    /* clamp last tick so it doesn't overflow */
-    s.style.left=Math.min(xpx, totalW-12)+'px';
+    s.style.left=Math.min(xpx,totalW-12)+'px';
     s.textContent=String(hour).padStart(2,'0');
     el.appendChild(s);
   }
@@ -1632,8 +1679,7 @@ function renderStream(){
   const con=document.getElementById('stream'); con.innerHTML='';
   const base=today0();
   const now=new Date();
-  const nh=now.getHours()<DAY_START?now.getHours()+24:now.getHours();
-  const nowFrac=(nh-DAY_START+now.getMinutes()/60)/DAY_HOURS;
+  const nowFrac=t2fAbs((now.getHours()<DAY_START?now.getHours()+24:now.getHours())+now.getMinutes()/60);
 
   for(let d=0;d<RANGE;d++){
     const date=addDays(base,d);
@@ -1705,10 +1751,13 @@ function renderStream(){
     tl.style.minHeight=rowH+'px';
 
     /* hour lines */
-    for(let h=0;h<=DAY_HOURS;h+=2){
+    for(let i=0;i<=24;i+=2){
+      const abs=DAY_START+i;
+      const frac=t2fAbs(abs);
+      if(frac<0||frac>1.001) continue;
       const ln=document.createElement('div');
-      ln.className='hg-line'+((DAY_START+h)%24===12?' noon':'');
-      ln.style.left=(h/DAY_HOURS*100)+'%';
+      ln.className='hg-line'+(abs%24===12?' noon':'');
+      ln.style.left=(Math.min(frac,1)*100)+'%';
       tl.appendChild(ln);
     }
 
@@ -1749,6 +1798,7 @@ function renderStream(){
     const innerH=rowH;
     fixedEvs.forEach((ev,ei)=>{
       if(!ev.start||!ev.end) return;
+      if(isMultiDay(ev)) return;
       const f1=t2f(ev.start), f2=t2f(ev.end);
       if(isNaN(f1)||isNaN(f2)||f2<=0||f1>=1) return;
       const evKey='fixed-'+d+'-'+ei;
@@ -1898,7 +1948,7 @@ function renderStream(){
       const nowH15=Math.round((now.getHours()*60+now.getMinutes())/15)*15;
       const qh=Math.floor(nowH15/60)%24;
       const qm=nowH15%60;
-      const qFrac=((qh<DAY_START?qh+24:qh)-DAY_START+qm/60)/DAY_HOURS;
+      const qFrac=t2fAbs((qh<DAY_START?qh+24:qh)+qm/60);
       const timeStr=`${String(qh).padStart(2,'0')}:${String(qm).padStart(2,'0')}`;
       const nl=document.createElement('div');
       nl.className='now-line';
@@ -1956,7 +2006,7 @@ window.addEventListener('load',()=>{
       const nowH15=Math.round((now.getHours()*60+now.getMinutes())/15)*15;
       const qh=Math.floor(nowH15/60)%24;
       const qm=nowH15%60;
-      const qFrac=((qh<DAY_START?qh+24:qh)-DAY_START+qm/60)/DAY_HOURS;
+      const qFrac=t2fAbs((qh<DAY_START?qh+24:qh)+qm/60);
       if(qFrac>=0&&qFrac<=1){
         nl.style.left=(qFrac*100)+'%';
         const tEl=nl.querySelector('.now-time');

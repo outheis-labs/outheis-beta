@@ -36,7 +36,7 @@
 }*/
 * { box-sizing:border-box; margin:0; padding:0; }
 html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans',sans-serif; font-size:13px; }
-#app { max-width:1040px; margin:0 auto; padding:2rem 1.5rem 6rem; }
+#app { padding:2rem 0.5rem 6rem; }
 
 .btn { display:inline-flex; align-items:center; justify-content:center; padding:5px 14px; font-family:inherit; font-size:13px; font-weight:400; color:var(--text); background:transparent; border:0.5px solid var(--text3); border-radius:6px; cursor:pointer; transition:all 0.15s ease; }
 .btn:hover { border-color:var(--text); }
@@ -123,6 +123,8 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   border:1px dashed rgba(0,0,0,0.22); border-radius:1px;
   padding:1px 5px; box-sizing:border-box;
 }
+.ev.deferred { border-left:2px solid var(--accent) !important; }
+.vol-text.deferred { text-decoration:underline dotted var(--accent); }
 
 /* time popup */
 .time-popup {
@@ -246,7 +248,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
     <button class="btn" id="gradBtn" onclick="toggleGrad()">Gradients</button>
     <button class="btn" id="spreadBtn" onclick="toggleSpread()">Spread</button>
   </div>
-  <div id="gradPanel" style="display:none;margin-bottom:1rem;padding-left:64px;flex-wrap:wrap;gap:18px;align-items:center;">
+  <div id="gradPanel" style="display:none;margin-bottom:1rem;padding-left:48px;flex-wrap:wrap;gap:18px;align-items:center;">
     <div style="display:flex;align-items:center;gap:6px;">
       <span style="font-size:13px;color:var(--text);letter-spacing:.05em;white-space:nowrap;font-family:'IBM Plex Sans',sans-serif;">Intensity</span>
       <input type="range" id="peakSlider" min="0.1" max="4.0" value="0.9" step="0.05" style="width:110px;accent-color:#218380;" oninput="PEAK_AMP=+this.value;document.getElementById('peakVal').textContent=(+this.value).toFixed(2);markDirty();renderStream()">
@@ -268,7 +270,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
       <span id="overlayVal" style="font-size:11px;color:var(--text);min-width:34px;font-family:'IBM Plex Sans',sans-serif;">0.09</span>
     </div>
   </div>
-  <div id="spreadPanel" style="display:none;margin-bottom:1rem;padding-left:64px;flex-direction:column;gap:10px;"></div>
+  <div id="spreadPanel" style="display:none;margin-bottom:1rem;padding-left:48px;flex-direction:column;gap:10px;"></div>
   <div class="legend" id="leg"></div>
   <div class="tax-row">
     <div class="time-axis" id="tax"></div>
@@ -358,6 +360,7 @@ const I18N={
   cp_ok:'Add item', cp_heading:'Add item',
   ep_heading:'Edit item', ep_ok:'Save', ep_done:'Done ✓', ep_dismiss:'🧹 Dismiss',
   ep_delete:'Delete', ep_delete_confirm:'Delete this item?',
+  ep_follows:'wartet auf', ep_precedes:'blockiert', ep_relates:'verknüpft',
 };
 
 function parseDateTime(s){
@@ -538,6 +541,55 @@ function isMultiDay(ev){
   if(!ev.start||!ev.end) return false;
   return ev.start.includes('T')&&ev.end.includes('T')&&
     ev.start.split('T')[0]!==ev.end.split('T')[0];
+}
+
+/* ── DEPENDENCY RESOLUTION ── */
+function idsToTitles(ids){
+  return (ids||[]).map(id=>{
+    const ev=EVENTS.find(e=>e._id!=null&&String(e._id)===String(id));
+    return ev?ev.title:String(id);
+  }).join(', ');
+}
+function titlesToIds(str){
+  if(!str||!str.trim()) return [];
+  return str.split(',').map(s=>s.trim()).filter(Boolean).map(title=>{
+    const t=title.toLowerCase();
+    const ev=EVENTS.find(e=>e.title&&e.title.toLowerCase()===t);
+    return ev?ev._id:null;
+  }).filter(id=>id!=null);
+}
+function effectiveDay(ev, _visited){
+  const visited=_visited||new Set();
+  const myId=ev._id!=null?String(ev._id):null;
+  if(myId&&visited.has(myId)) return ev.day??0; /* cycle guard */
+  if(myId) visited.add(myId);
+  const predIds=new Set();
+  (ev.follows||[]).forEach(id=>predIds.add(String(id)));
+  if(myId){
+    EVENTS.forEach(e=>{
+      if(e._id!=null&&(e.precedes||[]).some(id=>String(id)===myId))
+        predIds.add(String(e._id));
+    });
+  }
+  if(!predIds.size) return ev.day??0;
+  let maxDay=ev.day??0;
+  predIds.forEach(predId=>{
+    const pred=EVENTS.find(e=>e._id!=null&&String(e._id)===predId);
+    if(!pred||pred.done) return;
+    const predEff=effectiveDay(pred, new Set(visited));
+    if(predEff+1>maxDay) maxDay=predEff+1;
+  });
+  return maxDay;
+}
+const _effDayCache=new Map();
+function computeEffDays(){
+  _effDayCache.clear();
+  EVENTS.forEach(ev=>{ if(ev._id!=null) _effDayCache.set(String(ev._id), effectiveDay(ev)); });
+}
+function getEffDay(ev){
+  if(ev._id!=null&&volDayOverrides[ev._id]!=null) return volDayOverrides[ev._id];
+  if(ev._id!=null){ const c=_effDayCache.get(String(ev._id)); if(c!=null) return c; }
+  return ev.day??0;
 }
 function today0(){const d=new Date();d.setHours(0,0,0,0);return d;}
 function addDays(b,n){const d=new Date(b);d.setDate(d.getDate()+n);return d;}
@@ -1391,7 +1443,8 @@ function applyAgendaData(data){
         return {
           day,type,facet,title:item.title,
           start,end,density,layer,size,note:item.note||null,
-          duration,tags,done,_id:item.id,_source:item.source||null
+          duration,tags,done,_id:item.id,_source:item.source||null,
+          follows:item.follows||null, precedes:item.precedes||null, relates:item.relates||null
         };
       });
       /* restore volatile positions from localStorage */
@@ -1472,6 +1525,9 @@ function _buildItem(ev){
   if(ev._source) item.source=ev._source;
   const src=promoted?{...ev,type:'fixed',day:promoted.day,start:promoted.start,end:promoted.end,facet:promoted.facet||ev.facet,density:promoted.density||ev.density}:ev;
   item.tags=fieldsToTags(src,promoted?promoted.day:effDay);
+  if(ev.follows&&ev.follows.length)   item.follows=ev.follows;
+  if(ev.precedes&&ev.precedes.length) item.precedes=ev.precedes;
+  if(ev.relates&&ev.relates.length)   item.relates=ev.relates;
   return item;
 }
 
@@ -1609,7 +1665,7 @@ function showEditPopup(ev){
   const isRecurring=(ev.tags||[]).some(t=>t.startsWith('#recurring-'));
   pop.innerHTML=`
     <div style="font-size:11px;letter-spacing:.07em;color:var(--text2);margin-bottom:4px;">${I18N.ep_heading.toUpperCase()}${isRecurring?' (recurring)':''}</div>
-    <div class="cp-field"><label>${I18N.cp_title}</label><input type="text" id="ep-title" value="${escapeAttr(ev.title||'')}"></div>
+    <div class="cp-field"><label>${I18N.cp_title}</label><textarea id="ep-title" rows="3" style="width:100%;resize:vertical;font-family:inherit;font-size:inherit;padding:4px 6px;box-sizing:border-box;">${escapeAttr(ev.title||'')}</textarea></div>
     <div class="ep-time-wrap">
       <div class="cp-row">
         <div class="cp-field" style="flex:1"><label>${I18N.cp_start}</label><input type="time" id="ep-start" step="60" value="${escapeAttr(f.t1||f.duration||'')}"></div>
@@ -1635,6 +1691,8 @@ function showEditPopup(ev){
       <span class="ep-dmt-ph"></span>
     </div>
     <div class="cp-field"><label>${I18N.tp_tags}</label><input type="text" id="ep-tags" value="${escapeAttr(extraTags)}"></div>
+    <div class="cp-field" style="margin-top:4px;"><label>${I18N.ep_follows}</label><input type="text" id="ep-follows" value="${escapeAttr(idsToTitles(ev.follows))}" placeholder="Titel, Titel…" style="font-size:12px;"></div>
+    <div class="cp-field" style="margin-top:2px;"><label>${I18N.ep_precedes}</label><input type="text" id="ep-precedes" value="${escapeAttr(idsToTitles(ev.precedes))}" placeholder="Titel, Titel…" style="font-size:12px;"></div>
     <div class="tp-row">
       <button class="tp-ok" id="ep-ok">${I18N.ep_ok}</button>
       <button id="ep-done" style="color:#2a7;border-color:#2a7;">${I18N.ep_done}</button>
@@ -1663,12 +1721,24 @@ function showEditPopup(ev){
     pop.querySelector('#ep-day2').value='';
   };
   pop.querySelector('#ep-done').onclick=()=>{
-    close();
-    const done=localDateStr(today0());
-    const newTags=[...(ev.tags||[]).filter(t=>!t.startsWith('#done-')),`#done-${done}`];
-    ev.done=done; ev.tags=newTags;
-    const idx=evIdx(ev); if(idx>=0) EVENTS[idx]={...EVENTS[idx],done,tags:newTags};
-    markDirty(); renderStream(); saveAgenda();
+    const existing=pop.querySelector('#ep-done-note-wrap');
+    if(existing){ existing.remove(); return; }
+    const wrap=document.createElement('div');
+    wrap.id='ep-done-note-wrap';
+    wrap.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:6px;';
+    wrap.innerHTML=`<textarea id="ep-done-note" rows="2" placeholder="Kommentar (optional)" style="width:100%;resize:vertical;font-family:inherit;font-size:inherit;padding:4px 6px;box-sizing:border-box;">${escapeAttr(ev.note||'')}</textarea>`+
+      `<div style="display:flex;gap:6px;"><button class="tp-ok" id="ep-done-confirm" style="color:#2a7;border-color:#2a7;">✓ Erledigt</button><button id="ep-done-cancel-note" class="btn">Abbruch</button></div>`;
+    pop.querySelector('.tp-row').insertAdjacentElement('afterend', wrap);
+    wrap.querySelector('#ep-done-cancel-note').onclick=()=>wrap.remove();
+    wrap.querySelector('#ep-done-confirm').onclick=()=>{
+      const note=wrap.querySelector('#ep-done-note').value.trim()||null;
+      close();
+      const done=localDateStr(today0());
+      const newTags=[...(ev.tags||[]).filter(t=>!t.startsWith('#done-')),`#done-${done}`];
+      ev.done=done; ev.tags=newTags; if(note!=null) ev.note=note;
+      const idx=evIdx(ev); if(idx>=0) EVENTS[idx]={...EVENTS[idx],done,tags:newTags,...(note!=null?{note}:{})};
+      markDirty(); renderStream(); saveAgenda();
+    };
   };
   pop.querySelector('#ep-ok').onclick=()=>{
     const title=pop.querySelector('#ep-title').value.trim();
@@ -1689,10 +1759,14 @@ function showEditPopup(ev){
     if(size&&size!=='m') tags.push(`#size-${size}`);
     tags.push(...extraTagsNew);
     const f2=tagsToItemFields(tags);
+    const followsNew=titlesToIds(pop.querySelector('#ep-follows').value);
+    const precedesNew=titlesToIds(pop.querySelector('#ep-precedes').value);
     const idx=evIdx(ev);
     if(idx>=0){
       const updated={...EVENTS[idx],title,day,type:f2.type,
-        start:f2.start,end:f2.end,facet:f2.facet,size:f2.size,duration:f2.duration,tags};
+        start:f2.start,end:f2.end,facet:f2.facet,size:f2.size,duration:f2.duration,tags,
+        follows:followsNew.length?followsNew:null,
+        precedes:precedesNew.length?precedesNew:null};
       EVENTS[idx]=updated;
       /* sync closure ref so re-opening popup shows fresh values */
       Object.assign(ev,updated);
@@ -1744,6 +1818,7 @@ function renderAxis(){
 }
 
 function renderStream(){
+  computeEffDays();
   const con=document.getElementById('stream'); con.innerHTML='';
   const base=today0();
   const now=new Date();
@@ -1758,13 +1833,12 @@ function renderStream(){
     const baseEvs=[
       ...EVENTS.filter(e=>{
         if(e.done) return false;
-        const effDay=(e._id!=null&&volDayOverrides[e._id]!=null)?volDayOverrides[e._id]:e.day;
-        return effDay===d;
+        return getEffDay(e)===d;
       }),
       /* recurring copies from items anchored on other days */
       ...EVENTS.filter(ev=>{
         if(ev.done) return false;
-        const effDay=(ev._id!=null&&volDayOverrides[ev._id]!=null)?volDayOverrides[ev._id]:ev.day;
+        const effDay=getEffDay(ev);
         if(effDay===d) return false;
         const recurTag=(ev.tags||[]).find(t=>t.startsWith('#recurring-'));
         if(!recurTag) return false;
@@ -1874,8 +1948,9 @@ function renderStream(){
       const stored=fixedPositions[evKey]??(idKey?fixedPositions[idKey]:null);
       const xFrac=stored!=null?stored:Math.max(f1,0);
 
+      const isDeferred=(ev.follows||ev.precedes)&&getEffDay(ev)!==(ev.day??0);
       const block=document.createElement('div');
-      block.className='ev'+(unlockedEvents.has(evKey)?' unlocked':'');
+      block.className='ev'+(unlockedEvents.has(evKey)?' unlocked':'')+(isDeferred?' deferred':'');
       block.style.left=(xFrac*100)+'%';
       block.style.width=((Math.min(f2,1)-Math.max(f1,0))*100)+'%';
       block.style.height=innerH+'px';
@@ -1986,8 +2061,9 @@ function renderStream(){
       const storeKey=ev._storeKey;
       const seed=strHash(ev.title+String(ev.day??0));
       const pos=volPositions[storeKey]||{x:VOL_ANCHORS[seed%VOL_ANCHORS.length],y:VOL_Y[(seed*1664525+1)%VOL_Y.length]};
+      const vIsDeferred=(ev.follows||ev.precedes)&&getEffDay(ev)!==(ev.day??0);
       const vt=document.createElement('div');
-      vt.className='vol-text';
+      vt.className='vol-text'+(vIsDeferred?' deferred':'');
       vt.style.left=(pos.x*100)+'%';
       vt.style.top=(pos.y*100)+'%';
       vt.style.bottom='auto';
@@ -2052,6 +2128,8 @@ function addTip(el,ev){
     if(ev.size)    h+=`<br>${I18N.tip_size}: ${ev.size.toUpperCase()}`;
     if(ev.tags&&ev.tags.length) h+=`<br>${I18N.tip_tags}: ${ev.tags.join(', ')}`;
     if(ev.note)    h+=`<br><em style="color:var(--text2)">${ev.note}</em>`;
+    if(ev.follows&&ev.follows.length)  h+=`<br><span style="color:var(--text2)">${I18N.ep_follows}: ${idsToTitles(ev.follows)}</span>`;
+    if(ev.precedes&&ev.precedes.length)h+=`<br><span style="color:var(--text2)">${I18N.ep_precedes}: ${idsToTitles(ev.precedes)}</span>`;
     tt.innerHTML=h; tt.style.display='block';
     tt.style.left=(e.clientX+14)+'px'; tt.style.top=(e.clientY-6)+'px';
   });

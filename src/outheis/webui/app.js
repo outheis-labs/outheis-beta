@@ -621,18 +621,21 @@ async function renderConfigModels() {
   const ollamaData = await fetchAPI('/api/ollama/models');
   const ollamaModels = ollamaData?.models || [];
 
-  // Flatten provider_aliases into sortable rows, then sort by provider → alias
+  // Merge provider_aliases and flat models, dedup by (provider, alias), sort by provider → alias
   const entries = [];
+  const seen = new Set();
   Object.entries(providerAliases).forEach(([provider, aliases]) => {
-    Object.entries(aliases).forEach(([alias, name]) => entries.push([alias, provider, name]));
-  });
-  // Also include flat models that aren't in provider_aliases yet (legacy compat)
-  if (entries.length === 0) {
-    const models = config.llm?.models || { fast: '', capable: '', reasoning: '' };
-    Object.entries(models).forEach(([alias, m]) => {
-      entries.push([alias, m?.provider || 'anthropic', m?.name || m || '']);
+    Object.entries(aliases).forEach(([alias, name]) => {
+      entries.push([alias, provider, name]);
+      seen.add(`${provider}:${alias}`);
     });
-  }
+  });
+  const models = config.llm?.models || {};
+  Object.entries(models).forEach(([alias, m]) => {
+    const provider = m?.provider || 'anthropic';
+    const name = m?.name || m || '';
+    if (!seen.has(`${provider}:${alias}`)) entries.push([alias, provider, name]);
+  });
   entries.sort(([aA, aP], [bA, bP]) => aP !== bP ? aP.localeCompare(bP) : aA.localeCompare(bA));
 
   const rows = entries.map(([alias, provider, name]) => _modelRow(alias, provider, name, ollamaModels)).join('');

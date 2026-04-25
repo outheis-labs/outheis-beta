@@ -666,11 +666,11 @@ function _foRenderItems(order) {
   const items = order.map(p => `
     <div class="fo-item" draggable="true" data-provider="${p}">
       <span class="fo-handle">⠿</span>
-      <span class="fo-label">${p}</span>
-      <button class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</button>
+      <span>${p}</span>
+      <span class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</span>
     </div>`).join('<span class="fo-arrow">→</span>');
   return items + `
-    <select class="fo-add-select" onchange="foAddItem(this)">
+    <select onchange="foAddItem(this)" style="width:auto;">
       <option value="">+ provider</option>
       ${KNOWN_PROVIDERS.map(p => `<option value="${p}">${p}</option>`).join('')}
     </select>`;
@@ -701,7 +701,7 @@ function foAddItem(sel) {
   div.className = 'fo-item';
   div.draggable = true;
   div.dataset.provider = p;
-  div.innerHTML = `<span class="fo-handle">⠿</span><span class="fo-label">${p}</span><button class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</button>`;
+  div.innerHTML = `<span class="fo-handle">⠿</span><span>${p}</span><span class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</span>`;
   _foBindDrag(div);
   const addSel = list.querySelector('.fo-add-select');
   if (list.querySelector('.fo-item')) {

@@ -605,22 +605,19 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .model-name { flex: 1; }
 .model-name input, .model-name select { width: 100%; }
 
-/* Fallback order */
-.fo-list { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+/* Fallback order — reuses sched-time visual language */
+.fo-list { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .fo-item {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 3px 5px 3px 4px;
-  background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 4px;
-  font-size: 12px; user-select: none;
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--bg-secondary); padding: 6px 10px;
+  border-radius: var(--radius); user-select: none;
 }
 .fo-item.fo-dragging { opacity: 0.35; }
-.fo-handle { cursor: grab; color: var(--text-muted); font-size: 11px; }
+.fo-handle { cursor: grab; color: var(--text-tertiary); font-size: 13px; line-height: 1; }
 .fo-handle:active { cursor: grabbing; }
-.fo-label { color: var(--text-primary); font-size: 12px; }
-.fo-arrow { color: var(--text-muted); font-size: 12px; padding: 0 1px; }
-.fo-remove { background: none; border: none; padding: 0; margin-left: 1px; cursor: pointer; color: var(--text-muted); font-size: 12px; line-height: 1; }
-.fo-remove:hover { color: var(--accent-danger, #e05c5c); }
-.fo-add-select { font-size: 12px; padding: 2px 4px; background: transparent; border: 1px dashed var(--border-primary); border-radius: 4px; color: var(--text-muted); cursor: pointer; }
+.fo-arrow { color: var(--text-tertiary); font-size: 13px; }
+.fo-remove { font-size: 13px; color: var(--text-tertiary); cursor: pointer; transition: color 0.15s ease; }
+.fo-remove:hover { color: var(--accent-danger); }
 
 /* Scheduler */
 .sched-row {

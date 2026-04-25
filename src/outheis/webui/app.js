@@ -653,7 +653,7 @@ async function renderConfigModels() {
               Fallback order
               <div class="update-info-wrap">
                 <span class="update-info-icon" tabindex="0">ℹ</span>
-                <div class="update-tooltip">A fallback only triggers if the failing provider's alias is also defined on the next provider in this list.</div>
+                <div class="update-tooltip">The fallback mechanism requires the same alias names across providers to take effect.</div>
               </div>
             </div>
             <div class="form-value">

@@ -225,6 +225,20 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
 .ep-dmt-ph { flex:none; width:18px; }
 .cp-overlay { position:fixed; inset:0; background:rgba(0,0,0,.12); z-index:199; }
 
+.dep-drop {
+  position:absolute; z-index:300; background:var(--bg); border:1px solid var(--bg2);
+  border-radius:2px; box-shadow:0 2px 8px rgba(0,0,0,.12);
+  max-height:110px; overflow-y:auto; width:100%; left:0; top:100%;
+}
+.dep-drop-item { padding:4px 8px; font-size:12px; cursor:pointer; font-family:'IBM Plex Sans',sans-serif; }
+.dep-drop-item:hover { background:var(--bg2); }
+.dep-chip {
+  display:inline-flex; align-items:center; gap:3px;
+  background:var(--bg2); border:0.5px solid var(--text3); border-radius:3px;
+  padding:1px 5px; font-size:11px; font-family:'IBM Plex Sans',sans-serif;
+}
+.dep-chip-x { cursor:pointer; color:var(--text3); margin-left:2px; font-size:13px; line-height:1; }
+.dep-chip-x:hover { color:#c44; }
 #tt {
   position:fixed; background:var(--bg); border:1px solid var(--bg2);
   border-radius:2px; padding:8px 12px; font-size:12px; line-height:1.7;
@@ -1575,6 +1589,71 @@ function saveAgenda(){
     });
 }
 
+function makeDepField(parentEl, label, initialIds){
+  const S='font-family:\'IBM Plex Sans\',sans-serif;';
+  const field=document.createElement('div');
+  field.className='cp-field';
+  field.style.marginTop='4px';
+  const lbl=document.createElement('label');
+  lbl.textContent=label;
+  field.appendChild(lbl);
+  const chipsWrap=document.createElement('div');
+  chipsWrap.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;';
+  field.appendChild(chipsWrap);
+  const inputWrap=document.createElement('div');
+  inputWrap.style.cssText='position:relative;';
+  const inp=document.createElement('input');
+  inp.type='text'; inp.autocomplete='off';
+  inp.placeholder='Suchen…';
+  inp.style.cssText=`font-size:12px;width:100%;${S}`;
+  inp.className=''; /* pick up .time-popup input[type=text] styles */
+  const drop=document.createElement('div');
+  drop.className='dep-drop';
+  drop.style.display='none';
+  inputWrap.appendChild(inp); inputWrap.appendChild(drop);
+  field.appendChild(inputWrap);
+  parentEl.appendChild(field);
+  const selected=new Set((initialIds||[]).map(String).filter(Boolean));
+  function renderChips(){
+    chipsWrap.innerHTML='';
+    selected.forEach(id=>{
+      const ev=EVENTS.find(e=>e._id!=null&&String(e._id)===id);
+      const title=ev?ev.title:id;
+      const chip=document.createElement('span');
+      chip.className='dep-chip';
+      chip.innerHTML=`${escapeAttr(title)}<span class="dep-chip-x" data-id="${escapeAttr(id)}">×</span>`;
+      chip.querySelector('.dep-chip-x').onclick=e=>{e.stopPropagation();selected.delete(id);renderChips();};
+      chipsWrap.appendChild(chip);
+    });
+  }
+  function renderDrop(q){
+    const matches=EVENTS.filter(e=>{
+      if(!e.title||e._id==null) return false;
+      if(selected.has(String(e._id))) return false;
+      return !q||e.title.toLowerCase().includes(q.toLowerCase());
+    }).slice(0,10);
+    drop.innerHTML='';
+    if(!matches.length){drop.style.display='none';return;}
+    matches.forEach(ev=>{
+      const item=document.createElement('div');
+      item.className='dep-drop-item';
+      item.textContent=ev.title;
+      item.onmousedown=e=>{
+        e.preventDefault();
+        selected.add(String(ev._id));
+        inp.value=''; renderChips(); drop.style.display='none';
+      };
+      drop.appendChild(item);
+    });
+    drop.style.display='block';
+  }
+  inp.oninput=()=>renderDrop(inp.value);
+  inp.onfocus=()=>renderDrop(inp.value);
+  inp.onblur=()=>setTimeout(()=>{drop.style.display='none';},150);
+  renderChips();
+  return {getIds:()=>[...selected]};
+}
+
 function showCreatePopup(){
   if(activePopup){ activePopup.remove(); activePopup=null; }
   const overlay=document.createElement('div');
@@ -1691,8 +1770,7 @@ function showEditPopup(ev){
       <span class="ep-dmt-ph"></span>
     </div>
     <div class="cp-field"><label>${I18N.tp_tags}</label><input type="text" id="ep-tags" value="${escapeAttr(extraTags)}"></div>
-    <div class="cp-field" style="margin-top:4px;"><label>${I18N.ep_follows}</label><input type="text" id="ep-follows" value="${escapeAttr(idsToTitles(ev.follows))}" placeholder="Titel, Titel…" style="font-size:12px;"></div>
-    <div class="cp-field" style="margin-top:2px;"><label>${I18N.ep_precedes}</label><input type="text" id="ep-precedes" value="${escapeAttr(idsToTitles(ev.precedes))}" placeholder="Titel, Titel…" style="font-size:12px;"></div>
+    <div id="ep-dep-fields"></div>
     <div class="tp-row">
       <button class="tp-ok" id="ep-ok">${I18N.ep_ok}</button>
       <button id="ep-done" style="color:#2a7;border-color:#2a7;">${I18N.ep_done}</button>
@@ -1702,6 +1780,9 @@ function showEditPopup(ev){
   document.body.appendChild(overlay);
   document.body.appendChild(pop);
   activePopup=pop;
+  const depEl=pop.querySelector('#ep-dep-fields');
+  const followsField=makeDepField(depEl, I18N.ep_follows, ev.follows);
+  const precedesField=makeDepField(depEl, I18N.ep_precedes, ev.precedes);
   const close=()=>{ overlay.remove(); pop.remove(); activePopup=null; };
   overlay.onclick=close;
   pop.querySelector('#ep-cancel').onclick=close;
@@ -1759,8 +1840,8 @@ function showEditPopup(ev){
     if(size&&size!=='m') tags.push(`#size-${size}`);
     tags.push(...extraTagsNew);
     const f2=tagsToItemFields(tags);
-    const followsNew=titlesToIds(pop.querySelector('#ep-follows').value);
-    const precedesNew=titlesToIds(pop.querySelector('#ep-precedes').value);
+    const followsNew=followsField.getIds();
+    const precedesNew=precedesField.getIds();
     const idx=evIdx(ev);
     if(idx>=0){
       const updated={...EVENTS[idx],title,day,type:f2.type,
@@ -1929,7 +2010,19 @@ function renderStream(){
       });
     }
 
-    const allForCanvas=[...fixedEvs,...volEvs];
+    /* for multi-day events, replace with day-specific start/end fractions */
+    const endOfDay=String((DAY_START-1+24)%24).padStart(2,'0')+':59';
+    const startOfDay=String(DAY_START).padStart(2,'0')+':00';
+    const multiDayForCanvas=[];
+    EVENTS.filter(e=>isMultiDay(e)&&!hidden.has(e.facet)).forEach(ev=>{
+      const sd=dayOffset(ev.start), ed=dayOffset(ev.end);
+      if(sd==null||ed==null||d<sd||d>ed) return;
+      const isFirst=d===sd, isLast=d===ed;
+      multiDayForCanvas.push({...ev,
+        start:isFirst?ev.start.split('T')[1]||startOfDay:startOfDay,
+        end:  isLast ?ev.end.split('T')[1]  ||endOfDay  :endOfDay});
+    });
+    const allForCanvas=[...fixedEvs.filter(e=>!isMultiDay(e)),...multiDayForCanvas,...volEvs];
     const glowCv=buildGlowCanvas(allForCanvas, tlW, rowH);
     tl.appendChild(glowCv);
     /* _allEvs: single source for rebuildGlow — fixed + volatiles with _storeKey */

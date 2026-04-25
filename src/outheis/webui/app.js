@@ -631,7 +631,10 @@ async function renderConfigModels() {
   const ollamaData = await fetchAPI('/api/ollama/models');
   const ollamaModels = ollamaData?.models || [];
 
-  const rows = Object.entries(models).map(([alias, model]) => {
+  const rows = Object.entries(models).sort(([aAlias, aModel], [bAlias, bModel]) => {
+    const ap = aModel?.provider || '', bp = bModel?.provider || '';
+    return ap !== bp ? ap.localeCompare(bp) : aAlias.localeCompare(bAlias);
+  }).map(([alias, model]) => {
     const provider = model?.provider || 'anthropic';
     const name = model?.name || model || '';
     let html = _modelRow(alias, provider, name, ollamaModels, false);

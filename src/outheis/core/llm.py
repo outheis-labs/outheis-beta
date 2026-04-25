@@ -357,7 +357,7 @@ def call_llm(
     log = logging.getLogger(__name__)
 
     llm_config = get_llm_config()
-    use_provider_fallback = bool(llm_config.model_fallbacks)
+    use_provider_fallback = bool(llm_config.provider_aliases)
 
     failed_providers: set[str] = set()
     last_billing_error: BillingError | None = None

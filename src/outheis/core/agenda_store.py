@@ -118,10 +118,39 @@ def write_agenda_json(data: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def replace_items_by_source(data: dict, source: str, new_items: list[dict]) -> dict:
-    """Replace all items with a given source, preserving all others."""
-    kept = [it for it in data.get("items", []) if it.get("source") != source]
-    data["items"] = kept + new_items
+    """Replace all items with a given source, preserving all others.
+
+    Items carrying a #recurring-* tag are NEVER replaced regardless of source —
+    the recurring tag is the authoritative protection flag.  Incoming new_items
+    that match a protected recurring item by title are silently dropped.
+    """
+    # Build a lookup of recurring items keyed by normalized title
+    recurring_by_title: dict[str, dict] = {}
+    for it in data.get("items", []):
+        if any(t.startswith("#recurring-") for t in (it.get("tags") or [])):
+            recurring_by_title[_norm_title(it.get("title", ""))] = it
+
+    # Filter out new items that would overwrite a recurring item
+    merged_new = [
+        ni for ni in new_items
+        if _norm_title(ni.get("title", "")) not in recurring_by_title
+    ]
+
+    # Keep all items that are either: a different source, OR a recurring item of this source
+    kept = [
+        it for it in data.get("items", [])
+        if it.get("source") != source
+        or any(t.startswith("#recurring-") for t in (it.get("tags") or []))
+    ]
+    data["items"] = kept + merged_new
     return data
+
+
+def _norm_title(title: str) -> str:
+    """Lowercase, strip punctuation/whitespace for fuzzy title matching."""
+    import unicodedata
+    s = unicodedata.normalize("NFC", title).lower().strip()
+    return re.sub(r"[\s\-–—_/\\.,;:!?()\"']+", " ", s).strip()
 
 
 def remove_items_by_source(data: dict, source: str) -> dict:
@@ -419,7 +448,7 @@ def merge_shadow_write(data: dict, tag_text: str, default_source: str = "cato") 
             continue  # done items are handled above, not re-added
         item_id = p.get("id", "")
         if item_id in result_by_id:
-            # Update in place, preserve source
+            # Update in place, preserve source and recurring tags
             idx = result_by_id[item_id]
             orig = result[idx]
             updated = {**orig, **{k: v for k, v in p.items() if not k.startswith("_")}}

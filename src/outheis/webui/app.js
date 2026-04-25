@@ -222,31 +222,6 @@ async function renderOverview() {
   ]);
   if (!config) config = cfg;
 
-  // Resolve fallback alias → provider + model name
-  const fbAlias = (status.system_mode === 'fallback' && status.fallback_model && status.fallback_model !== 'none')
-    ? status.fallback_model : null;
-  let fbProvider = '', fbModelName = '', fbStage = '';
-  if (fbAlias) {
-    const provAliases = cfg.llm?.provider_aliases || {};
-    const models = cfg.llm?.models || {};
-    const fallbackOrder = cfg.llm?.fallback_order || [];
-    const searchOrder = fallbackOrder.length
-      ? [...fallbackOrder, ...Object.keys(provAliases).filter(p => !fallbackOrder.includes(p))]
-      : Object.keys(provAliases);
-    for (const p of searchOrder) {
-      if (provAliases[p]?.[fbAlias]) { fbProvider = p; fbModelName = provAliases[p][fbAlias]; break; }
-    }
-    if (!fbProvider && models[fbAlias]) {
-      const m = models[fbAlias];
-      fbProvider = typeof m === 'object' ? (m.provider || '') : '';
-      fbModelName = typeof m === 'object' ? (m.name || '') : String(m);
-    }
-    if (fallbackOrder.length && fbProvider) {
-      const idx = fallbackOrder.indexOf(fbProvider);
-      if (idx >= 0) fbStage = `stage ${idx + 1} of ${fallbackOrder.length}`;
-    }
-  }
-
   // Extract human-readable error message without guessing categories
   const fbExtractReason = (raw) => {
     if (!raw) return 'unavailable';
@@ -258,35 +233,66 @@ async function renderOverview() {
     return stripped.length > 120 ? stripped.slice(0, 120) + '…' : stripped;
   };
 
-  // Build per-stage lines using failed_providers from status (authoritative)
+  // Build per-stage rows — always shown when fallback_order is configured
   const fbFailedSet = new Set(status.fallback_failed_providers || []);
-  const fbStageLines = (() => {
-    if (status.system_mode !== 'fallback') return [];
+  const stageRows = (() => {
     const fallbackOrder = cfg.llm?.fallback_order || [];
+    if (!fallbackOrder.length) return [];
     const reason = fbExtractReason(status.fallback_reason);
-    if (fallbackOrder.length) {
-      return fallbackOrder.map((p, i) => {
-        if (fbFailedSet.has(p)) {
-          // Last failed provider carries the stored reason; earlier ones just show "failed"
-          const isLast = [...fbFailedSet].every(fp => fallbackOrder.indexOf(fp) <= i);
-          return `${p} (stage ${i + 1}): ${isLast ? reason : 'failed'}`;
-        }
-        return `${p} (stage ${i + 1}): not reached`;
-      });
-    }
-    if (fbFailedSet.size) return [[...fbFailedSet].map(p => `${p}: ${reason}`).join(', ')];
-    return reason ? [reason] : [];
-  })();
-
-  // Per-agent lines: always show when in fallback, resolve to provider:model if possible
-  const fbAgentLines = (() => {
-    if (status.system_mode !== 'fallback') return [];
+    const provAliases = cfg.llm?.provider_aliases || {};
     const agents = cfg.agents || {};
     const cloudAgents = ['relay', 'data', 'agenda', 'pattern', 'code'];
-    const modelLabel = fbProvider && fbModelName ? `${fbProvider}: ${fbModelName}` : fbAlias || '?';
+
+    // For each active agent alias, find which provider serves it (first non-failed in fallback_order)
+    const providerUsedAliases = {};
+    for (const [role, a] of Object.entries(agents)) {
+      if (!a.enabled || !cloudAgents.includes(role)) continue;
+      const alias = a.model;
+      for (const p of fallbackOrder) {
+        if (fbFailedSet.has(p)) continue;
+        if (provAliases[p]?.[alias]) {
+          if (!providerUsedAliases[p]) providerUsedAliases[p] = new Set();
+          providerUsedAliases[p].add(alias);
+          break;
+        }
+      }
+    }
+
+    return fallbackOrder.map((p) => {
+      if (fbFailedSet.has(p)) {
+        const isLast = [...fbFailedSet].every(fp => fallbackOrder.indexOf(fp) <= fallbackOrder.indexOf(p));
+        return { label: p, value: isLast ? reason : 'failed' };
+      }
+      const used = providerUsedAliases[p];
+      if (used?.size) return { label: p, value: `active (${[...used].join(', ')})` };
+      return { label: p, value: 'standby' };
+    });
+  })();
+
+  const renderGrid = (rows, labelStyle = '') =>
+    rows.length ? `<div style="display:grid;grid-template-columns:max-content 1fr;gap:2px 16px;font-size:12px;color:var(--text-tertiary);margin-top:4px;line-height:1.6;">${
+      rows.map(r => `<span${labelStyle ? ` style="${labelStyle}"` : ''}>${r.label}</span><span>${r.value}</span>`).join('')
+    }</div>` : '';
+
+  // Per-agent rows: resolve each agent's alias from config, skipping failed providers
+  const agentRows = (() => {
+    const agents = cfg.agents || {};
+    const cloudAgents = ['relay', 'data', 'agenda', 'pattern', 'code'];
+    const provAliases = cfg.llm?.provider_aliases || {};
+    const fallbackOrder = cfg.llm?.fallback_order || [];
+    const searchOrder = fallbackOrder.length ? fallbackOrder : Object.keys(provAliases).sort();
     return Object.entries(agents)
       .filter(([role, a]) => a.enabled && cloudAgents.includes(role))
-      .map(([role]) => `${role}: ${modelLabel}`);
+      .map(([role, a]) => {
+        const alias = a.model;
+        let resolved = null;
+        for (const p of searchOrder) {
+          if (fbFailedSet.has(p)) continue;
+          if (provAliases[p]?.[alias]) { resolved = `${p}: ${provAliases[p][alias]}`; break; }
+        }
+        if (!resolved) resolved = fbFailedSet.size ? 'unavailable' : alias;
+        return { label: role, value: resolved };
+      });
   })();
 
   const msgCountEl = document.getElementById('msg-count');
@@ -297,16 +303,15 @@ async function renderOverview() {
   viewContent.innerHTML = `
     <div class="scroll">
       <div class="metrics">
-        <div class="metric">
+        <div class="metric" style="grid-column: span 2;">
           <div class="metric-label">Dispatcher</div>
-          <div class="metric-value ${status.running ? (status.system_mode === 'fallback' ? 'warning' : 'success') : ''}">${status.running ? (status.system_mode === 'fallback' ? `Fallback${fbStage ? ` (${fbStage})` : ''}` : 'Running') : 'Stopped'}</div>
-          ${status.system_mode === 'fallback' && fbStageLines.length ? `<div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;line-height:1.6;">${fbStageLines.join('<br>')}</div>` : ''}
+          <div class="metric-value ${status.running ? (status.system_mode === 'fallback' ? 'warning' : 'success') : ''}">${status.running ? (status.system_mode === 'fallback' ? 'Provider Operation Mode' : 'Running') : 'Stopped'}</div>
+          ${renderGrid(stageRows)}
         </div>
-        ${status.system_mode === 'fallback' ? `
         <div class="metric" style="grid-column: 1 / -1;">
-          <div class="metric-label">Fallback model</div>
-          <div class="metric-value warning" style="font-size:14px;line-height:1.8;">${fbAgentLines.length ? fbAgentLines.join('<br>') : (fbProvider ? `${fbProvider}: ${fbModelName}` : status.fallback_model || '?')}</div>
-        </div>` : ''}
+          <div class="metric-label">Currently running models</div>
+          <div class="metric-value" style="font-size:14px;">${renderGrid(agentRows, 'color:var(--accent-warning);font-size:14px;') || '—'}</div>
+        </div>
         <div class="metric">
           <div class="metric-label">Active agents</div>
           <div class="metric-value">${status.enabled_agents} / ${status.total_agents}</div>
@@ -1485,13 +1490,14 @@ async function renderAgendaView() {
     else if (running.includes('agenda_review')) { reviewBtn.textContent = 'Running…'; reviewBtn.disabled = true; watchTask('agenda_review', reviewBtn); }
   }
 
-  const validTabs = ['calendar', 'agendamd', 'source', 'extern'];
+  const validTabs = ['calendar', 'agendamd', 'source', 'extern', 'flow'];
   const tab = validTabs.includes(currentTab) ? currentTab : 'calendar';
   viewTabs.innerHTML = `
     <div class="tab ${tab === 'calendar' ? 'active' : ''}" onclick="switchAgendaTab('calendar')">Calendar</div>
     <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Notebook</div>
     <div class="tab ${tab === 'source'   ? 'active' : ''}" onclick="switchAgendaTab('source')">Source</div>
     <div class="tab ${tab === 'extern'   ? 'active' : ''}" onclick="switchAgendaTab('extern')">External</div>
+    <div class="tab ${tab === 'flow'    ? 'active' : ''}" onclick="switchAgendaTab('flow')">Flow</div>
   `;
   await renderAgendaTab(tab);
 }
@@ -1507,7 +1513,7 @@ async function switchAgendaTab(tab) {
     }
   }
   currentTab = tab;
-  const tabOrder = ['calendar', 'agendamd', 'source', 'extern'];
+  const tabOrder = ['calendar', 'agendamd', 'source', 'extern', 'flow'];
   viewTabs.querySelectorAll('.tab').forEach((t, i) =>
     t.classList.toggle('active', tabOrder[i] === tab)
   );
@@ -1522,6 +1528,8 @@ async function renderAgendaTab(tab) {
     await renderSourceTab();
   } else if (tab === 'extern') {
     await renderExternTab();
+  } else if (tab === 'flow') {
+    viewContent.innerHTML = '<div style="flex:1;display:flex;padding:0 24px;overflow:hidden;"><iframe src="/flow" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe></div>';
   } else {
     currentFile = 'Agenda.md';
     fileMode = 'rendered';

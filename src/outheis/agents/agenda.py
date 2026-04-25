@@ -62,26 +62,16 @@ def get_daily_template() -> str | None:
 
 
 def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
-    """Compute the next occurrence date for a recurring Shadow.md entry.
-
-    Args:
-        current_date: The current #date value (i.e. today or the last shown date).
-        tag: The #recurring-* tag string (e.g. '#recurring-weekly', '#recurring-mon-wed-thu').
-
-    Returns:
-        The next occurrence date, or None if the tag is not a known recurring format.
-    """
-    from datetime import date as _date, timedelta as _td
+    """Compute the next occurrence date for a recurring Shadow.md entry."""
+    from datetime import timedelta as _td
     from outheis.core.i18n import RECURRING_WEEKDAY_CODES
 
     tag = tag.strip().lower()
 
     if tag == "#recurring-daily":
         return current_date + _td(days=1)
-
     if tag == "#recurring-weekly":
         return current_date + _td(weeks=1)
-
     if tag == "#recurring-monthly":
         import calendar
         year, month, day = current_date.year, current_date.month, current_date.day
@@ -90,15 +80,12 @@ def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
         else:
             month += 1
         day = min(day, calendar.monthrange(year, month)[1])
-        return _date(year, month, day)
-
+        return current_date.__class__(year, month, day)
     if tag == "#recurring-yearly":
         import calendar
         year = current_date.year + 1
         day = min(current_date.day, calendar.monthrange(year, current_date.month)[1])
-        return _date(year, current_date.month, day)
-
-    # #recurring-monthly-10-22  (specific days of month)
+        return current_date.__class__(year, current_date.month, day)
     if tag.startswith("#recurring-monthly-"):
         import calendar
         parts = tag[len("#recurring-monthly-"):].split("-")
@@ -106,15 +93,15 @@ def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
             days = sorted(int(p) for p in parts)
         except ValueError:
             return None
-        from datetime import date as _date2
-        today = _date2.today()
+        from datetime import date as _d
+        today = _d.today()
         year, month = today.year, today.month
-        for _ in range(25):  # max 25 month iterations
+        for _ in range(25):
             max_day = calendar.monthrange(year, month)[1]
             for d in days:
                 if d > max_day:
                     continue
-                candidate = _date(year, month, d)
+                candidate = _d(year, month, d)
                 if candidate > today:
                     return candidate
             if month == 12:
@@ -122,20 +109,17 @@ def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
             else:
                 month += 1
         return None
-
-    # #recurring-mon-wed-thu  (specific weekdays)
     prefix = "#recurring-"
     if tag.startswith(prefix):
         codes = tag[len(prefix):].split("-")
         if all(c in RECURRING_WEEKDAY_CODES for c in codes):
             target_weekdays = [RECURRING_WEEKDAY_CODES.index(c) for c in codes]
-            from datetime import date as _date2
-            today = _date2.today()
+            from datetime import date as _d
+            today = _d.today()
             for delta in range(1, 8):
                 candidate = today + _td(days=delta)
                 if candidate.weekday() in target_weekdays:
                     return candidate
-
     return None
 
 

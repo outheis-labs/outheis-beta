@@ -554,6 +554,92 @@ async def serve_agenda_html():
     return HTMLResponse(path.read_text(encoding="utf-8"))
 
 
+@app.get("/flow")
+async def serve_flow_html():
+    """Serve flow.html from user pages directory."""
+    path = PAGES_DIR / "flow.html"
+    if not path.exists():
+        return HTMLResponse("<p>flow.html not found in ~/.outheis/human/webui/pages/</p>", status_code=404)
+    return HTMLResponse(path.read_text(encoding="utf-8"))
+
+
+@app.get("/api/flow-graph")
+async def get_flow_graph():
+    """Return agenda.json with resolved dependencies and conflict detection.
+
+    Calculates effectiveDay for each item based on follows/precedes relationships,
+    detects conflicts (date vs dependency mismatch), and returns the full graph.
+    """
+    from datetime import date as date_type
+    path = PAGES_DIR / "agenda.json"
+    if not path.exists():
+        return JSONResponse({"error": "agenda.json not found"}, status_code=404)
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    items = data.get("items", [])
+    item_by_id = {item.get("id"): item for item in items if item.get("id")}
+    conflicts = []
+
+    # Calculate effective day based on dependencies
+    def get_effective_day(item_id: str, visited: set = None) -> int:
+        """Calculate effective day considering follows dependencies."""
+        if visited is None:
+            visited = set()
+        if item_id in visited:
+            return 0  # Cycle detected, return 0
+
+        item = item_by_id.get(item_id)
+        if not item:
+            return 0
+
+        base_day = item.get("day", 0)
+        follows = item.get("follows", [])
+
+        if not follows:
+            return base_day
+
+        visited.add(item_id)
+        max_pred_day = 0
+        for pred_id in follows:
+            pred_day = get_effective_day(pred_id, visited.copy())
+            # If predecessor is not done, we need pred_day + 1
+            pred_item = item_by_id.get(pred_id)
+            if pred_item and not pred_item.get("done"):
+                max_pred_day = max(max_pred_day, pred_day + 1)
+        visited.discard(item_id)
+
+        return max(max_pred_day, base_day)
+
+    # Resolve dependencies for each item
+    for item in items:
+        if not item.get("id"):
+            continue
+
+        follows = item.get("follows", [])
+        if follows:
+            effective = get_effective_day(item["id"])
+            base_day = item.get("day", 0)
+            if effective > base_day:
+                item["effectiveDay"] = effective
+                # Check for conflicts
+                if base_day > 0:
+                    conflicts.append({
+                        "item_id": item["id"],
+                        "item_title": item.get("title", ""),
+                        "base_day": base_day,
+                        "effective_day": effective,
+                        "reason": f"Blocked by predecessors. Planned day {base_day}, effective day {effective}"
+                    })
+
+    # Add conflicts to response
+    data["conflicts"] = conflicts
+    return JSONResponse(data)
+
+
 @app.get("/agenda.json")
 async def serve_agenda_json():
     """Serve agenda.json so agenda.html's fetch('agenda.json') resolves correctly."""

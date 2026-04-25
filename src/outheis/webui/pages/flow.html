@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>flow · outheis</title>
+<style>
+@font-face {
+  font-family: 'IBM Plex Sans';
+  src: url('/assets/fonts/IBMPlexSans-Variable.woff2') format('woff2');
+  font-weight: 100 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/assets/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}
+</style>
+<style>
+:root {
+  --bg: #F0EFEC;
+  --bg2: #E8E6E6;
+  --text: #1A1A1A;
+  --text2: #7A7676;
+  --text3: #B8B4B4;
+  --accent: #218380;
+  --border: #D8D4D4;
+  --blocked: #C44;
+  --overdue: #E67300;
+  --today: #4A90D9;
+  --active: #5B8C5A;
+  --future: #7A7676;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: 13px;
+  height: 100%;
+  overflow: hidden;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 0.5rem 1rem 1rem;
+}
+
+/* Top bar */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1rem;
+  flex-shrink: 0;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text);
+  background: transparent;
+  border: 0.5px solid var(--text3);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.btn:hover { border-color: var(--text); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-primary:hover { background: #1a6b6b; }
+.refresh-btn {
+  background: none;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.refresh-btn:hover { color: var(--text); }
+.refresh-btn.spinning { animation: spin 0.6s linear; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Select dropdown */
+select {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg2);
+  border: 0.5px solid var(--text3);
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+select:focus { outline: none; border-color: var(--accent); }
+
+/* Lane container */
+.lanes {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+/* Lane */
+.lane {
+  background: var(--bg);
+  border: 0.5px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+}
+.lane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border-radius: 4px 4px 0 0;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  user-select: none;
+}
+.lane-header:hover { background: #E0DEDE; }
+.lane-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.lane-count {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--text2);
+  font-size: 11px;
+}
+.lane-content {
+  padding: 8px;
+  display: none;
+}
+.lane.open .lane-content {
+  display: block;
+}
+
+/* Lane colors */
+.lane-blocked .lane-icon { background: var(--blocked); }
+.lane-overdue .lane-icon { background: var(--overdue); }
+.lane-today .lane-icon { background: var(--today); }
+.lane-active .lane-icon { background: var(--active); }
+.lane-future .lane-icon { background: var(--future); }
+
+/* Group */
+.group {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 8px;
+  background: white;
+}
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg2);
+  border-radius: 4px 4px 0 0;
+  font-weight: 500;
+  font-size: 12px;
+  cursor: pointer;
+}
+.group-content {
+  padding: 6px 10px 10px;
+}
+
+/* Item */
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  margin: 2px 0;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.item:hover { background: var(--bg2); }
+.item-title {
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.item-meta {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text2);
+  margin-top: 2px;
+}
+.item-facet {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.item-date {
+  color: var(--text2);
+}
+.item-conflict {
+  color: var(--blocked);
+  font-weight: 500;
+}
+
+/* Dependency indicators */
+.dep-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--text2);
+  padding: 1px 4px;
+  background: var(--bg2);
+  border-radius: 2px;
+}
+.dep-blocked { color: var(--blocked); background: #FDE8E8; }
+.dep-waiting { color: var(--today); }
+
+/* SVG container for dependency arrows */
+.arrows-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Edit popup (shared with agenda.html) */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 200;
+  display: none;
+}
+.popup-overlay.show { display: block; }
+.popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 16px;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  z-index: 201;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.popup-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 12px;
+}
+.popup-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.popup-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.popup-label {
+  font-size: 11px;
+  color: var(--text2);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.popup-input {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg2);
+  border: none;
+  border-bottom: 1px solid var(--text3);
+  padding: 4px 6px;
+  outline: none;
+}
+.popup-input:focus { border-bottom-color: var(--accent); }
+.popup-textarea {
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg2);
+  border: 1px solid var(--text3);
+  border-radius: 3px;
+  padding: 6px;
+  outline: none;
+  resize: vertical;
+  min-height: 60px;
+}
+.popup-textarea:focus { border-color: var(--accent); }
+.popup-buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  justify-content: flex-end;
+}
+.popup-conflict {
+  background: #FDE8E8;
+  border: 1px solid var(--blocked);
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--blocked);
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <button class="refresh-btn" id="reloadBtn" onclick="reloadFlow()" title="Reload flow">↻</button>
+    <select id="groupSelect" onchange="changeGrouping()">
+      <option value="none">No grouping</option>
+      <option value="relates">By relation</option>
+      <option value="facet">By facet</option>
+    </select>
+    <select id="filterSelect" onchange="changeFilter()">
+      <option value="all">All items</option>
+      <option value="blocked">Blocked only</option>
+      <option value="overdue">Overdue only</option>
+      <option value="undated">Undated only</option>
+    </select>
+    <button class="btn" onclick="showCreatePopup()">Add item</button>
+    <button class="btn" id="saveBtn" onclick="saveFlow()">Save</button>
+  </div>
+
+  <div class="lanes" id="lanes">
+    <!-- Populated by JavaScript -->
+  </div>
+</div>
+
+<!-- Edit popup -->
+<div class="popup-overlay" id="popupOverlay" onclick="closePopup()"></div>
+<div class="popup" id="popup" onclick="event.stopPropagation()">
+  <div class="popup-title" id="popupTitle">Edit item</div>
+  <div class="popup-conflict" id="popupConflict" style="display:none;"></div>
+  <textarea class="popup-textarea" id="popupTitle2" placeholder="Title"></textarea>
+  <div class="popup-row">
+    <div class="popup-field">
+      <span class="popup-label">Start</span>
+      <input class="popup-input" id="popupStart" type="time">
+    </div>
+    <div class="popup-field">
+      <span class="popup-label">End</span>
+      <input class="popup-input" id="popupEnd" type="time">
+    </div>
+    <div class="popup-field">
+      <span class="popup-label">Date</span>
+      <input class="popup-input" id="popupDate" type="date">
+    </div>
+  </div>
+  <div class="popup-row">
+    <div class="popup-field">
+      <span class="popup-label">Facet</span>
+      <select class="popup-input" id="popupFacet"></select>
+    </div>
+    <div class="popup-field">
+      <span class="popup-label">Size</span>
+      <select class="popup-input" id="popupSize">
+        <option value="">-</option>
+        <option value="s">S</option>
+        <option value="m">M</option>
+        <option value="l">L</option>
+      </select>
+    </div>
+  </div>
+  <div class="popup-field" style="margin-bottom:10px;">
+    <span class="popup-label">Tags</span>
+    <input class="popup-input" id="popupTags" placeholder="#tag1 #tag2">
+  </div>
+  <div class="popup-field" style="margin-bottom:10px;">
+    <span class="popup-label">Waits for (follows)</span>
+    <input class="popup-input" id="popupFollows" placeholder="Item titles, comma-separated">
+  </div>
+  <div class="popup-field" style="margin-bottom:10px;">
+    <span class="popup-label">Blocks (precedes)</span>
+    <input class="popup-input" id="popupPrecedes" placeholder="Item titles, comma-separated">
+  </div>
+  <div class="popup-field" style="margin-bottom:10px;">
+    <span class="popup-label">Relates to</span>
+    <input class="popup-input" id="popupRelates" placeholder="Group name">
+  </div>
+  <div class="popup-buttons">
+    <button class="btn" onclick="closePopup()">Cancel</button>
+    <button class="btn btn-primary" onclick="savePopupItem()">Save</button>
+  </div>
+</div>
+
+<script>
+// State
+let agendaData = null;
+let currentItem = null;
+let dirty = false;
+
+// Lane definitions
+const LANES = [
+  { id: 'blocked', label: 'Blocked', icon: '⚠️' },
+  { id: 'overdue', label: 'Overdue', icon: '🔴' },
+  { id: 'today', label: 'Today', icon: '🟡' },
+  { id: 'active', label: 'Active', icon: '🟢' },
+  { id: 'future', label: 'Future', icon: '⚪' }
+];
+
+// Initialize
+async function init() {
+  await reloadFlow();
+  initLanes();
+}
+
+function initLanes() {
+  const container = document.getElementById('lanes');
+  container.innerHTML = LANES.map(lane => `
+    <div class="lane lane-${lane.id}" id="lane-${lane.id}">
+      <div class="lane-header" onclick="toggleLane('${lane.id}')">
+        <span class="lane-icon"></span>
+        <span>${lane.label}</span>
+        <span class="lane-count" id="count-${lane.id}">0</span>
+      </div>
+      <div class="lane-content" id="content-${lane.id}"></div>
+    </div>
+  `).join('');
+}
+
+function toggleLane(id) {
+  document.getElementById(`lane-${id}`).classList.toggle('open');
+}
+
+async function reloadFlow() {
+  const btn = document.getElementById('reloadBtn');
+  btn.classList.add('spinning');
+  try {
+    const res = await fetch('/api/flow-graph?_=' + Date.now());
+    agendaData = await res.json();
+    renderFlow();
+    updateSaveButton();
+  } catch (e) {
+    console.error('Failed to load flow:', e);
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function renderFlow() {
+  if (!agendaData) return;
+
+  const items = agendaData.items || [];
+  const facets = agendaData.facets || [];
+
+  // Categorize items into lanes
+  const lanes = {
+    blocked: [],
+    overdue: [],
+    today: [],
+    active: [],
+    future: []
+  };
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  items.forEach(item => {
+    const lane = categorizeItem(item, today);
+    lanes[lane].push(item);
+  });
+
+  // Render each lane
+  LANES.forEach(lane => {
+    const count = lanes[lane.id].length;
+    document.getElementById(`count-${lane.id}`).textContent = count;
+
+    const content = document.getElementById(`content-${lane.id}`);
+    if (count === 0) {
+      content.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px;">No items</div>';
+    } else {
+      content.innerHTML = lanes[lane.id].map(item => renderItem(item, facets)).join('');
+    }
+  });
+
+  // Populate facet dropdown
+  const facetSelect = document.getElementById('popupFacet');
+  facetSelect.innerHTML = '<option value="">none</option>' +
+    facets.map(f => `<option value="${f.id}">${f.label || f.id}</option>`).join('');
+}
+
+function categorizeItem(item, today) {
+  // Check for blocked (effectiveDay > day)
+  if (item.effectiveDay !== undefined && item.effectiveDay > (item.day || 0)) {
+    return 'blocked';
+  }
+
+  const date = item.date || (item.start ? item.start.slice(0, 10) : null);
+
+  // Check for overdue
+  if (date && date < today && !item.done) {
+    return 'overdue';
+  }
+
+  // Check for today
+  if (date === today) {
+    return 'today';
+  }
+
+  // Check for active (undated with action-required)
+  if (!date && (item.tags || []).includes('#action-required')) {
+    return 'active';
+  }
+
+  // Check for future
+  if (date && date > today) {
+    return 'future';
+  }
+
+  // Default to active for undated items
+  return 'active';
+}
+
+function renderItem(item, facets) {
+  const facet = facets.find(f => f.id === item.facet);
+  const facetColor = facet ? `background:${facet.hex || '#7A7676'};color:white;` : '';
+  const facetLabel = facet ? (facet.label || facet.id) : '';
+
+  const date = item.date || (item.start ? item.start.slice(0, 10) : null);
+  const dateStr = date ? formatDate(date) : '';
+
+  const conflict = item.effectiveDay !== undefined && item.effectiveDay > (item.day || 0);
+
+  // Build dependency indicators
+  const followsCount = (item.follows || []).length;
+  const precedesCount = (item.precedes || []).length;
+
+  let depHtml = '';
+  if (followsCount > 0) {
+    depHtml += `<span class="dep-indicator ${conflict ? 'dep-blocked' : 'dep-waiting'}">⬅ ${followsCount} waits</span>`;
+  }
+  if (precedesCount > 0) {
+    depHtml += `<span class="dep-indicator">➡ ${precedesCount} blocks</span>`;
+  }
+
+  return `
+    <div class="item" onclick="editItem('${item.id}')">
+      <div style="flex:1">
+        <div class="item-title">${escapeHtml(item.title || 'Untitled')}</div>
+        <div class="item-meta">
+          ${facetLabel ? `<span class="item-facet" style="${facetColor}">${facetLabel}</span>` : ''}
+          ${dateStr ? `<span class="item-date">${dateStr}</span>` : ''}
+          ${conflict ? `<span class="item-conflict">⚠ conflict</span>` : ''}
+          ${depHtml}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr);
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return `${days[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.`;
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function editItem(id) {
+  const item = agendaData.items.find(i => i.id === id);
+  if (!item) return;
+
+  currentItem = item;
+
+  document.getElementById('popupTitle').textContent = 'Edit item';
+  document.getElementById('popupTitle2').value = item.title || '';
+  document.getElementById('popupStart').value = item.start ? item.start.slice(11, 16) : '';
+  document.getElementById('popupEnd').value = item.end ? item.end.slice(11, 16) : '';
+  document.getElementById('popupDate').value = item.date || '';
+  document.getElementById('popupFacet').value = item.facet || '';
+  document.getElementById('popupSize').value = item.size || '';
+  document.getElementById('popupTags').value = (item.tags || []).join(' ');
+  document.getElementById('popupFollows').value = (item.follows || []).join(', ');
+  document.getElementById('popupPrecedes').value = (item.precedes || []).join(', ');
+  document.getElementById('popupRelates').value = (item.relates || []).join(', ');
+
+  // Show conflict if any
+  const conflict = item.effectiveDay !== undefined && item.effectiveDay > (item.day || 0);
+  const conflictEl = document.getElementById('popupConflict');
+  if (conflict) {
+    conflictEl.style.display = 'block';
+    conflictEl.textContent = `⚠ Blocked by predecessors. Effective day: day ${item.effectiveDay}`;
+  } else {
+    conflictEl.style.display = 'none';
+  }
+
+  document.getElementById('popupOverlay').classList.add('show');
+}
+
+function showCreatePopup() {
+  currentItem = null;
+
+  document.getElementById('popupTitle').textContent = 'Add item';
+  document.getElementById('popupTitle2').value = '';
+  document.getElementById('popupStart').value = '';
+  document.getElementById('popupEnd').value = '';
+  document.getElementById('popupDate').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('popupFacet').value = '';
+  document.getElementById('popupSize').value = '';
+  document.getElementById('popupTags').value = '';
+  document.getElementById('popupFollows').value = '';
+  document.getElementById('popupPrecedes').value = '';
+  document.getElementById('popupRelates').value = '';
+  document.getElementById('popupConflict').style.display = 'none';
+
+  document.getElementById('popupOverlay').classList.add('show');
+}
+
+function closePopup() {
+  document.getElementById('popupOverlay').classList.remove('show');
+  currentItem = null;
+}
+
+async function savePopupItem() {
+  const title = document.getElementById('popupTitle2').value.trim();
+  if (!title) {
+    alert('Title required');
+    return;
+  }
+
+  const newItem = {
+    id: currentItem ? currentItem.id : generateId(),
+    title: title,
+    type: (document.getElementById('popupStart').value && document.getElementById('popupEnd').value) ? 'fixed' : 'volatile',
+    facet: document.getElementById('popupFacet').value || 'none',
+    tags: document.getElementById('popupTags').value.trim().split(/\s+/).filter(t => t.startsWith('#'))
+  };
+
+  const start = document.getElementById('popupStart').value;
+  const end = document.getElementById('popupEnd').value;
+  const date = document.getElementById('popupDate').value;
+
+  if (date) {
+    newItem.date = date;
+    if (start && end) {
+      newItem.start = start;
+      newItem.end = end;
+    }
+  }
+
+  const size = document.getElementById('popupSize').value;
+  if (size) newItem.size = size;
+
+  // Parse follows/precedes/relates
+  newItem.follows = document.getElementById('popupFollows').value.split(',').map(s => s.trim()).filter(s => s);
+  newItem.precedes = document.getElementById('popupPrecedes').value.split(',').map(s => s.trim()).filter(s => s);
+  newItem.relates = document.getElementById('popupRelates').value.split(',').map(s => s.trim()).filter(s => s);
+
+  // Update or add item
+  if (currentItem) {
+    const idx = agendaData.items.findIndex(i => i.id === currentItem.id);
+    if (idx >= 0) agendaData.items[idx] = { ...currentItem, ...newItem };
+  } else {
+    agendaData.items.push(newItem);
+  }
+
+  dirty = true;
+  updateSaveButton();
+  closePopup();
+  renderFlow();
+}
+
+function generateId() {
+  // Simple snowflake-like ID
+  return String(Date.now()) + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+
+function updateSaveButton() {
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = dirty ? 'Save' : '✓';
+}
+
+async function saveFlow() {
+  if (!dirty) return;
+
+  const btn = document.getElementById('saveBtn');
+  btn.textContent = 'Saving...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch('/agenda.json', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: JSON.stringify(agendaData, null, 2) })
+    });
+
+    if (res.ok) {
+      dirty = false;
+      updateSaveButton();
+    } else {
+      const err = await res.json();
+      if (err.conflicts && err.conflicts.length > 0) {
+        alert('Conflicts detected:\n' + err.conflicts.map(c => c.reason).join('\n'));
+      } else {
+        alert('Save failed');
+      }
+    }
+  } catch (e) {
+    console.error('Save error:', e);
+    alert('Save failed');
+  } finally {
+    btn.textContent = dirty ? 'Save' : '✓';
+    btn.disabled = false;
+  }
+}
+
+function changeGrouping() {
+  // TODO: implement grouping
+  renderFlow();
+}
+
+function changeFilter() {
+  // TODO: implement filtering
+  renderFlow();
+}
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

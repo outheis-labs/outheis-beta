@@ -471,7 +471,7 @@ class Dispatcher:
         import os as _os
         result = False
         for name, provider in self.config.llm.providers.items():
-            if name.startswith("ollama"):
+            if name == "ollama.local" or "localhost" in (provider.base_url or "") or "127.0.0.1" in (provider.base_url or ""):
                 continue
             key = provider.api_key
             if not key and name == "anthropic":
@@ -520,51 +520,82 @@ class Dispatcher:
             self._exit_fallback_mode()
 
     def _check_billing_at_startup(self) -> None:
-        """Probe cloud providers at startup. Enter fallback mode if billing fails."""
-        from outheis.core.config import get_human_dir
-        from outheis.core.llm import BillingError, call_llm, resolve_model
+        """Probe each cloud provider individually at startup to build an accurate failed_providers set."""
+        import json
+        import time as _time
 
-        # Was fallback active before this restart?
+        from outheis.core.config import ModelConfig, get_human_dir, get_status_path
+        from outheis.core.llm import BillingError, _do_call
+
         _fallback_flag = get_human_dir() / ".fallback_active"
         _already_known = _fallback_flag.exists()
 
-        # Collect unique cloud providers used by enabled agents
-        cloud_aliases: set[str] = set()
-        for _role, agent_cfg in self.config.agents.items():
-            if not agent_cfg.enabled:
-                continue
-            try:
-                mc = resolve_model(agent_cfg.model)
-                if not mc.provider.startswith("ollama"):
-                    cloud_aliases.add(agent_cfg.model)
-            except Exception:
-                pass
+        fallback_order = self.config.llm.fallback_order
+        provider_aliases = self.config.llm.provider_aliases
 
-        if not cloud_aliases:
-            return  # All agents already on local models
+        if not fallback_order or not provider_aliases:
+            return
 
-        # No API key configured — enter fallback immediately without a network call
         if not self._cloud_api_key_available():
             print("[startup] No cloud API key configured — entering fallback mode.")
             self._enter_fallback_mode("No cloud API key configured.", conversation_id=None, silent=_already_known)
             return
 
-        # Test with the cheapest available alias
-        test_alias = next(iter(cloud_aliases))
-        try:
-            call_llm(
-                model=test_alias,
-                messages=[{"role": "user", "content": "ping"}],
-                max_tokens=1,
-                agent="startup_check",
-            )
-            print(f"[startup] Cloud provider OK (tested alias: {test_alias})")
-        except BillingError as e:
-            print(f"[startup] Billing error detected: {e}")
-            self._enter_fallback_mode(str(e), conversation_id=None, silent=_already_known)
-        except Exception as e:
-            # Other errors (network, timeout) — don't enter fallback, log only
-            print(f"[startup] Cloud probe warning (non-billing): {e}")
+        # Probe each cloud provider individually so partial failures are recorded accurately
+        failed: set[str] = set()
+        working: list[str] = []
+        last_error = ""
+
+        for provider_name in fallback_order:
+            prov_config = self.config.llm.providers.get(provider_name)
+            if not prov_config:
+                continue
+            base_url = prov_config.base_url or ""
+            if "localhost" in base_url or "127.0.0.1" in base_url:
+                continue
+            alias_map = provider_aliases.get(provider_name, {})
+            if not alias_map:
+                continue
+            # Use first alias defined for this provider — no dependency on other providers' aliases
+            probe_model = next(iter(alias_map.values()))
+            mc = ModelConfig(provider=provider_name, name=probe_model)
+            try:
+                _do_call(mc, [{"role": "user", "content": "ping"}], None, None, 1, 15.0)
+                working.append(provider_name)
+                print(f"[startup] {provider_name}: OK")
+            except BillingError as e:
+                failed.add(provider_name)
+                last_error = str(e)
+                print(f"[startup] {provider_name}: billing/auth error")
+            except Exception as e:
+                print(f"[startup] {provider_name}: non-billing error (skipped): {e}")
+
+        if not working and failed:
+            self._enter_fallback_mode(last_error, conversation_id=None, silent=_already_known, failed_providers=failed)
+        elif failed:
+            # Partial failure: some providers work, record which ones failed without entering full fallback
+            status = {
+                "mode": "normal",
+                "reason": last_error,
+                "failed_providers": sorted(failed),
+                "since": _time.time(),
+            }
+            try:
+                _atomic_write(get_status_path(), json.dumps(status))
+                _fallback_flag.unlink(missing_ok=True)
+            except Exception as e:
+                print(f"[startup] Could not write status: {e}")
+            print(f"[startup] Partial: {sorted(failed)} failed, {working} working")
+        else:
+            # All providers OK — clear any stale fallback status
+            if _already_known:
+                self._exit_fallback_mode()
+            else:
+                try:
+                    sp = get_status_path()
+                    _atomic_write(sp, json.dumps({"mode": "normal", "failed_providers": []}))
+                except Exception:
+                    pass
 
     def _handle_shutdown(self, signum, frame):
         """Handle shutdown signals."""

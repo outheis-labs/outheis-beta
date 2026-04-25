@@ -640,14 +640,6 @@ async function renderConfigModels() {
 
   const rows = entries.map(([alias, provider, name]) => _modelRow(alias, provider, name, ollamaModels)).join('');
 
-  const foItems = fallbackOrder.map(p => `
-    <div class="fo-item" draggable="true" data-provider="${p}"
-         ondragstart="foDragStart(event)" ondragover="foDragOver(event)" ondrop="foDrop(event)" ondragend="foDragEnd(event)">
-      <span class="fo-handle">⠿</span>
-      <span class="fo-label">${p}</span>
-      <button class="fo-remove" onclick="this.closest('.fo-item').remove()">×</button>
-    </div>`).join('');
-
   viewContent.innerHTML = `
     <div class="scroll">
       <div class="card">
@@ -656,14 +648,10 @@ async function renderConfigModels() {
           <button class="btn" onclick="addModel()">+ Add alias</button>
         </div>
         <div class="card-body" style="padding:12px 20px;">
-          <div class="form-row" style="margin-bottom:10px;align-items:flex-start;">
-            <div class="form-label" style="padding-top:6px;">Fallback order</div>
-            <div class="form-value" style="flex-direction:column;gap:4px;">
-              <div id="fallback-order-list" style="display:flex;flex-wrap:wrap;gap:4px;min-height:28px;">${foItems}</div>
-              <div style="display:flex;gap:6px;margin-top:2px;">
-                <select id="fo-add-select" style="font-size:12px;">${_providerOptions('')}</select>
-                <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="foAddItem()">+ Add</button>
-              </div>
+          <div class="form-row" style="margin-bottom:10px;">
+            <div class="form-label">Fallback order</div>
+            <div class="form-value">
+              <div id="fallback-order-list" class="fo-list">${_foRenderItems(fallbackOrder)}</div>
             </div>
           </div>
           <div id="models-container">${rows}</div>
@@ -671,54 +659,88 @@ async function renderConfigModels() {
       </div>
     </div>
   `;
+  document.querySelectorAll('#fallback-order-list .fo-item').forEach(_foBindDrag);
 }
 
-let _foDragging = null;
-
-function foDragStart(e) {
-  _foDragging = e.currentTarget;
-  e.dataTransfer.effectAllowed = 'move';
-  setTimeout(() => _foDragging?.classList.add('fo-dragging'), 0);
+function _foRenderItems(order) {
+  const items = order.map(p => `
+    <div class="fo-item" draggable="true" data-provider="${p}">
+      <span class="fo-handle">⠿</span>
+      <span class="fo-label">${p}</span>
+      <button class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</button>
+    </div>`).join('<span class="fo-arrow">→</span>');
+  return items + `
+    <select class="fo-add-select" onchange="foAddItem(this)">
+      <option value="">+ provider</option>
+      ${KNOWN_PROVIDERS.map(p => `<option value="${p}">${p}</option>`).join('')}
+    </select>`;
 }
 
-function foDragOver(e) {
-  e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  const target = e.currentTarget;
-  if (!_foDragging || target === _foDragging) return;
-  const list = target.parentElement;
+function _foUpdateArrows() {
+  const list = document.getElementById('fallback-order-list');
+  if (!list) return;
+  list.querySelectorAll('.fo-arrow').forEach(a => a.remove());
   const items = [...list.querySelectorAll('.fo-item')];
-  const fromIdx = items.indexOf(_foDragging);
-  const toIdx = items.indexOf(target);
-  if (fromIdx < toIdx) target.after(_foDragging);
-  else target.before(_foDragging);
+  items.forEach((item, i) => {
+    if (i < items.length - 1) {
+      const arrow = document.createElement('span');
+      arrow.className = 'fo-arrow';
+      arrow.textContent = '→';
+      item.after(arrow);
+    }
+  });
 }
 
-function foDrop(e) { e.preventDefault(); }
-
-function foDragEnd() {
-  _foDragging?.classList.remove('fo-dragging');
-  _foDragging = null;
-}
-
-function foAddItem() {
-  const sel = document.getElementById('fo-add-select');
-  const p = sel?.value;
+function foAddItem(sel) {
+  const p = sel.value;
+  sel.value = '';
   if (!p) return;
   const list = document.getElementById('fallback-order-list');
-  const existing = list.querySelector(`[data-provider="${p}"]`);
-  if (existing) return;
+  if (list.querySelector(`[data-provider="${p}"]`)) return;
   const div = document.createElement('div');
   div.className = 'fo-item';
   div.draggable = true;
   div.dataset.provider = p;
-  div.innerHTML = `<span class="fo-handle">⠿</span><span class="fo-label">${p}</span><button class="fo-remove" onclick="this.closest('.fo-item').remove()">×</button>`;
-  div.addEventListener('dragstart', foDragStart);
-  div.addEventListener('dragover', foDragOver);
-  div.addEventListener('drop', foDrop);
-  div.addEventListener('dragend', foDragEnd);
-  list.appendChild(div);
+  div.innerHTML = `<span class="fo-handle">⠿</span><span class="fo-label">${p}</span><button class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</button>`;
+  _foBindDrag(div);
+  const addSel = list.querySelector('.fo-add-select');
+  if (list.querySelector('.fo-item')) {
+    const arrow = document.createElement('span');
+    arrow.className = 'fo-arrow';
+    arrow.textContent = '→';
+    addSel.before(arrow);
+  }
+  addSel.before(div);
 }
+
+let _foDragging = null;
+
+function _foBindDrag(el) {
+  el.addEventListener('dragstart', e => {
+    _foDragging = el;
+    e.dataTransfer.effectAllowed = 'move';
+    setTimeout(() => el.classList.add('fo-dragging'), 0);
+  });
+  el.addEventListener('dragend', () => {
+    el.classList.remove('fo-dragging');
+    _foDragging = null;
+    _foUpdateArrows();
+  });
+  el.addEventListener('dragover', e => {
+    e.preventDefault();
+    if (!_foDragging || _foDragging === el) return;
+    const r = el.getBoundingClientRect();
+    if (e.clientX < r.left + r.width / 2) el.before(_foDragging);
+    else el.after(_foDragging);
+  });
+  el.addEventListener('drop', e => e.preventDefault());
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.body.addEventListener('dragover', e => {
+    if (e.target.closest('#fallback-order-list')) e.preventDefault();
+  });
+});
 
 async function refreshOllamaSelect(selectEl) {
   const current = selectEl.value;

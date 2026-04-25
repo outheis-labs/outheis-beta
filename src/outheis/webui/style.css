@@ -605,25 +605,22 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .model-name { flex: 1; }
 .model-name input, .model-name select { width: 100%; }
 
-/* Fallback order drag-and-drop pills */
+/* Fallback order */
+.fo-list { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .fo-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px 3px 4px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-primary);
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: default;
-  user-select: none;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 3px 5px 3px 4px;
+  background: var(--bg-tertiary); border: 1px solid var(--border-primary); border-radius: 4px;
+  font-size: 12px; user-select: none;
 }
-.fo-item.fo-dragging { opacity: 0.4; }
-.fo-handle { cursor: grab; color: var(--text-muted); font-size: 13px; line-height: 1; }
+.fo-item.fo-dragging { opacity: 0.35; }
+.fo-handle { cursor: grab; color: var(--text-muted); font-size: 11px; }
 .fo-handle:active { cursor: grabbing; }
-.fo-label { color: var(--text-primary); }
-.fo-remove { background: none; border: none; padding: 0 0 0 2px; cursor: pointer; color: var(--text-muted); font-size: 13px; line-height: 1; }
+.fo-label { color: var(--text-primary); font-size: 12px; }
+.fo-arrow { color: var(--text-muted); font-size: 12px; padding: 0 1px; }
+.fo-remove { background: none; border: none; padding: 0; margin-left: 1px; cursor: pointer; color: var(--text-muted); font-size: 12px; line-height: 1; }
 .fo-remove:hover { color: var(--accent-danger, #e05c5c); }
+.fo-add-select { font-size: 12px; padding: 2px 4px; background: transparent; border: 1px dashed var(--border-primary); border-radius: 4px; color: var(--text-muted); cursor: pointer; }
 
 /* Scheduler */
 .sched-row {

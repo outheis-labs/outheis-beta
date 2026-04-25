@@ -640,6 +640,14 @@ async function renderConfigModels() {
 
   const rows = entries.map(([alias, provider, name]) => _modelRow(alias, provider, name, ollamaModels)).join('');
 
+  const foItems = fallbackOrder.map(p => `
+    <div class="fo-item" draggable="true" data-provider="${p}"
+         ondragstart="foDragStart(event)" ondragover="foDragOver(event)" ondrop="foDrop(event)" ondragend="foDragEnd(event)">
+      <span class="fo-handle">⠿</span>
+      <span class="fo-label">${p}</span>
+      <button class="fo-remove" onclick="this.closest('.fo-item').remove()">×</button>
+    </div>`).join('');
+
   viewContent.innerHTML = `
     <div class="scroll">
       <div class="card">
@@ -648,10 +656,14 @@ async function renderConfigModels() {
           <button class="btn" onclick="addModel()">+ Add alias</button>
         </div>
         <div class="card-body" style="padding:12px 20px;">
-          <div class="form-row" style="margin-bottom:10px;">
-            <div class="form-label" title="Providers tried in order when a billing error occurs. Comma-separated.">Fallback order</div>
-            <div class="form-value">
-              <input type="text" id="cfg-fallback-order" value="${fallbackOrder.join(', ')}" placeholder="anthropic, ollama.cloud, ollama.local">
+          <div class="form-row" style="margin-bottom:10px;align-items:flex-start;">
+            <div class="form-label" style="padding-top:6px;">Fallback order</div>
+            <div class="form-value" style="flex-direction:column;gap:4px;">
+              <div id="fallback-order-list" style="display:flex;flex-wrap:wrap;gap:4px;min-height:28px;">${foItems}</div>
+              <div style="display:flex;gap:6px;margin-top:2px;">
+                <select id="fo-add-select" style="font-size:12px;">${_providerOptions('')}</select>
+                <button class="btn" style="font-size:11px;padding:2px 8px;" onclick="foAddItem()">+ Add</button>
+              </div>
             </div>
           </div>
           <div id="models-container">${rows}</div>
@@ -659,6 +671,53 @@ async function renderConfigModels() {
       </div>
     </div>
   `;
+}
+
+let _foDragging = null;
+
+function foDragStart(e) {
+  _foDragging = e.currentTarget;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => _foDragging?.classList.add('fo-dragging'), 0);
+}
+
+function foDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const target = e.currentTarget;
+  if (!_foDragging || target === _foDragging) return;
+  const list = target.parentElement;
+  const items = [...list.querySelectorAll('.fo-item')];
+  const fromIdx = items.indexOf(_foDragging);
+  const toIdx = items.indexOf(target);
+  if (fromIdx < toIdx) target.after(_foDragging);
+  else target.before(_foDragging);
+}
+
+function foDrop(e) { e.preventDefault(); }
+
+function foDragEnd() {
+  _foDragging?.classList.remove('fo-dragging');
+  _foDragging = null;
+}
+
+function foAddItem() {
+  const sel = document.getElementById('fo-add-select');
+  const p = sel?.value;
+  if (!p) return;
+  const list = document.getElementById('fallback-order-list');
+  const existing = list.querySelector(`[data-provider="${p}"]`);
+  if (existing) return;
+  const div = document.createElement('div');
+  div.className = 'fo-item';
+  div.draggable = true;
+  div.dataset.provider = p;
+  div.innerHTML = `<span class="fo-handle">⠿</span><span class="fo-label">${p}</span><button class="fo-remove" onclick="this.closest('.fo-item').remove()">×</button>`;
+  div.addEventListener('dragstart', foDragStart);
+  div.addEventListener('dragover', foDragOver);
+  div.addEventListener('drop', foDrop);
+  div.addEventListener('dragend', foDragEnd);
+  list.appendChild(div);
 }
 
 async function refreshOllamaSelect(selectEl) {
@@ -937,9 +996,9 @@ async function saveConfig() {
     });
     updatedConfig.llm.provider_aliases = Object.keys(providerAliases).length ? providerAliases : null;
     // Fallback order
-    const foEl = document.getElementById('cfg-fallback-order');
-    if (foEl) {
-      const order = foEl.value.split(',').map(s => s.trim()).filter(Boolean);
+    const foList = document.getElementById('fallback-order-list');
+    if (foList) {
+      const order = [...foList.querySelectorAll('.fo-item')].map(el => el.dataset.provider).filter(Boolean);
       updatedConfig.llm.fallback_order = order.length ? order : null;
     }
     if (incompleteAliases.length > 0) {

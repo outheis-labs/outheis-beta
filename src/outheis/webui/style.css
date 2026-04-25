@@ -605,6 +605,26 @@ input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
 .model-name { flex: 1; }
 .model-name input, .model-name select { width: 100%; }
 
+/* Fallback order drag-and-drop pills */
+.fo-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: default;
+  user-select: none;
+}
+.fo-item.fo-dragging { opacity: 0.4; }
+.fo-handle { cursor: grab; color: var(--text-muted); font-size: 13px; line-height: 1; }
+.fo-handle:active { cursor: grabbing; }
+.fo-label { color: var(--text-primary); }
+.fo-remove { background: none; border: none; padding: 0 0 0 2px; cursor: pointer; color: var(--text-muted); font-size: 13px; line-height: 1; }
+.fo-remove:hover { color: var(--accent-danger, #e05c5c); }
+
 /* Scheduler */
 .sched-row {
   display: flex;

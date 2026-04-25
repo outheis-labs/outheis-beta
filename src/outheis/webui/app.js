@@ -784,7 +784,10 @@ function renderConfigAgents() {
                 <div class="agent-role">${agent.role}</div>
                 <div class="agent-model">
                   <select class="agent-model-select">
-                    ${Object.keys(config.llm?.models || {fast:{},capable:{},reasoning:{}}).map(alias =>
+                    ${[...new Set([
+                      ...Object.values(config.llm?.provider_aliases || {}).flatMap(a => Object.keys(a)),
+                      ...Object.keys(config.llm?.models || {}),
+                    ]) ].sort().map(alias =>
                       `<option value="${alias}" ${model === alias ? 'selected' : ''}>${alias}</option>`
                     ).join('')}
                   </select>
@@ -1017,6 +1020,7 @@ async function saveConfig() {
       providerAliases[provider][alias] = name;
     });
     updatedConfig.llm.provider_aliases = Object.keys(providerAliases).length ? providerAliases : null;
+    if (Object.keys(providerAliases).length) updatedConfig.llm.models = {}; // superseded by provider_aliases
     // Fallback order
     const foList = document.getElementById('fallback-order-list');
     if (foList) {

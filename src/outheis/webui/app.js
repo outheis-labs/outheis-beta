@@ -247,52 +247,35 @@ async function renderOverview() {
     }
   }
 
-  // Determine which provider failed — only reliable when fallback_order is configured
-  const fbFailedProvider = (() => {
-    const fallbackOrder = cfg.llm?.fallback_order || [];
-    if (!fallbackOrder.length) return null;
-    if (fbProvider) {
-      const idx = fallbackOrder.indexOf(fbProvider);
-      return idx > 0 ? fallbackOrder[idx - 1] : fallbackOrder[0];
-    }
-    return fallbackOrder[0];
-  })();
-
   // Extract human-readable error message without guessing categories
   const fbExtractReason = (raw) => {
     if (!raw) return 'unavailable';
-    // Try to extract 'message': '...' from Python exception string
     const m = raw.match(/'message':\s*'([^']+)'/);
     if (m) return m[1];
     const m2 = raw.match(/"message":\s*"([^"]+)"/);
     if (m2) return m2[1];
-    // Strip "Error code: 400 - " prefix
     const stripped = raw.replace(/^Error code:\s*\d+\s*-\s*/i, '').trim();
     return stripped.length > 120 ? stripped.slice(0, 120) + '…' : stripped;
   };
 
-  // Build per-stage cause lines: failed stages with reason, current stage as active
+  // Build per-stage lines using failed_providers from status (authoritative)
+  const fbFailedSet = new Set(status.fallback_failed_providers || []);
   const fbStageLines = (() => {
+    if (status.system_mode !== 'fallback') return [];
     const fallbackOrder = cfg.llm?.fallback_order || [];
-    const lines = [];
-    if (fallbackOrder.length && fbProvider) {
-      const currentIdx = fallbackOrder.indexOf(fbProvider);
-      for (let i = 0; i < fallbackOrder.length; i++) {
-        const p = fallbackOrder[i];
-        if (i < currentIdx) {
-          const reason = i === currentIdx - 1 ? fbExtractReason(status.fallback_reason) : 'unavailable';
-          lines.push(`${p} (stage ${i + 1}): ${reason}`);
-        } else if (i === currentIdx) {
-          lines.push(`${p} (stage ${i + 1}): active`);
+    const reason = fbExtractReason(status.fallback_reason);
+    if (fallbackOrder.length) {
+      return fallbackOrder.map((p, i) => {
+        if (fbFailedSet.has(p)) {
+          // Last failed provider carries the stored reason; earlier ones just show "failed"
+          const isLast = [...fbFailedSet].every(fp => fallbackOrder.indexOf(fp) <= i);
+          return `${p} (stage ${i + 1}): ${isLast ? reason : 'failed'}`;
         }
-      }
-    } else {
-      // No fallback_order — can't reliably identify which provider failed, just show reason
-      const reason = fbExtractReason(status.fallback_reason);
-      if (reason) lines.push(reason);
-      if (fbProvider) lines.push(`${fbProvider}: active`);
+        return `${p} (stage ${i + 1}): not reached`;
+      });
     }
-    return lines;
+    if (fbFailedSet.size) return [[...fbFailedSet].map(p => `${p}: ${reason}`).join(', ')];
+    return reason ? [reason] : [];
   })();
 
   // Per-agent lines: always show when in fallback, resolve to provider:model if possible

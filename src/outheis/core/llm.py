@@ -25,10 +25,11 @@ from outheis.core.config import LLMConfig, ModelConfig
 # =============================================================================
 
 class BillingError(Exception):
-    """Raised when the cloud provider rejects a call due to billing / auth issues.
+    """Raised when all configured providers are exhausted due to billing/auth failures."""
 
-    Signals the dispatcher to enter local-fallback mode if configured.
-    """
+    def __init__(self, message: str, failed_providers: set[str] | None = None):
+        super().__init__(message)
+        self.failed_providers: set[str] = failed_providers or set()
     pass
 
 
@@ -369,7 +370,7 @@ def call_llm(
             model_config = resolve_model(model, skip_providers=skip)
         except ModelResolutionError:
             if last_billing_error:
-                raise last_billing_error
+                raise BillingError(str(last_billing_error), failed_providers=failed_providers) from last_billing_error
             raise
 
         try:

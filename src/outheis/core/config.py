@@ -176,7 +176,6 @@ class LLMConfig:
         "reasoning": ModelConfig(provider="anthropic", name="claude-opus-4-5"),
         "local": ModelConfig(provider="ollama.local", name=""),
     })
-    local_fallback: str | None = "local"  # Legacy: single fallback alias
     # Per-provider alias tables: {"anthropic": {"fast": "claude-haiku-4-5"}, "ollama.cloud": {"fast": "gemma3:12b"}}
     # The same alias name may appear on multiple providers. fallback_order determines which provider
     # is tried first; on BillingError the next provider in the list that has the alias is used.
@@ -194,8 +193,6 @@ class LLMConfig:
 
         When provider_aliases is configured, iterates fallback_order (or sorted provider keys)
         and returns the first provider that has the alias defined and is not in skip_providers.
-
-        Falls back to the flat models dict + local_fallback for backward compatibility.
 
         Returns (model_config, warning) where warning is non-None when a fallback was used.
         Raises ModelResolutionError if no usable provider is found.
@@ -245,25 +242,6 @@ class LLMConfig:
         else:
             missing = model.missing_fields()
             primary_problem = f"alias '{alias}' is incomplete (missing: {', '.join(missing)})"
-
-        if self.local_fallback and self.local_fallback != alias:
-            fallback_model = self.models.get(self.local_fallback)
-            if fallback_model and fallback_model.is_complete():
-                warning = f"{primary_problem} — using fallback '{self.local_fallback}'"
-                return fallback_model, warning
-            if fallback_model:
-                fb_missing = fallback_model.missing_fields()
-                raise ModelResolutionError(
-                    f"{primary_problem}. "
-                    f"Fallback '{self.local_fallback}' is also misconfigured "
-                    f"(missing: {', '.join(fb_missing)}). "
-                    f"Fix in Configuration → Models."
-                )
-            raise ModelResolutionError(
-                f"{primary_problem}. "
-                f"Fallback alias '{self.local_fallback}' does not exist. "
-                f"Fix in Configuration → Models."
-            )
 
         raise ModelResolutionError(
             f"{primary_problem}. No fallback configured. "
@@ -513,7 +491,6 @@ def load_config() -> Config:
     llm = LLMConfig(
         providers=_parse_providers(llm_data.get("providers", {})),
         models=_parse_models(llm_data.get("models", {})),
-        local_fallback=llm_data.get("local_fallback") or None,
         provider_aliases=llm_data.get("provider_aliases") or {},
         fallback_order=llm_data.get("fallback_order") or [],
     )

@@ -344,7 +344,6 @@ class Dispatcher:
 
     # Fallback mode — activated when cloud billing fails
     _fallback_mode: bool = False
-    _original_models: dict = field(default_factory=dict)  # saved before fallback override
 
     # Task execution lock — prevents concurrent runs of the same task
     _running_tasks: set = field(default_factory=set)
@@ -360,14 +359,13 @@ class Dispatcher:
         os.set_blocking(self._wakeup_read, False)
         os.set_blocking(self._wakeup_write, False)
 
-    def _enter_fallback_mode(self, reason: str, conversation_id: str | None = None, *, silent: bool = False) -> None:
-        """Switch to local fallback models when cloud billing fails.
+    def _enter_fallback_mode(self, reason: str, conversation_id: str | None = None, *, silent: bool = False, failed_providers: set[str] | None = None) -> None:
+        """Enter degraded mode when all configured providers are exhausted.
 
-        - Always notifies user on all channels, regardless of fallback availability.
-        - If local_fallback is configured: overrides agent models to fallback alias.
-        - Writes system_status.json so WebUI can show the yellow flag.
-        - Starts periodic billing probe to detect when credits are restored.
-        - silent=True: update models and state but don't broadcast (used on restart when already known).
+        - Writes system_status.json so WebUI can show the warning flag.
+        - Notifies user on all channels.
+        - Starts periodic billing probe to detect when a provider recovers.
+        - silent=True: update state but don't broadcast (used on restart when already known).
         """
         import time as _time
 
@@ -379,7 +377,6 @@ class Dispatcher:
             return  # Already in fallback — don't repeat
 
         self._fallback_mode = True
-        # Persist state so the next restart knows we were already in fallback
         try:
             _fallback_flag = get_human_dir() / ".fallback_active"
             _fallback_flag.write_text(reason, encoding="utf-8")
@@ -387,45 +384,17 @@ class Dispatcher:
             pass
         print(f"[fallback] Entering fallback mode: {reason}", flush=True)
 
-        fallback = self.config.llm.local_fallback
-
-        if fallback:
-            # Override model alias for all cloud-dependent agents, saving originals
-            fallback_agents = {"relay", "data", "agenda", "pattern", "code"}
-            for role, agent_cfg in self.config.agents.items():
-                if role in fallback_agents and agent_cfg.enabled:
-                    self._original_models[role] = agent_cfg.model
-                    agent_cfg.model = fallback
-                    self._agents.pop(role, None)
-
-            # Prewarm the fallback model so the first request doesn't stall
-            mc = self.config.llm.models.get(fallback)
-            if mc and mc.provider == "ollama.local" and mc.name:
-                threading.Thread(
-                    target=lambda: self._warmup_alias(fallback, required=False),
-                    daemon=True,
-                    name="warmup-fallback",
-                ).start()
-
-            text = (
-                f"API credit balance exhausted. "
-                f"Switched to local fallback model '{fallback}'. "
-                f"Some capabilities may be reduced. "
-                f"Will switch back automatically when credits are restored."
-            )
-        else:
-            text = (
-                "API credit balance exhausted. "
-                "No local fallback model configured — requests will fail until credits are restored. "
-                "Will notify you automatically when the API is available again."
-            )
-            print("[fallback] No local_fallback configured — notifications only.", flush=True)
+        text = (
+            "All configured providers are currently unavailable. "
+            "Requests will fail until at least one provider recovers. "
+            "Will notify you automatically when service is restored."
+        )
 
         # Write status file for WebUI
         status = {
             "mode": "fallback",
             "reason": reason,
-            "fallback_model": fallback or "none",
+            "failed_providers": sorted(failed_providers or []),
             "since": _time.time(),
         }
         try:
@@ -471,13 +440,6 @@ class Dispatcher:
             pass
         print("[fallback] Exiting fallback mode — cloud billing restored.", flush=True)
 
-        # Restore original model aliases
-        for role, original_model in self._original_models.items():
-            if role in self.config.agents:
-                self.config.agents[role].model = original_model
-                self._agents.pop(role, None)
-        self._original_models.clear()
-
         # Clear status file
         try:
             _atomic_write(get_status_path(), __import__("json").dumps({"mode": "ok", "since": _time.time()}))
@@ -485,7 +447,7 @@ class Dispatcher:
             print(f"[fallback] Could not update status file: {e}", flush=True)
 
         # Broadcast recovery notification
-        text = "API credits restored. Switched back to cloud models."
+        text = "Provider service restored. Requests are being routed normally again."
         notif = create_agent_message(
             from_agent="relay",
             to="transport",
@@ -530,16 +492,8 @@ class Dispatcher:
         if not self._cloud_api_key_available():
             return False
 
-        # Find a cloud alias from original models (or current config if no originals saved)
-        aliases = list(self._original_models.values()) or [
-            cfg.model for cfg in self.config.agents.values()
-            if cfg.enabled
-        ]
-        test_alias = next(
-            (a for a in aliases
-             if not a.startswith("local-") and a != "local"),
-            None,
-        )
+        aliases = [cfg.model for cfg in self.config.agents.values() if cfg.enabled]
+        test_alias = next((a for a in aliases if a), None)
         if not test_alias:
             return False  # No cloud alias found
 
@@ -591,11 +545,8 @@ class Dispatcher:
 
         # No API key configured — enter fallback immediately without a network call
         if not self._cloud_api_key_available():
-            if self.config.llm.local_fallback:
-                print("[startup] No cloud API key configured — switching to local model immediately.")
-                self._enter_fallback_mode("No cloud API key configured.", conversation_id=None, silent=_already_known)
-            else:
-                print("[startup] No cloud API key configured and no local fallback set — requests will fail.")
+            print("[startup] No cloud API key configured — entering fallback mode.")
+            self._enter_fallback_mode("No cloud API key configured.", conversation_id=None, silent=_already_known)
             return
 
         # Test with the cheapest available alias
@@ -737,7 +688,7 @@ class Dispatcher:
 
         If required=True, aborts the process on failure (used at startup for
         directly assigned agents). If required=False, logs a warning only
-        (used for local_fallback which is optional).
+        (used for optional warmup).
         """
         import sys
         model_cfg = self.config.llm.models.get(alias)
@@ -762,21 +713,9 @@ class Dispatcher:
             return False
 
     def _warmup_persistent_models(self) -> None:
-        """Warm up all ollama.local models at startup.
-
-        - Models directly assigned to enabled agents: required (abort on failure).
-        - local_fallback model: optional warmup (warn only, don't abort).
-        """
+        """Warm up all ollama.local models assigned to enabled agents at startup."""
         for alias in self._active_ollama_aliases():
             self._warmup_alias(alias, required=True)
-
-        # Also prewarm the local_fallback model if it's an ollama.local model
-        # and not already covered above (it's not directly assigned to an agent).
-        fallback = self.config.llm.local_fallback
-        if fallback and fallback not in self._active_ollama_aliases():
-            mc = self.config.llm.models.get(fallback)
-            if mc and mc.provider == "ollama.local" and mc.name:
-                self._warmup_alias(fallback, required=False)
 
     def _unload_ollama_model(self, model_name: str) -> None:
         """Tell Ollama to unload a model from memory (keep_alive=0)."""
@@ -1101,16 +1040,8 @@ class Dispatcher:
             except Exception as e:
                 from outheis.core.llm import BillingError
                 if isinstance(e, BillingError):
-                    self._enter_fallback_mode(str(e), conversation_id)
-                    # Retry once with fallback model now active
-                    try:
-                        self._agents.pop(to, None)
-                        agent = self.get_agent(to)
-                        result = agent.handle_direct(query) if agent else f"Agent '{to}' not available."
-                    except Exception as e2:
-                        result = f"Agent '{to}' error after fallback: {e2}"
-                else:
-                    result = f"Agent '{to}' error: {e}"
+                    self._enter_fallback_mode(str(e), conversation_id, failed_providers=e.failed_providers)
+                result = f"Agent '{to}' error: {e}"
 
         # Log response
         response_msg = create_agent_message(
@@ -1169,17 +1100,8 @@ class Dispatcher:
             except Exception as e:
                 from outheis.core.llm import BillingError
                 if isinstance(e, BillingError):
-                    self._enter_fallback_mode(str(e), msg.conversation_id)
-                    # Retry with fallback model
-                    try:
-                        self._agents.pop(target, None)
-                        agent = self.get_agent(target)
-                        if agent:
-                            agent.handle(msg)
-                    except Exception as e2:
-                        self._handle_agent_error(msg, target, e2)
-                else:
-                    self._handle_agent_error(msg, target, e)
+                    self._enter_fallback_mode(str(e), msg.conversation_id, failed_providers=e.failed_providers)
+                self._handle_agent_error(msg, target, e)
         return True
 
     def _handle_agent_error(self, msg: Message, agent: str, error: Exception) -> None:

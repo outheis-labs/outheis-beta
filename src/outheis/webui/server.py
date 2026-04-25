@@ -40,6 +40,20 @@ def _get_secret() -> str:
     return SECRET_PATH.read_text().strip()
 
 
+def _hash_password(plain: str) -> str:
+    salt = secrets.token_hex(16)
+    h = hashlib.pbkdf2_hmac("sha256", plain.encode(), bytes.fromhex(salt), 600_000)
+    return f"pbkdf2:sha256:600000:{salt}:{h.hex()}"
+
+
+def _verify_password(plain: str, stored: str) -> bool:
+    if stored.startswith("pbkdf2:sha256:"):
+        _, algo, iters, salt, expected = stored.split(":")
+        h = hashlib.pbkdf2_hmac(algo, plain.encode(), bytes.fromhex(salt), int(iters))
+        return h.hex() == expected
+    return plain == stored  # plaintext fallback for migration
+
+
 def _get_password() -> str:
     """Read webui.password from config. Returns empty string if not set."""
     try:
@@ -47,6 +61,16 @@ def _get_password() -> str:
         return cfg.get("webui", {}).get("password", "")
     except Exception:
         return ""
+
+
+def _migrate_password(plain: str) -> None:
+    """Replace plaintext password in config with a hash."""
+    try:
+        cfg = json.loads(CONFIG_PATH.read_text())
+        cfg.setdefault("webui", {})["password"] = _hash_password(plain)
+        CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    except Exception:
+        pass
 
 
 def _get_session_hours() -> int:
@@ -276,9 +300,13 @@ async def logout():
 
 @app.post("/api/login")
 async def login(body: dict):
-    password = _get_password()
-    if not password or body.get("password") != password:
+    stored = _get_password()
+    plain = body.get("password", "")
+    if not stored or not _verify_password(plain, stored):
         return JSONResponse({"error": "Invalid password"}, status_code=401)
+    # Migrate plaintext → hash on first successful login
+    if stored and not stored.startswith("pbkdf2:"):
+        _migrate_password(plain)
     hours = _get_session_hours()
     cookie_value = _make_session_cookie(hours)
     response = JSONResponse({"status": "ok"})
@@ -1286,14 +1314,14 @@ async def get_status():
     # System status (fallback mode etc.)
     system_mode = "normal"
     fallback_reason = None
-    fallback_model = None
+    fallback_failed_providers: list[str] = []
     status_path = HUMAN_DIR / "system_status.json"
     if status_path.exists():
         try:
             s = json.loads(status_path.read_text())
             system_mode = s.get("mode", "normal")
             fallback_reason = s.get("reason")
-            fallback_model = s.get("fallback_model")
+            fallback_failed_providers = s.get("failed_providers", [])
         except Exception:
             pass
 
@@ -1305,7 +1333,7 @@ async def get_status():
         "messages_today": messages_today,
         "system_mode": system_mode,
         "fallback_reason": fallback_reason,
-        "fallback_model": fallback_model,
+        "fallback_failed_providers": fallback_failed_providers,
         "auth_required": _auth_required(),
     }
 

@@ -703,7 +703,7 @@ function foAddItem(sel) {
   div.dataset.provider = p;
   div.innerHTML = `<span class="fo-handle">⠿</span><span>${p}</span><span class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</span>`;
   _foBindDrag(div);
-  const addSel = list.querySelector('.fo-add-select');
+  const addSel = list.querySelector('select');
   if (list.querySelector('.fo-item')) {
     const arrow = document.createElement('span');
     arrow.className = 'fo-arrow';

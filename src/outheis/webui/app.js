@@ -598,157 +598,98 @@ function _providerOptions(selected) {
   return KNOWN_PROVIDERS.map(p => `<option value="${p}" ${selected === p ? 'selected' : ''}>${p}</option>`).join('');
 }
 
+function _modelRow(alias, provider, name, ollamaModels, isFallback) {
+  const isOllamaLocal = provider === 'ollama.local';
+  const modelField = isOllamaLocal
+    ? `<select class="model-name-input" data-ollama-select="true" onfocus="refreshOllamaSelect(this)">
+         <option value="">— pick a model —</option>
+         ${ollamaModels.map(m => `<option value="${m}" ${name === m ? 'selected' : ''}>${m}</option>`).join('')}
+       </select>`
+    : `<input type="text" class="model-name-input" value="${name}">`;
+  if (isFallback) {
+    return `
+      <div class="model-row model-fallback-row" data-alias="${alias}">
+        <span style="width:180px;padding-left:20px;color:var(--text-muted);font-size:12px;display:flex;align-items:center;gap:4px;"><span style="opacity:.5;">↳</span> fallback</span>
+        <div class="model-provider"><select class="model-provider-select" onchange="onProviderChange(this)">${_providerOptions(provider)}</select></div>
+        <div class="model-name">${modelField}</div>
+        <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
+      </div>`;
+  }
+  return `
+    <div class="model-row" data-alias="${alias}">
+      <input type="text" class="model-alias-input" value="${alias}" style="width:180px;font-weight:500;">
+      <div class="model-provider"><select class="model-provider-select" onchange="onProviderChange(this)">${_providerOptions(provider)}</select></div>
+      <div class="model-name">${modelField}</div>
+      <button class="btn" style="font-size:11px;padding:2px 6px;" onclick="addFallbackRow(this)">+ fb</button>
+      <button class="btn btn-icon danger" onclick="removePrimaryRow(this)">×</button>
+    </div>`;
+}
+
 async function renderConfigModels() {
   const models = config.llm?.models || { fast: 'claude-haiku-4-5', capable: 'claude-sonnet-4-20250514', reasoning: 'claude-opus-4-5' };
-  const providerAliases = config.llm?.provider_aliases || {};
-  const fallbackOrder = config.llm?.fallback_order || [];
-
+  const modelFallbacks = config.llm?.model_fallbacks || {};
   const ollamaData = await fetchAPI('/api/ollama/models');
   const ollamaModels = ollamaData?.models || [];
 
-  // Build fallback-order rows
-  const allProviders = [...new Set([
-    ...fallbackOrder,
-    ...Object.keys(providerAliases),
-    ...Object.values(models).map(m => m?.provider).filter(Boolean),
-  ])];
-
-  const fallbackOrderRows = fallbackOrder.map(p => `
-    <div class="model-row fallback-order-row">
-      <select class="fallback-order-provider" style="flex:1;">${_providerOptions(p)}</select>
-      <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
-    </div>
-  `).join('');
-
-  // Build provider-aliases sections
-  const providerAliasSections = allProviders.map(provider => {
-    const aliases = providerAliases[provider] || {};
-    const rows = Object.entries(aliases).map(([alias, modelName]) => `
-      <div class="model-row provider-alias-row" data-provider="${provider}">
-        <input type="text" class="pa-alias-input" value="${alias}" style="width:160px;font-weight:500;" placeholder="alias">
-        <input type="text" class="pa-model-input" value="${modelName}" style="flex:1;" placeholder="model name">
-        <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
-      </div>
-    `).join('');
-    return `
-      <div class="pa-provider-section" data-provider="${provider}" style="margin-bottom:12px;">
-        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding:0 2px;">${provider}</div>
-        <div class="pa-rows">${rows}</div>
-        <button class="btn" style="width:100%;margin-top:4px;" onclick="addProviderAlias('${provider}')">+ Add alias</button>
-      </div>
-    `;
+  const rows = Object.entries(models).map(([alias, model]) => {
+    const provider = model?.provider || 'anthropic';
+    const name = model?.name || model || '';
+    let html = _modelRow(alias, provider, name, ollamaModels, false);
+    (modelFallbacks[alias] || []).forEach(fb => {
+      html += _modelRow(alias, fb.provider || 'anthropic', fb.name || '', ollamaModels, true);
+    });
+    return html;
   }).join('');
 
   viewContent.innerHTML = `
     <div class="scroll">
-      <div class="card" style="margin-bottom:12px;">
-        <div class="card-header">
-          <span class="card-title">Fallback order</span>
-          <button class="btn" onclick="addFallbackProvider()">+ Add provider</button>
-        </div>
-        <div class="card-body" style="padding:12px 20px;">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-            When a provider fails with a billing or auth error, the next provider in this list is tried automatically — for any alias it has defined below.
-          </div>
-          <div id="fallback-order-container">${fallbackOrderRows}</div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:12px;">
-        <div class="card-header">
-          <span class="card-title">Provider aliases</span>
-          <button class="btn" onclick="addProviderSection()">+ Add provider</button>
-        </div>
-        <div class="card-body" style="padding:12px 20px;">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-            Define which model each alias maps to on each provider. Free alias names — no canonical names required. Mix providers freely across aliases.
-          </div>
-          <div id="provider-aliases-container">${providerAliasSections}</div>
-        </div>
-      </div>
       <div class="card">
         <div class="card-header">
-          <span class="card-title">Active model aliases</span>
+          <span class="card-title">Model aliases</span>
           <button class="btn" onclick="addModel()">+ Add alias</button>
         </div>
-        <div class="card-body" style="padding:12px 20px;">
-          <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-            The currently active alias → provider + model assignment. Mix providers freely. When a provider fails, the fallback order above takes over.
-          </div>
-          <div id="models-container">
-            ${Object.entries(models).map(([alias, model]) => {
-              const provider = model?.provider || 'anthropic';
-              const name = model?.name || model || '';
-              const isOllamaLocal = provider === 'ollama.local';
-              const modelField = isOllamaLocal
-                ? `<select class="model-name-input" data-ollama-select="true" onfocus="refreshOllamaSelect(this)">
-                     <option value="">— pick a model —</option>
-                     ${ollamaModels.map(m => `<option value="${m}" ${name === m ? 'selected' : ''}>${m}</option>`).join('')}
-                   </select>`
-                : `<input type="text" class="model-name-input" value="${name}">`;
-              return `
-                <div class="model-row" data-alias="${alias}">
-                  <input type="text" class="model-alias-input" value="${alias}" style="width:180px;font-weight:500;">
-                  <div class="model-provider">
-                    <select class="model-provider-select" onchange="onProviderChange(this)">
-                      ${_providerOptions(provider)}
-                    </select>
-                  </div>
-                  <div class="model-name">${modelField}</div>
-                  <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        </div>
+        <div class="card-body" style="padding:12px 20px;" id="models-container">${rows}</div>
       </div>
     </div>
   `;
 }
 
-function addFallbackProvider() {
-  const container = document.getElementById('fallback-order-container');
-  const row = document.createElement('div');
-  row.className = 'model-row fallback-order-row';
-  row.innerHTML = `
-    <select class="fallback-order-provider" style="flex:1;">${_providerOptions('anthropic')}</select>
+function addFallbackRow(btn) {
+  const primaryRow = btn.closest('.model-row');
+  const alias = primaryRow.querySelector('.model-alias-input')?.value || primaryRow.dataset.alias || '';
+  const fbRow = document.createElement('div');
+  fbRow.className = 'model-row model-fallback-row';
+  fbRow.dataset.alias = alias;
+  fbRow.innerHTML = `
+    <span style="width:180px;padding-left:20px;color:var(--text-muted);font-size:12px;display:flex;align-items:center;gap:4px;"><span style="opacity:.5;">↳</span> fallback</span>
+    <div class="model-provider"><select class="model-provider-select" onchange="onProviderChange(this)">${_providerOptions('anthropic')}</select></div>
+    <div class="model-name"><input type="text" class="model-name-input" placeholder="model-name"></div>
     <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
   `;
-  container.appendChild(row);
+  // Insert after the last fallback row for this alias, or right after the primary
+  const container = primaryRow.parentElement;
+  const siblings = Array.from(container.children);
+  const myIdx = siblings.indexOf(primaryRow);
+  let insertAfter = primaryRow;
+  for (let i = myIdx + 1; i < siblings.length; i++) {
+    if (siblings[i].classList.contains('model-fallback-row')) insertAfter = siblings[i];
+    else break;
+  }
+  insertAfter.after(fbRow);
 }
 
-function addProviderSection() {
-  const container = document.getElementById('provider-aliases-container');
-  const provider = prompt('Provider name (e.g. anthropic, openai, ollama.cloud, ollama.local):');
-  if (!provider?.trim()) return;
-  const p = provider.trim();
-  const existing = container.querySelector(`[data-provider="${p}"]`);
-  if (existing) { existing.scrollIntoView({ behavior: 'smooth' }); return; }
-  const section = document.createElement('div');
-  section.className = 'pa-provider-section';
-  section.dataset.provider = p;
-  section.style.marginBottom = '12px';
-  section.innerHTML = `
-    <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding:0 2px;">${p}</div>
-    <div class="pa-rows"></div>
-    <button class="btn" style="width:100%;margin-top:4px;" onclick="addProviderAlias('${p}')">+ Add alias</button>
-  `;
-  container.appendChild(section);
-}
-
-function addProviderAlias(provider) {
-  const section = document.querySelector(`#provider-aliases-container [data-provider="${provider}"]`);
-  if (!section) return;
-  const rows = section.querySelector('.pa-rows');
-  const row = document.createElement('div');
-  row.className = 'model-row provider-alias-row';
-  row.dataset.provider = provider;
-  row.innerHTML = `
-    <input type="text" class="pa-alias-input" style="width:160px;font-weight:500;" placeholder="alias">
-    <input type="text" class="pa-model-input" style="flex:1;" placeholder="model name">
-    <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
-  `;
-  rows.appendChild(row);
-  row.querySelector('.pa-alias-input').focus();
+function removePrimaryRow(btn) {
+  const row = btn.closest('.model-row');
+  const container = row.parentElement;
+  const siblings = Array.from(container.children);
+  const myIdx = siblings.indexOf(row);
+  // Remove trailing fallback rows belonging to this alias
+  let i = myIdx + 1;
+  while (i < siblings.length && siblings[i].classList.contains('model-fallback-row')) {
+    siblings[i].remove();
+    i++;
+  }
+  row.remove();
 }
 
 async function refreshOllamaSelect(selectEl) {
@@ -903,19 +844,11 @@ function addVault() {
 
 function addModel() {
   const container = document.getElementById('models-container');
-  const row = document.createElement('div');
-  row.className = 'model-row';
-  row.innerHTML = `
-    <input type="text" class="model-alias-input" placeholder="alias" style="width:180px;font-weight:500;">
-    <div class="model-provider">
-      <select class="model-provider-select" onchange="onProviderChange(this)">${_providerOptions('anthropic')}</select>
-    </div>
-    <div class="model-name">
-      <input type="text" class="model-name-input" placeholder="model-name">
-    </div>
-    <button class="btn btn-icon danger" onclick="removeRow(this)">×</button>
-  `;
+  const div = document.createElement('div');
+  div.innerHTML = _modelRow('', 'anthropic', '', [], false);
+  const row = div.firstElementChild;
   container.appendChild(row);
+  row.querySelector('.model-alias-input')?.focus();
 }
 
 function addWhitelist() {
@@ -932,7 +865,7 @@ function addWhitelist() {
 }
 
 function removeRow(btn) {
-  btn.closest('.form-row, .model-row, .whitelist-row, .sched-row, .provider-alias-row').remove();
+  btn.closest('.form-row, .model-row, .whitelist-row, .sched-row').remove();
 }
 
 function togglePasswordVisibility(inputId, btn) {
@@ -1017,54 +950,46 @@ async function saveConfig() {
   }
 
   // Models tab
-  const modelRows = document.querySelectorAll('#models-container .model-row');
-  const fallbackOrderRows = document.querySelectorAll('.fallback-order-row');
-  const providerAliasSections = document.querySelectorAll('.pa-provider-section');
-  if (modelRows.length > 0 || fallbackOrderRows.length > 0 || providerAliasSections.length > 0) {
+  const container = document.getElementById('models-container');
+  if (container) {
     updatedConfig.llm = updatedConfig.llm || {};
+    updatedConfig.llm.models = {};
+    updatedConfig.llm.model_fallbacks = {};
+    const incompleteAliases = [];
 
-    // Fallback order
-    if (fallbackOrderRows.length > 0) {
-      updatedConfig.llm.fallback_order = Array.from(fallbackOrderRows)
-        .map(r => r.querySelector('.fallback-order-provider')?.value)
-        .filter(Boolean);
-    }
+    Array.from(container.children).forEach(row => {
+      if (!row.classList.contains('model-row')) return;
+      const provider = row.querySelector('.model-provider-select')?.value || '';
+      const name = row.querySelector('.model-name-input')?.value?.trim() || '';
 
-    // Provider aliases
-    if (providerAliasSections.length > 0) {
-      updatedConfig.llm.provider_aliases = {};
-      providerAliasSections.forEach(section => {
-        const provider = section.dataset.provider;
-        if (!provider) return;
-        const aliasRows = section.querySelectorAll('.provider-alias-row');
-        const aliases = {};
-        aliasRows.forEach(row => {
-          const alias = row.querySelector('.pa-alias-input')?.value?.trim();
-          const modelName = row.querySelector('.pa-model-input')?.value?.trim();
-          if (alias && modelName) aliases[alias] = modelName;
-        });
-        if (Object.keys(aliases).length > 0) {
-          updatedConfig.llm.provider_aliases[provider] = aliases;
-        }
-      });
-    }
-
-    // Active model aliases
-    if (modelRows.length > 0) {
-      updatedConfig.llm.models = {};
-      const incompleteAliases = [];
-      modelRows.forEach((row) => {
+      if (row.classList.contains('model-fallback-row')) {
+        // Fallback row — alias tracked via data-alias (set at creation, updated on primary alias change)
+        const alias = row.dataset.alias;
+        if (!alias || !provider || !name) return;
+        updatedConfig.llm.model_fallbacks[alias] = updatedConfig.llm.model_fallbacks[alias] || [];
+        updatedConfig.llm.model_fallbacks[alias].push({ provider, name });
+      } else {
+        // Primary row
         const alias = row.querySelector('.model-alias-input')?.value?.trim();
-        const name = row.querySelector('.model-name-input')?.value?.trim();
-        const provider = row.querySelector('.model-provider-select')?.value;
         if (!alias) return;
-        updatedConfig.llm.models[alias] = { provider: provider || '', name: name || '' };
+        updatedConfig.llm.models[alias] = { provider, name };
         if (!provider || !name) incompleteAliases.push(alias);
         row.style.outline = (!provider || !name) ? '1px solid var(--accent-warning)' : '';
-      });
-      if (incompleteAliases.length > 0) {
-        showToast(`Warning: incomplete alias${incompleteAliases.length > 1 ? 'es' : ''}: ${incompleteAliases.join(', ')} — fallback will be used if configured`, 5000);
+        // Keep fallback rows in sync with alias name
+        row.dataset.alias = alias;
+        let next = row.nextElementSibling;
+        while (next?.classList.contains('model-fallback-row')) {
+          next.dataset.alias = alias;
+          next = next.nextElementSibling;
+        }
       }
+    });
+
+    if (Object.keys(updatedConfig.llm.model_fallbacks).length === 0) {
+      delete updatedConfig.llm.model_fallbacks;
+    }
+    if (incompleteAliases.length > 0) {
+      showToast(`Warning: incomplete alias${incompleteAliases.length > 1 ? 'es' : ''}: ${incompleteAliases.join(', ')} — fallback will be used if configured`, 5000);
     }
   }
 

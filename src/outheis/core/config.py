@@ -176,12 +176,10 @@ class LLMConfig:
         "reasoning": ModelConfig(provider="anthropic", name="claude-opus-4-5"),
         "local": ModelConfig(provider="ollama.local", name=""),
     })
-    local_fallback: str | None = "local"  # Legacy: single fallback alias (superseded by fallback_order)
-    # Per-provider alias tables: {"anthropic": {"fast": "claude-haiku-4-5", ...}, "ollama.cloud": {"fast": "gemma3:12b"}}
-    # When a provider fails with BillingError, the system tries the next provider in fallback_order
-    # that has the requested alias defined.
-    provider_aliases: dict[str, dict[str, str]] = field(default_factory=dict)
-    fallback_order: list[str] = field(default_factory=list)
+    local_fallback: str | None = "local"  # Legacy: single fallback alias
+    # Per-alias fallback chains: {"fast": [{"provider": "ollama.cloud", "name": "gemma3:12b"}, ...], ...}
+    # When the primary provider for an alias raises BillingError, entries are tried in order.
+    model_fallbacks: dict[str, list[ModelConfig]] = field(default_factory=dict)
 
     def get_model(self, alias: str) -> ModelConfig:
         """Get model config for alias. Returns a default if not found."""
@@ -192,64 +190,47 @@ class LLMConfig:
     def resolve_model(self, alias: str, skip_providers: set[str] | None = None) -> tuple[ModelConfig, str | None]:
         """Resolve alias to a complete ModelConfig.
 
-        When provider_aliases is configured, iterates fallback_order to find a provider
-        that has the alias defined, skipping any providers in skip_providers (already failed).
+        When skip_providers is given (providers that already raised BillingError), the
+        per-alias fallback chain in model_fallbacks is walked to find the next usable entry.
 
-        Falls back to the flat models dict + local_fallback for backward compatibility.
+        Falls back to local_fallback (legacy) when model_fallbacks is not configured.
 
         Returns (model_config, warning) where warning is non-None when a fallback was used.
         Raises ModelResolutionError if no usable provider is found.
         """
-        # New path: provider_aliases configured
-        if self.provider_aliases:
-            order = self.fallback_order or sorted(self.provider_aliases.keys())
-            for provider in order:
-                if skip_providers and provider in skip_providers:
-                    continue
-                aliases = self.provider_aliases.get(provider, {})
-                if alias in aliases:
-                    model_name = aliases[alias]
-                    warning = None
-                    if skip_providers:
-                        warning = (
-                            f"alias '{alias}' on {', '.join(sorted(skip_providers))} failed — "
-                            f"using {provider}"
-                        )
-                    return ModelConfig(provider=provider, name=model_name), warning
-            # Not found in any available provider
-            tried = [p for p in order if not skip_providers or p not in skip_providers]
-            if skip_providers and all(p in skip_providers for p in order):
-                raise ModelResolutionError(
-                    f"All providers exhausted for alias '{alias}'. "
-                    f"Tried: {', '.join(order)}. Fix in Configuration → Models."
-                )
-            raise ModelResolutionError(
-                f"Alias '{alias}' is not defined on any provider "
-                f"({', '.join(tried) or 'none available'}). "
-                f"Add it in Configuration → Models."
-            )
-
-        # Legacy path: flat models dict
         model = self.models.get(alias)
 
         if model is None:
-            # Unknown alias — treat as direct model name on anthropic (legacy behaviour)
             return ModelConfig(provider="anthropic", name=alias), None
 
-        if model.is_complete():
-            if skip_providers and model.provider in skip_providers:
-                # Primary provider failed — try local_fallback
-                pass
-            else:
-                return model, None
+        primary_failed = skip_providers and model.provider in skip_providers
 
-        # Primary alias is incomplete or its provider was skipped — try local_fallback
-        missing = model.missing_fields()
-        primary_problem = (
-            f"alias '{alias}' is incomplete (missing: {', '.join(missing)})"
-            if missing else
-            f"alias '{alias}' provider '{model.provider}' failed"
-        )
+        if model.is_complete() and not primary_failed:
+            return model, None
+
+        # Walk the per-alias fallback chain
+        if self.model_fallbacks.get(alias):
+            for fb in self.model_fallbacks[alias]:
+                if skip_providers and fb.provider in skip_providers:
+                    continue
+                if fb.is_complete():
+                    warning = (
+                        f"alias '{alias}' on {', '.join(sorted(skip_providers))} failed — "
+                        f"using {fb.provider}"
+                    )
+                    return fb, warning
+            if skip_providers:
+                raise ModelResolutionError(
+                    f"All providers exhausted for alias '{alias}'. "
+                    f"Fix in Configuration → Models."
+                )
+
+        # Incomplete primary and no fallback chain — try legacy local_fallback
+        if primary_failed:
+            primary_problem = f"alias '{alias}' provider '{model.provider}' failed"
+        else:
+            missing = model.missing_fields()
+            primary_problem = f"alias '{alias}' is incomplete (missing: {', '.join(missing)})"
 
         if self.local_fallback and self.local_fallback != alias:
             fallback_model = self.models.get(self.local_fallback)
@@ -515,12 +496,20 @@ def load_config() -> Config:
 
     # LLM
     llm_data = data.get("llm", {})
+    raw_fallbacks = llm_data.get("model_fallbacks") or {}
+    model_fallbacks = {
+        alias: [
+            ModelConfig(provider=e.get("provider", ""), name=e.get("name", ""))
+            for e in entries if isinstance(e, dict)
+        ]
+        for alias, entries in raw_fallbacks.items()
+        if isinstance(entries, list)
+    }
     llm = LLMConfig(
         providers=_parse_providers(llm_data.get("providers", {})),
         models=_parse_models(llm_data.get("models", {})),
         local_fallback=llm_data.get("local_fallback") or None,
-        provider_aliases=llm_data.get("provider_aliases") or {},
-        fallback_order=llm_data.get("fallback_order") or [],
+        model_fallbacks=model_fallbacks,
     )
     # Use defaults if empty
     if not llm.providers:
@@ -633,8 +622,11 @@ def save_config(config: Config) -> None:
                 alias: {"provider": m.provider, "name": m.name}
                 for alias, m in config.llm.models.items()
             },
-            **({"provider_aliases": config.llm.provider_aliases} if config.llm.provider_aliases else {}),
-            **({"fallback_order": config.llm.fallback_order} if config.llm.fallback_order else {}),
+            **({"model_fallbacks": {
+                alias: [{"provider": fb.provider, "name": fb.name} for fb in chain]
+                for alias, chain in config.llm.model_fallbacks.items()
+                if chain
+            }} if config.llm.model_fallbacks else {}),
         },
         "agents": {
             role: {

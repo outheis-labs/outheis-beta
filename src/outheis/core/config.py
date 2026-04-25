@@ -176,7 +176,12 @@ class LLMConfig:
         "reasoning": ModelConfig(provider="anthropic", name="claude-opus-4-5"),
         "local": ModelConfig(provider="ollama.local", name=""),
     })
-    local_fallback: str | None = "local"  # Model alias to use when cloud billing fails
+    local_fallback: str | None = "local"  # Legacy: single fallback alias (superseded by fallback_order)
+    # Per-provider alias tables: {"anthropic": {"fast": "claude-haiku-4-5", ...}, "ollama.cloud": {"fast": "gemma3:12b"}}
+    # When a provider fails with BillingError, the system tries the next provider in fallback_order
+    # that has the requested alias defined.
+    provider_aliases: dict[str, dict[str, str]] = field(default_factory=dict)
+    fallback_order: list[str] = field(default_factory=list)
 
     def get_model(self, alias: str) -> ModelConfig:
         """Get model config for alias. Returns a default if not found."""
@@ -184,12 +189,47 @@ class LLMConfig:
             return self.models[alias]
         return ModelConfig(provider="anthropic", name=alias)
 
-    def resolve_model(self, alias: str) -> tuple[ModelConfig, str | None]:
-        """Resolve alias to a complete ModelConfig, using local_fallback if needed.
+    def resolve_model(self, alias: str, skip_providers: set[str] | None = None) -> tuple[ModelConfig, str | None]:
+        """Resolve alias to a complete ModelConfig.
 
-        Returns (model_config, warning) where warning is non-None if the fallback
-        was used. Raises ModelResolutionError if neither alias nor fallback is complete.
+        When provider_aliases is configured, iterates fallback_order to find a provider
+        that has the alias defined, skipping any providers in skip_providers (already failed).
+
+        Falls back to the flat models dict + local_fallback for backward compatibility.
+
+        Returns (model_config, warning) where warning is non-None when a fallback was used.
+        Raises ModelResolutionError if no usable provider is found.
         """
+        # New path: provider_aliases configured
+        if self.provider_aliases:
+            order = self.fallback_order or sorted(self.provider_aliases.keys())
+            for provider in order:
+                if skip_providers and provider in skip_providers:
+                    continue
+                aliases = self.provider_aliases.get(provider, {})
+                if alias in aliases:
+                    model_name = aliases[alias]
+                    warning = None
+                    if skip_providers:
+                        warning = (
+                            f"alias '{alias}' on {', '.join(sorted(skip_providers))} failed — "
+                            f"using {provider}"
+                        )
+                    return ModelConfig(provider=provider, name=model_name), warning
+            # Not found in any available provider
+            tried = [p for p in order if not skip_providers or p not in skip_providers]
+            if skip_providers and all(p in skip_providers for p in order):
+                raise ModelResolutionError(
+                    f"All providers exhausted for alias '{alias}'. "
+                    f"Tried: {', '.join(order)}. Fix in Configuration → Models."
+                )
+            raise ModelResolutionError(
+                f"Alias '{alias}' is not defined on any provider "
+                f"({', '.join(tried) or 'none available'}). "
+                f"Add it in Configuration → Models."
+            )
+
+        # Legacy path: flat models dict
         model = self.models.get(alias)
 
         if model is None:
@@ -197,18 +237,25 @@ class LLMConfig:
             return ModelConfig(provider="anthropic", name=alias), None
 
         if model.is_complete():
-            return model, None
+            if skip_providers and model.provider in skip_providers:
+                # Primary provider failed — try local_fallback
+                pass
+            else:
+                return model, None
 
-        # Primary alias is incomplete — try local_fallback
+        # Primary alias is incomplete or its provider was skipped — try local_fallback
         missing = model.missing_fields()
-        primary_problem = f"alias '{alias}' is incomplete (missing: {', '.join(missing)})"
+        primary_problem = (
+            f"alias '{alias}' is incomplete (missing: {', '.join(missing)})"
+            if missing else
+            f"alias '{alias}' provider '{model.provider}' failed"
+        )
 
         if self.local_fallback and self.local_fallback != alias:
             fallback_model = self.models.get(self.local_fallback)
             if fallback_model and fallback_model.is_complete():
                 warning = f"{primary_problem} — using fallback '{self.local_fallback}'"
                 return fallback_model, warning
-            # Fallback also incomplete
             if fallback_model:
                 fb_missing = fallback_model.missing_fields()
                 raise ModelResolutionError(
@@ -472,6 +519,8 @@ def load_config() -> Config:
         providers=_parse_providers(llm_data.get("providers", {})),
         models=_parse_models(llm_data.get("models", {})),
         local_fallback=llm_data.get("local_fallback") or None,
+        provider_aliases=llm_data.get("provider_aliases") or {},
+        fallback_order=llm_data.get("fallback_order") or [],
     )
     # Use defaults if empty
     if not llm.providers:
@@ -581,13 +630,11 @@ def save_config(config: Config) -> None:
         "llm": {
             "providers": _serialize_providers(config.llm.providers),
             "models": {
-                alias: {
-                    "provider": m.provider,
-                    "name": m.name,
-
-                }
+                alias: {"provider": m.provider, "name": m.name}
                 for alias, m in config.llm.models.items()
             },
+            **({"provider_aliases": config.llm.provider_aliases} if config.llm.provider_aliases else {}),
+            **({"fallback_order": config.llm.fallback_order} if config.llm.fallback_order else {}),
         },
         "agents": {
             role: {

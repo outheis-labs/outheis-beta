@@ -270,19 +270,67 @@ def _wrap_openai_response(response: Any) -> _FakeResponse:
 # PUBLIC API
 # =============================================================================
 
-def resolve_model(alias: str) -> ModelConfig:
+def resolve_model(alias: str, skip_providers: set[str] | None = None) -> ModelConfig:
     """Resolve model alias to a complete ModelConfig.
 
-    Uses local_fallback if the primary alias is incomplete.
-    Raises ModelResolutionError if neither is usable.
-    Logs a warning when the fallback is used.
+    Uses provider_aliases + fallback_order when configured, otherwise falls back
+    to the flat models dict + local_fallback (legacy).
+    Raises ModelResolutionError if no usable provider is found.
+    Logs a warning when a fallback is used.
     """
     import logging
     llm_config = get_llm_config()
-    model_config, warning = llm_config.resolve_model(alias)
+    model_config, warning = llm_config.resolve_model(alias, skip_providers=skip_providers)
     if warning:
         logging.getLogger(__name__).warning(warning)
     return model_config
+
+
+def _do_call(
+    model_config: ModelConfig,
+    messages: list[dict[str, Any]],
+    system: str | None,
+    tools: list[dict[str, Any]] | None,
+    max_tokens: int,
+    timeout: float,
+) -> Any:
+    """Execute a single LLM call. Raises BillingError on billing/auth failure."""
+    client = get_client(model_config.provider)
+
+    if model_config.provider == "anthropic":
+        kwargs: dict[str, Any] = {
+            "model": model_config.name,
+            "max_tokens": max_tokens,
+            "messages": messages,
+        }
+        if system:
+            kwargs["system"] = system
+        if tools:
+            kwargs["tools"] = tools
+        try:
+            return client.messages.create(timeout=timeout, **kwargs)
+        except Exception as e:
+            _raise_if_billing(e)
+            raise
+
+    else:  # openai or ollama
+        oai_messages = _to_openai_messages(messages, system)
+        oai_tools = _to_openai_tools(tools)
+        kwargs = {
+            "model": model_config.name,
+            "max_tokens": max_tokens,
+            "messages": oai_messages,
+        }
+        if oai_tools:
+            kwargs["tools"] = oai_tools
+        if model_config.provider == "ollama.local":
+            kwargs["extra_body"] = {"keep_alive": -1}
+        try:
+            raw = client.chat.completions.create(**kwargs)
+        except Exception as e:
+            _raise_if_billing(e)
+            raise
+        return _wrap_openai_response(raw)
 
 
 def call_llm(
@@ -300,56 +348,53 @@ def call_llm(
     Messages and tools are always passed in Anthropic format.
     For OpenAI/Ollama providers the conversion happens transparently here;
     callers always receive an Anthropic-compatible response object.
+
+    When provider_aliases + fallback_order are configured, automatically retries
+    on the next provider in fallback_order if the current provider raises a
+    BillingError. Only propagates BillingError when all providers are exhausted.
     """
-    model_config = resolve_model(model)
-    client = get_client(model_config.provider)
+    import logging
+    log = logging.getLogger(__name__)
 
-    if model_config.provider == "anthropic":
-        kwargs: dict[str, Any] = {
-            "model": model_config.name,
-            "max_tokens": max_tokens,
-            "messages": messages,
-        }
-        if system:
-            kwargs["system"] = system
-        if tools:
-            kwargs["tools"] = tools
+    llm_config = get_llm_config()
+    use_provider_fallback = bool(llm_config.provider_aliases)
+
+    failed_providers: set[str] = set()
+    last_billing_error: BillingError | None = None
+
+    while True:
+        from outheis.core.config import ModelResolutionError
         try:
-            response = client.messages.create(timeout=timeout, **kwargs)
-        except Exception as e:
-            _raise_if_billing(e)
+            skip = failed_providers if use_provider_fallback else None
+            model_config = resolve_model(model, skip_providers=skip)
+        except ModelResolutionError:
+            if last_billing_error:
+                raise last_billing_error
             raise
 
-    else:  # openai or ollama
-        oai_messages = _to_openai_messages(messages, system)
-        oai_tools = _to_openai_tools(tools)
-        kwargs = {
-            "model": model_config.name,
-            "max_tokens": max_tokens,
-            "messages": oai_messages,
-        }
-        if oai_tools:
-            kwargs["tools"] = oai_tools
-        if model_config.provider == "ollama.local":
-            # keep_alive=-1: keep model loaded in memory between calls
-            kwargs["extra_body"] = {"keep_alive": -1}
         try:
-            raw = client.chat.completions.create(**kwargs)
-        except Exception as e:
-            _raise_if_billing(e)
-            raise
-        response = _wrap_openai_response(raw)
-
-    try:
-        from outheis.core.tokens import record_usage
-        if hasattr(response, "usage") and response.usage:
-            record_usage(
-                agent=agent,
-                model=model_config.name,
-                input_tokens=response.usage.input_tokens,
-                output_tokens=response.usage.output_tokens,
+            response = _do_call(model_config, messages, system, tools, max_tokens, timeout)
+        except BillingError as e:
+            if not use_provider_fallback:
+                raise
+            log.warning(
+                "[llm] BillingError on provider '%s' for alias '%s' — trying next provider",
+                model_config.provider, model,
             )
-    except Exception:
-        pass
+            failed_providers.add(model_config.provider)
+            last_billing_error = e
+            continue
 
-    return response
+        try:
+            from outheis.core.tokens import record_usage
+            if hasattr(response, "usage") and response.usage:
+                record_usage(
+                    agent=agent,
+                    model=model_config.name,
+                    input_tokens=response.usage.input_tokens,
+                    output_tokens=response.usage.output_tokens,
+                )
+        except Exception:
+            pass
+
+        return response

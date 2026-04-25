@@ -649,7 +649,13 @@ async function renderConfigModels() {
         </div>
         <div class="card-body" style="padding:12px 20px;">
           <div class="form-row" style="margin-bottom:10px;">
-            <div class="form-label">Fallback order</div>
+            <div class="form-label" style="display:flex;align-items:center;gap:6px;">
+              Fallback order
+              <div class="update-info-wrap">
+                <span class="update-info-icon" tabindex="0">ℹ</span>
+                <div class="update-tooltip">A fallback only triggers if the failing provider's alias is also defined on the next provider in this list.</div>
+              </div>
+            </div>
             <div class="form-value">
               <div id="fallback-order-list" class="fo-list">${_foRenderItems(fallbackOrder)}</div>
             </div>

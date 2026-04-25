@@ -670,7 +670,7 @@ function _foRenderItems(order) {
       <span class="fo-remove" onclick="this.closest('.fo-item').remove();_foUpdateArrows()">×</span>
     </div>`).join('<span class="fo-arrow">→</span>');
   return items + `
-    <select onchange="foAddItem(this)" style="width:auto;">
+    <select onchange="foAddItem(this)" style="width:20ch;margin-left:16px;">
       <option value="">+ provider</option>
       ${KNOWN_PROVIDERS.map(p => `<option value="${p}">${p}</option>`).join('')}
     </select>`;

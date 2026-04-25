@@ -216,7 +216,96 @@ async function renderOverview() {
   viewTitle.textContent = 'Overview';
   viewPath.textContent = '';
 
-  const status = await fetchAPI('/api/status');
+  const [status, cfg] = await Promise.all([
+    fetchAPI('/api/status'),
+    config ? Promise.resolve(config) : fetchAPI('/api/config'),
+  ]);
+  if (!config) config = cfg;
+
+  // Resolve fallback alias → provider + model name
+  const fbAlias = (status.system_mode === 'fallback' && status.fallback_model && status.fallback_model !== 'none')
+    ? status.fallback_model : null;
+  let fbProvider = '', fbModelName = '', fbStage = '';
+  if (fbAlias) {
+    const provAliases = cfg.llm?.provider_aliases || {};
+    const models = cfg.llm?.models || {};
+    const fallbackOrder = cfg.llm?.fallback_order || [];
+    const searchOrder = fallbackOrder.length
+      ? [...fallbackOrder, ...Object.keys(provAliases).filter(p => !fallbackOrder.includes(p))]
+      : Object.keys(provAliases);
+    for (const p of searchOrder) {
+      if (provAliases[p]?.[fbAlias]) { fbProvider = p; fbModelName = provAliases[p][fbAlias]; break; }
+    }
+    if (!fbProvider && models[fbAlias]) {
+      const m = models[fbAlias];
+      fbProvider = typeof m === 'object' ? (m.provider || '') : '';
+      fbModelName = typeof m === 'object' ? (m.name || '') : String(m);
+    }
+    if (fallbackOrder.length && fbProvider) {
+      const idx = fallbackOrder.indexOf(fbProvider);
+      if (idx >= 0) fbStage = `stage ${idx + 1} of ${fallbackOrder.length}`;
+    }
+  }
+
+  // Determine which provider failed — only reliable when fallback_order is configured
+  const fbFailedProvider = (() => {
+    const fallbackOrder = cfg.llm?.fallback_order || [];
+    if (!fallbackOrder.length) return null;
+    if (fbProvider) {
+      const idx = fallbackOrder.indexOf(fbProvider);
+      return idx > 0 ? fallbackOrder[idx - 1] : fallbackOrder[0];
+    }
+    return fallbackOrder[0];
+  })();
+
+  // Extract human-readable error message without guessing categories
+  const fbExtractReason = (raw) => {
+    if (!raw) return 'unavailable';
+    // Try to extract 'message': '...' from Python exception string
+    const m = raw.match(/'message':\s*'([^']+)'/);
+    if (m) return m[1];
+    const m2 = raw.match(/"message":\s*"([^"]+)"/);
+    if (m2) return m2[1];
+    // Strip "Error code: 400 - " prefix
+    const stripped = raw.replace(/^Error code:\s*\d+\s*-\s*/i, '').trim();
+    return stripped.length > 120 ? stripped.slice(0, 120) + '…' : stripped;
+  };
+
+  // Build per-stage cause lines: failed stages with reason, current stage as active
+  const fbStageLines = (() => {
+    const fallbackOrder = cfg.llm?.fallback_order || [];
+    const lines = [];
+    if (fallbackOrder.length && fbProvider) {
+      const currentIdx = fallbackOrder.indexOf(fbProvider);
+      for (let i = 0; i < fallbackOrder.length; i++) {
+        const p = fallbackOrder[i];
+        if (i < currentIdx) {
+          const reason = i === currentIdx - 1 ? fbExtractReason(status.fallback_reason) : 'unavailable';
+          lines.push(`${p} (stage ${i + 1}): ${reason}`);
+        } else if (i === currentIdx) {
+          lines.push(`${p} (stage ${i + 1}): active`);
+        }
+      }
+    } else {
+      // No fallback_order — can't reliably identify which provider failed, just show reason
+      const reason = fbExtractReason(status.fallback_reason);
+      if (reason) lines.push(reason);
+      if (fbProvider) lines.push(`${fbProvider}: active`);
+    }
+    return lines;
+  })();
+
+  // Per-agent lines: always show when in fallback, resolve to provider:model if possible
+  const fbAgentLines = (() => {
+    if (status.system_mode !== 'fallback') return [];
+    const agents = cfg.agents || {};
+    const cloudAgents = ['relay', 'data', 'agenda', 'pattern', 'code'];
+    const modelLabel = fbProvider && fbModelName ? `${fbProvider}: ${fbModelName}` : fbAlias || '?';
+    return Object.entries(agents)
+      .filter(([role, a]) => a.enabled && cloudAgents.includes(role))
+      .map(([role]) => `${role}: ${modelLabel}`);
+  })();
+
   const msgCountEl = document.getElementById('msg-count');
   if (msgCountEl) msgCountEl.textContent = status.messages_today || 0;
   const allMessages = await fetchAPI('/api/messages?limit=100');
@@ -227,12 +316,13 @@ async function renderOverview() {
       <div class="metrics">
         <div class="metric">
           <div class="metric-label">Dispatcher</div>
-          <div class="metric-value ${status.running ? (status.system_mode === 'fallback' ? 'warning' : 'success') : ''}">${status.running ? (status.system_mode === 'fallback' ? 'Fallback' : 'Running') : 'Stopped'}</div>
+          <div class="metric-value ${status.running ? (status.system_mode === 'fallback' ? 'warning' : 'success') : ''}">${status.running ? (status.system_mode === 'fallback' ? `Fallback${fbStage ? ` (${fbStage})` : ''}` : 'Running') : 'Stopped'}</div>
+          ${status.system_mode === 'fallback' && fbStageLines.length ? `<div style="font-size:12px;color:var(--text-tertiary);margin-top:4px;line-height:1.6;">${fbStageLines.join('<br>')}</div>` : ''}
         </div>
         ${status.system_mode === 'fallback' ? `
         <div class="metric" style="grid-column: 1 / -1;">
           <div class="metric-label">Fallback model</div>
-          <div class="metric-value warning">${status.fallback_model || '?'} — ${status.fallback_reason || 'cloud provider unavailable'}</div>
+          <div class="metric-value warning" style="font-size:14px;line-height:1.8;">${fbAgentLines.length ? fbAgentLines.join('<br>') : (fbProvider ? `${fbProvider}: ${fbModelName}` : status.fallback_model || '?')}</div>
         </div>` : ''}
         <div class="metric">
           <div class="metric-label">Active agents</div>
@@ -1416,7 +1506,7 @@ async function renderAgendaView() {
   const tab = validTabs.includes(currentTab) ? currentTab : 'calendar';
   viewTabs.innerHTML = `
     <div class="tab ${tab === 'calendar' ? 'active' : ''}" onclick="switchAgendaTab('calendar')">Calendar</div>
-    <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Agenda</div>
+    <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Notebook</div>
     <div class="tab ${tab === 'source'   ? 'active' : ''}" onclick="switchAgendaTab('source')">Source</div>
     <div class="tab ${tab === 'extern'   ? 'active' : ''}" onclick="switchAgendaTab('extern')">External</div>
   `;

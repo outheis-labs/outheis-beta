@@ -231,7 +231,9 @@ class LLMConfig:
         model = self.models.get(alias)
 
         if model is None:
-            return ModelConfig(provider="anthropic", name=alias), None
+            raise ModelResolutionError(
+                f"Alias '{alias}' is not defined. Fix in Configuration → Models."
+            )
 
         primary_failed = bool(skip_providers and model.provider in skip_providers)
 

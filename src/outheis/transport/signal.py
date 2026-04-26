@@ -52,7 +52,12 @@ class SignalTransport(Transport):
             self.allowed_phones[contact.phone] = contact.name
 
         # Load learned UUIDs from persistent storage
-        self.known_uuids: dict[str, str] = self._load_known_uuids()  # phone -> uuid
+        self.known_uuids: dict[str, str] = self._load_state().get("known_uuids", {})  # phone -> uuid
+
+        # Active conversations: identity -> {conversation_id, last_activity}
+        # Allows multi-turn conversations across Signal messages
+        self._conversations: dict[str, dict] = self._load_state().get("conversations", {})
+        self._conversation_timeout_minutes: int = 30  # Start new conversation after 30 min idle
 
         self.rpc = SignalRPC(self.bot_phone)
         self.queue_path = get_messages_path()
@@ -76,8 +81,8 @@ class SignalTransport(Transport):
         from outheis.core.config import get_human_dir
         return get_human_dir() / "signal.json"
 
-    def _load_known_uuids(self) -> dict[str, str]:
-        """Load known phone->UUID mappings from persistent storage."""
+    def _load_state(self) -> dict:
+        """Load Signal state from persistent storage."""
         import json
         path = self._get_signal_state_path()
         if path.exists():
@@ -87,20 +92,67 @@ class SignalTransport(Transport):
                 if "user_uuid" in data:
                     phone = data.get("user_phone", "")
                     if phone:
-                        return {phone: data["user_uuid"]}
-                # New format
-                return data.get("known_uuids", {})
+                        return {
+                            "known_uuids": {phone: data["user_uuid"]},
+                            "conversations": {}
+                        }
+                return data
             except Exception:
                 pass
-        return {}
+        return {"known_uuids": {}, "conversations": {}}
 
-    def _save_known_uuids(self) -> None:
-        """Save phone->UUID mappings to persistent storage."""
+    def _save_state(self) -> None:
+        """Save Signal state to persistent storage."""
         import json
         path = self._get_signal_state_path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        data = {"known_uuids": self.known_uuids}
+        data = {
+            "known_uuids": self.known_uuids,
+            "conversations": self._conversations,
+        }
         path.write_text(json.dumps(data, indent=2))
+
+    def _get_or_create_conversation(self, identity: str) -> str:
+        """
+        Get or create a persistent conversation_id for an identity.
+
+        Returns the same conversation_id for messages within the timeout window,
+        starts a new conversation after 30 minutes of inactivity.
+        """
+        from datetime import datetime, timedelta
+        from outheis.core.message import generate_conversation_id
+
+        now = datetime.now()
+        timeout = timedelta(minutes=self._conversation_timeout_minutes)
+
+        if identity in self._conversations:
+            conv = self._conversations[identity]
+            last_activity = datetime.fromisoformat(conv["last_activity"])
+
+            # Check if conversation is still active
+            if now - last_activity < timeout:
+                # Update last activity and return existing conversation_id
+                conv["last_activity"] = now.isoformat()
+                self._save_state()
+                return conv["conversation_id"]
+
+        # Start new conversation
+        conv_id = generate_conversation_id()
+        self._conversations[identity] = {
+            "conversation_id": conv_id,
+            "last_activity": now.isoformat(),
+        }
+        self._save_state()
+        return conv_id
+
+    def _is_conversation_active(self, conv: dict) -> bool:
+        """Check if a conversation is within the timeout window."""
+        from datetime import datetime, timedelta
+        try:
+            last_activity = datetime.fromisoformat(conv.get("last_activity", ""))
+            return datetime.now() - last_activity < timedelta(minutes=self._conversation_timeout_minutes)
+        except Exception:
+            return False
 
     def _init_whisper(self) -> None:
         """Initialize Whisper for voice transcription (optional)."""
@@ -121,7 +173,7 @@ class SignalTransport(Transport):
         # Check phone number — learn and save UUID
         if msg.sender_phone and msg.sender_phone in self.allowed_phones:
             self.known_uuids[msg.sender_phone] = msg.sender_uuid
-            self._save_known_uuids()
+            self._save_state()
             name = self.allowed_phones[msg.sender_phone]
             print(f"📝 Learned UUID for {name} ({msg.sender_phone}): {msg.sender_uuid[:8]}...", flush=True)
             return True
@@ -132,7 +184,7 @@ class SignalTransport(Transport):
             # Use first configured phone as placeholder
             first_phone = next(iter(self.allowed_phones.keys()), "unknown")
             self.known_uuids[first_phone] = msg.sender_uuid
-            self._save_known_uuids()
+            self._save_state()
             print(f"📝 First contact — saved UUID: {msg.sender_uuid[:8]}...", flush=True)
             return True
 
@@ -309,11 +361,16 @@ class SignalTransport(Transport):
 
         print(f"📩 {msg.sender_name}: {text[:60]}{'...' if len(text) > 60 else ''}", flush=True)
 
+        # Get persistent conversation_id for multi-turn support
+        identity = msg.sender_phone or msg.sender_uuid
+        conversation_id = self._get_or_create_conversation(identity)
+
         # Create message and add to queue
         user_msg = create_user_message(
             text=text,
             channel="signal",
-            identity=msg.sender_phone or msg.sender_uuid,
+            identity=identity,
+            conversation_id=conversation_id,  # Persistent across messages
         )
         append(self.queue_path, user_msg)
 
@@ -321,7 +378,7 @@ class SignalTransport(Transport):
         with self._lock:
             self.pending[user_msg.id] = msg.sender_uuid
 
-        print(f"💬 Queued [{user_msg.id[:8]}], waiting for response...", flush=True)
+        print(f"💬 Queued [{user_msg.id[:8]}] conv={conversation_id[:16]}..., waiting for response...", flush=True)
 
     def run(self) -> None:
         """Run Signal transport main loop."""
@@ -353,6 +410,12 @@ class SignalTransport(Transport):
                     print(f"  • {phone}: {uuid[:8]}...", flush=True)
             else:
                 print("⏳ No known UUIDs — first message will be accepted", flush=True)
+
+            # Show active conversations
+            if self._conversations:
+                active = sum(1 for c in self._conversations.values()
+                             if self._is_conversation_active(c))
+                print(f"✓ Active conversations: {active}", flush=True)
 
             # Start watcher thread
             self._watching = True

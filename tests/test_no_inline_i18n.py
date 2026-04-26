@@ -22,6 +22,8 @@ _REPO_ROOT = Path(__file__).parent.parent
 _SRC_ROOT = _REPO_ROOT / "src"
 _TESTS_ROOT = _REPO_ROOT / "tests"
 _I18N_FILE = _SRC_ROOT / "outheis" / "core" / "i18n.py"
+# Holiday names are locale-specific data, not translatable UI strings
+_HOLIDAYS_FILE = _SRC_ROOT / "outheis" / "core" / "holidays" / "_builtin.py"
 
 
 def _has_non_ascii_letter(line: str) -> bool:
@@ -41,7 +43,7 @@ def _collect_violations() -> list[tuple[Path, int, str]]:
                 continue
             if path.suffix not in {".py", ".md"}:
                 continue
-            if path == _I18N_FILE:
+            if path == _I18N_FILE or path == _HOLIDAYS_FILE:
                 continue
             parts = path.relative_to(root).parts
             if any(p in exclude_dirs for p in parts):

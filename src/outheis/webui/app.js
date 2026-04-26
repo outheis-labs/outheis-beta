@@ -1213,7 +1213,7 @@ async function renderSchedulerTasks() {
         </div>
         <div class="card-body" style="padding: 12px 20px;" id="schedule-container">
           ${renderScheduleRow('agenda_review', schedule.agenda_review)}
-          ${renderScheduleRow('shadow_scan', schedule.shadow_scan)}
+          ${renderScheduleRow('vault_scan', schedule.vault_scan)}
           ${renderScheduleRow('pattern_infer', schedule.pattern_infer)}
           ${renderScheduleRow('memory_migrate', schedule.memory_migrate)}
           ${renderScheduleRow('index_rebuild', schedule.index_rebuild)}
@@ -1260,7 +1260,7 @@ async function renderSchedulerHistory() {
 
 const SCHED_DEFAULTS = {
   agenda_review:    { time: Array.from({length: 20}, (_, i) => `${String(i + 4).padStart(2, '0')}:55`) },
-  shadow_scan:      { time: ['03:30'] },
+  vault_scan:      { time: ['03:30'] },
   pattern_infer:    { time: ['04:00'] },
   memory_migrate:   { time: ['04:00'] },
   index_rebuild:    { time: ['04:30'] },
@@ -1269,7 +1269,7 @@ const SCHED_DEFAULTS = {
 
 const SCHED_DESCRIPTIONS = {
   agenda_review:    'cato — personal secretary service',
-  shadow_scan:      'zeno scans vault for new and changed files, updates context',
+  vault_scan:      'zeno scans vault for new and changed files, updates context',
   pattern_infer:    'rumi analyzes message history to extract patterns and promote them to skills and rules',
   memory_migrate:   'rumi reads Exchange.md decisions and adopts/rejects pending memory items',
   index_rebuild:    'zeno rebuilds the vault full-text search index from scratch',
@@ -1285,7 +1285,7 @@ function renderScheduleRow(type, schedConfig) {
   const dur = taskDurations[type];
   const durText = dur ? `${dur.ok ? '✓' : '✗'} ${dur.seconds}s` : '';
 
-  const allOptions = ['agenda_review', 'shadow_scan', 'pattern_infer', 'memory_migrate', 'index_rebuild'];
+  const allOptions = ['agenda_review', 'vault_scan', 'pattern_infer', 'memory_migrate', 'index_rebuild'];
   const selectOptions = allOptions.map((v) => `<option value="${v}" ${type === v ? 'selected' : ''}>${v}</option>`).join('');
 
   let timesHtml;
@@ -1411,7 +1411,7 @@ function addScheduleTask() {
     <div class="sched-type">
       <select class="sched-type-select" onchange="this.nextElementSibling.textContent = SCHED_DESCRIPTIONS[this.value] || ''">
         <option value="agenda_review">agenda_review</option>
-        <option value="shadow_scan">shadow_scan</option>
+        <option value="vault_scan">vault_scan</option>
         <option value="pattern_infer">pattern_infer</option>
         <option value="memory_migrate">memory_migrate</option>
         <option value="index_rebuild">index_rebuild</option>
@@ -1481,7 +1481,6 @@ async function renderAgendaView() {
 
   viewActions.innerHTML = `
     <button class="btn sched-run-btn" data-task="agenda_review" onclick="runTask('agenda_review', this)">Review</button>
-    <button class="btn" id="migrate-shadow-btn" onclick="migrateFromShadow()" style="margin-left:6px" title="Import non-vault items from Shadow.md into agenda.json">Migrate Shadow</button>
   `;
   const { running = [] } = await fetchAPI('/api/scheduler/running');
   const reviewBtn = viewActions.querySelector('.sched-run-btn[data-task="agenda_review"]');
@@ -1724,23 +1723,10 @@ async function reimportAllIcs(btn) {
   await renderExternTab();
 }
 
-async function migrateFromShadow() {
-  const btn = document.getElementById('migrate-shadow-btn');
-  if (btn) { btn.textContent = 'Migrating…'; btn.disabled = true; }
-  try {
-    const res = await fetchAPI('/api/agenda/migrate-from-shadow', { method: 'POST' });
-    const msg = res.error ? `Error: ${res.error}` : `Done — ${res.imported} item(s) imported`;
-    if (btn) { btn.textContent = msg; }
-    setTimeout(() => { if (btn) { btn.textContent = 'Migrate Shadow'; btn.disabled = false; } }, 3000);
-  } catch (e) {
-    if (btn) { btn.textContent = 'Failed'; btn.disabled = false; }
-  }
-}
-
 async function renderFileView(type, pathPrefix) {
   viewTitle.textContent = type.charAt(0).toUpperCase() + type.slice(1);
   viewPath.textContent = pathPrefix;
-  const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate', files: 'shadow_scan' }[type];
+  const taskForView = { agenda: 'agenda_review', codebase: 'code_review', migration: 'memory_migrate', files: 'vault_scan' }[type];
   const taskLabel = { files: 'Scan' }[type] || 'Review';
   viewActions.innerHTML = taskForView
     ? `<button class="btn sched-run-btn" data-task="${taskForView}" onclick="runTask('${taskForView}', this)">${taskLabel}</button>`

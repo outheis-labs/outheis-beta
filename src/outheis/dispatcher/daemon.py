@@ -617,8 +617,8 @@ class Dispatcher:
             self.scheduler.add("index_rebuild", self._run_index_rebuild, time=sched.index_rebuild.time)
         if sched.archive_rotation.enabled:
             self.scheduler.add("archive_rotation", self._run_archive_rotation, time=sched.archive_rotation.time)
-        if sched.shadow_scan.enabled:
-            self.scheduler.add("shadow_scan", self._run_shadow_scan, time=sched.shadow_scan.time)
+        if sched.vault_scan.enabled:
+            self.scheduler.add("vault_scan", self._run_vault_scan, time=sched.vault_scan.time)
         if sched.memory_migrate.enabled:
             self.scheduler.add("memory_migrate", self._run_memory_migrate_task, time=sched.memory_migrate.time)
         if sched.action_tasks.enabled:
@@ -857,23 +857,23 @@ class Dispatcher:
         else:
             print("[data_migrate] all records up to date", file=sys.stderr)
 
-    def _run_shadow_scan(self) -> None:
+    def _run_vault_scan(self) -> None:
         """
-        Nightly shadow scan: Data agent scans vault for chronological entries.
+        Nightly vault scan: Data agent scans vault for chronological entries.
 
         Detects dates, deadlines, birthdays, appointments across all vault files.
-        Writes to Agenda/Shadow.md — appends new entries, doesn't overwrite.
+        Updates agenda.json via replace_items_by_source.
         """
         agent = self.get_agent("data")
         if agent and hasattr(agent, 'scan_chronological_entries'):
             try:
                 count = agent.scan_chronological_entries()
                 if count:
-                    print(f"Shadow scan: processed {count} file(s)")
+                    print(f"Vault scan: processed {count} file(s)")
                 else:
-                    print("Shadow scan: no changes detected")
+                    print("Vault scan: no changes detected")
             except Exception as e:
-                print(f"Shadow scan failed: {e}")
+                print(f"Vault scan failed: {e}")
 
     def _run_agenda_review(self, force: bool | None = None) -> None:
         """
@@ -999,8 +999,8 @@ class Dispatcher:
     def _insert_to_agenda(self, content: str) -> None:
         """Insert content into Agenda.md."""
         agenda_agent = self.get_agent("agenda")
-        if agenda_agent and hasattr(agenda_agent, 'insert_to_daily'):
-            agenda_agent.insert_to_daily(content)
+        if agenda_agent and hasattr(agenda_agent, 'insert_to_agenda'):
+            agenda_agent.insert_to_agenda(content)
 
     def get_agent(self, name: str):
         """Get or create an agent instance."""
@@ -1103,7 +1103,7 @@ class Dispatcher:
                     "pattern_infer": self._run_pattern_agent,
                     "pattern_nightly": self._run_pattern_agent,  # migration alias
                     "index_rebuild": self._run_index_rebuild,
-                    "shadow_scan": self._run_shadow_scan,
+                    "vault_scan": self._run_vault_scan,
                     "archive_rotation": self._run_archive_rotation,
                     "agenda_review": lambda: self._run_agenda_review(force=True),
                     "agenda_midnight": self._run_agenda_midnight,

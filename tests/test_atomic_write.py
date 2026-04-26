@@ -69,7 +69,7 @@ class TestPersistRegistry:
         from outheis.core import config as cfg_mod
         monkeypatch.setattr(cfg_mod, "get_tasks_path", lambda: tmp_path / "tasks.json")
 
-        registry = {"shadow_scan": {"status": "completed", "last_run": 1234567890.0}}
+        registry = {"vault_scan": {"status": "completed", "last_run": 1234567890.0}}
         with _task_registry_lock:
             _persist_registry(registry)
 

@@ -112,7 +112,7 @@ class TestInternalFilter:
 
         msgs = [
             make_user_msg("user-msg"),
-            make_user_msg("run_task:shadow_scan", intent="internal"),
+            make_user_msg("run_task:vault_scan", intent="internal"),
             make_user_msg("another-user-msg"),
         ]
         run_backlog(d, msgs)
@@ -120,7 +120,7 @@ class TestInternalFilter:
         texts = [m.payload.get("text") for m in processed]
         assert "user-msg" in texts
         assert "another-user-msg" in texts
-        assert "run_task:shadow_scan" not in texts
+        assert "run_task:vault_scan" not in texts
 
     def test_only_internal_messages_yields_nothing(self, monkeypatch):
         d = make_dispatcher()

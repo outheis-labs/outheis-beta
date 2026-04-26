@@ -408,7 +408,7 @@ class AgendaAgent(BaseAgent):
             return "(No agenda directory)"
 
         import re as _re
-        from outheis.core.agenda_store import items_to_shadow_text, read_agenda_json
+        from outheis.core.agenda_store import items_to_tag_text, read_agenda_json
 
         parts = []
 
@@ -427,21 +427,21 @@ class AgendaAgent(BaseAgent):
             else:
                 parts.append(f"### {filename}\n\n(does not exist)")
 
-        # agenda.json replaces Shadow.md — render items as tag text for LLM context
+        # agenda.json — render items as tag text for LLM context
         agenda_data = read_agenda_json()
         items = agenda_data.get("items", [])
         if items:
-            shadow_text = items_to_shadow_text(items)
-            parts.append(f"### agenda.json (Shadow)\n\n```markdown\n{shadow_text}\n```")
+            tag_text = items_to_tag_text(items)
+            parts.append(f"### agenda.json\n\n```markdown\n{tag_text}\n```")
         else:
-            parts.append("### agenda.json (Shadow)\n\n(no items)")
-            self._trigger_shadow_scan()
+            parts.append("### agenda.json\n\n(no items)")
+            self._trigger_vault_scan()
 
         return "\n\n".join(parts)
 
-    def _trigger_shadow_scan(self) -> None:
+    def _trigger_vault_scan(self) -> None:
         """
-        Request a shadow_scan from the dispatcher (fire-and-forget).
+        Request a vault_scan from the dispatcher (fire-and-forget).
 
         The scan runs in a background thread via the existing task-locking
         mechanism — no double-run risk even if called repeatedly.
@@ -458,11 +458,11 @@ class AgendaAgent(BaseAgent):
             to="dispatcher",
             type="internal",
             intent="internal",
-            payload={"text": "run_task:shadow_scan"},
+            payload={"text": "run_task:vault_scan"},
             conversation_id=str(uuid.uuid4()),
         )
         append(get_messages_path(), msg)
-        print("[agenda] Shadow.md sparse — shadow_scan requested", file=sys.stderr)
+        print("[agenda] agenda.json empty — vault_scan requested", file=sys.stderr)
 
 
     def _get_tools(self) -> list[dict]:
@@ -568,7 +568,7 @@ class AgendaAgent(BaseAgent):
             if file_key == "shadow":
                 # Shadow writes go to agenda.json — merge tag-format content
                 import sys as _sys
-                from outheis.core.agenda_store import merge_shadow_write, read_agenda_json, write_agenda_json
+                from outheis.core.agenda_store import merge_cato_write, read_agenda_json, write_agenda_json
                 _has_done = "#done-" in content
                 _sys.stderr.write(
                     f"[done-logger] write_file(shadow→agenda.json): #done present={_has_done}\n"
@@ -579,7 +579,7 @@ class AgendaAgent(BaseAgent):
                             _sys.stderr.write(f"[done-logger]   done-line: {_ln[:120]}\n")
                 try:
                     data = read_agenda_json()
-                    data = merge_shadow_write(data, content, default_source="cato")
+                    data = merge_cato_write(data, content, default_source="cato")
                     write_agenda_json(data)
                     return "✓ agenda.json updated"
                 except Exception as _e:
@@ -1393,7 +1393,7 @@ class AgendaAgent(BaseAgent):
             "Report what you did."
         )
 
-    def insert_to_daily(self, content: str, section: str | None = None) -> bool:
+    def insert_to_agenda(self, content: str, section: str | None = None) -> bool:
         """Insert content to Agenda.md — called by Relay."""
         section_hint = f" in section '{section}'" if section else ""
         result = self._process_with_tools(

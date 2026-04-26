@@ -193,7 +193,8 @@ class TestCallLlmFallback:
 
         assert exc_info.value.failed_providers == {"anthropic", "ollama.cloud", "ollama.local"}
 
-    def test_non_billing_error_propagates_immediately(self, monkeypatch):
+    def test_non_billing_error_tries_fallback(self, monkeypatch):
+        """Non-billing errors (e.g., 404 model not found, connection errors) should also try fallback providers."""
         from outheis.core.llm import call_llm
         import outheis.core.llm as llm_mod
 
@@ -210,8 +211,8 @@ class TestCallLlmFallback:
         with pytest.raises(ConnectionError):
             call_llm("fast", messages=[{"role": "user", "content": "hi"}])
 
-        # Only the first provider was tried — non-billing errors don't trigger fallback
-        assert calls == ["anthropic"]
+        # All providers tried — non-billing errors also trigger fallback
+        assert calls == ["anthropic", "ollama.cloud", "ollama.local"]
 
     def test_no_provider_has_alias_raises_model_resolution_error(self, monkeypatch):
         from outheis.core.config import ModelResolutionError

@@ -181,7 +181,7 @@ def day_offset(date_str: str) -> int | None:
 
 
 # ---------------------------------------------------------------------------
-# Tag format → items  (Shadow two-line format)
+# Tag format → items  (two-line format for LLM context)
 # ---------------------------------------------------------------------------
 
 _DATE_RE      = re.compile(r"#date-(\d{4}-\d{2}-\d{2})")
@@ -221,7 +221,7 @@ _STRUCTURAL_PREFIXES = (
 
 def parse_tag_entries_to_items(text: str, source: str) -> list[dict]:
     """
-    Parse Shadow-format two-line tag entries into agenda.json item dicts.
+    Parse two-line tag entries into agenda.json item dicts.
 
     Each entry:
         #date-YYYY-MM-DD [#time-HH:MM-HH:MM] [#facet-X] [#id-XXX] ...
@@ -302,15 +302,15 @@ def parse_tag_entries_to_items(text: str, source: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# Items → Shadow tag text  (for LLM context in agenda.py)
+# Items → tag text  (for LLM context in agenda.py)
 # ---------------------------------------------------------------------------
 
-def items_to_shadow_text(items: list[dict]) -> str:
+def items_to_tag_text(items: list[dict]) -> str:
     """
-    Convert agenda.json items to Shadow-format two-line tag text.
+    Convert agenda.json items to two-line tag format for LLM context.
 
     Includes #id- so cato can write items back and merge() can match by ID.
-    Groups items by source with <!-- BEGIN/END --> markers (like Shadow.md).
+    Groups items by source with <!-- BEGIN/END --> markers.
     """
     from collections import defaultdict
     today = date.today()
@@ -390,12 +390,12 @@ def items_to_shadow_text(items: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Merge — used by cato's write_file(file='shadow', content=...)
+# Merge — used by cato's write_file(file='agenda', content=...)
 # ---------------------------------------------------------------------------
 
-def merge_shadow_write(data: dict, tag_text: str, default_source: str = "cato") -> dict:
+def merge_cato_write(data: dict, tag_text: str, default_source: str = "cato") -> dict:
     """
-    Merge a Shadow-format write (from cato) back into agenda.json.
+    Merge a tag-format write (from cato) back into agenda.json.
 
     Rules:
     - Items with #id-: update the matching item in data, preserve its source.
@@ -426,19 +426,22 @@ def merge_shadow_write(data: dict, tag_text: str, default_source: str = "cato") 
     # Keep all items not owned by default_source, apply done-marks
     for it in data.get("items", []):
         item_id = it.get("id", "")
+        # Apply done mark to any item that's marked done
+        if item_id in done_ids:
+            it = dict(it)
+            done_tag = f"#done-{done_ids[item_id]}"
+            tags = [t for t in (it.get("tags") or []) if not t.startswith("#done-")]
+            tags.append(done_tag)
+            it["tags"] = tags
+            it.pop("done", None)
+
         if it.get("source") != default_source:
-            if item_id in done_ids:
-                it = dict(it)
-                done_tag = f"#done-{done_ids[item_id]}"
-                tags = [t for t in (it.get("tags") or []) if not t.startswith("#done-")]
-                tags.append(done_tag)
-                it["tags"] = tags
-                it.pop("done", None)
+            # Vault items always kept
             result.append(it)
         else:
-            # default_source items: keep only if seen in tag_text
-            if item_id in seen_ids:
-                result.append(it)  # will be updated below
+            # default_source items: keep only if seen in tag_text (will be updated below)
+            if item_id in seen_ids or item_id in done_ids:
+                result.append(it)
 
     # Update / add items from parsed content
     result_by_id = {it.get("id"): i for i, it in enumerate(result)}
@@ -667,50 +670,3 @@ def migrate_to_tag_schema(data: dict) -> int:
         data["meta"].pop("base_date", None)
 
     return converted
-
-
-# ---------------------------------------------------------------------------
-# One-time migration: Shadow.md → agenda.json
-# ---------------------------------------------------------------------------
-
-def migrate_from_shadow(shadow_path: Path) -> int:
-    """
-    Import all items from Shadow.md into agenda.json.
-
-    Replaces items whose source matches a Shadow.md section name (vault file
-    paths), while preserving items from other sources (cato-added, webui,
-    signal, cli, etc.).  Safe to re-run — idempotent per source.
-    Returns number of items imported.
-    """
-    if not shadow_path.exists():
-        return 0
-
-    content = shadow_path.read_text(encoding="utf-8")
-    pattern = re.compile(
-        r"<!-- BEGIN:\s*(.+?)\s*-->.*?## .+?\n(.*?)<!-- END:",
-        re.DOTALL,
-    )
-
-    data = read_agenda_json()
-
-    # Collect all Shadow section source names first
-    shadow_sources: set[str] = {m.group(1).strip() for m in pattern.finditer(content)}
-
-    # Remove existing items that originated from Shadow sections (will be replaced)
-    data["items"] = [
-        it for it in data.get("items", [])
-        if it.get("source", "") not in shadow_sources
-    ]
-
-    imported = 0
-    for match in pattern.finditer(content):
-        source = match.group(1).strip()
-        body   = match.group(2).strip()
-        if not body:
-            continue
-        items = parse_tag_entries_to_items(body, source=source)
-        data["items"].extend(items)
-        imported += len(items)
-
-    write_agenda_json(data)
-    return imported

@@ -1,4 +1,4 @@
-"""test_data_create_shadow — unit tests for DataAgent agenda.json integration.
+"""test_data_vault_scan — unit tests for DataAgent agenda.json integration.
 
 Tests scan_chronological_entries file-selection logic and agenda.json writes
 without hitting the filesystem or API.
@@ -152,13 +152,13 @@ class TestScanWritesAgendaJson:
                 mock_cfg.return_value.agents.get.return_value = None
                 agent.scan_chronological_entries()
 
-        assert agenda_path.exists()
-        data = json.loads(agenda_path.read_text())
-        items = data["items"]
-        assert len(items) == 1
-        assert items[0]["title"] == "Team standup"
-        assert items[0]["source"] == "work.md"
-        assert items[0]["facet"] == "hiro"
+            assert agenda_path.exists()
+            data = json.loads(agenda_path.read_text())
+            items = data["items"]
+            assert len(items) == 1
+            assert items[0]["title"] == "Team standup"
+            assert items[0]["source"] == "work.md"
+            assert "#facet-hiro" in items[0].get("tags", [])
 
     def test_deleted_file_items_removed_from_agenda_json(self):
         """Items from a deleted vault file are removed from agenda.json."""
@@ -189,8 +189,8 @@ class TestScanWritesAgendaJson:
                 mock_cfg.return_value.agents.get.return_value = None
                 agent.scan_chronological_entries()
 
-        data = json.loads(agenda_path.read_text())
-        assert not any(it["source"] == "deleted.md" for it in data["items"])
+            data = json.loads(agenda_path.read_text())
+            assert not any(it["source"] == "deleted.md" for it in data["items"])
 
     def test_none_extraction_removes_source_items(self):
         """If LLM returns empty/NONE for a changed file, its items are removed."""
@@ -224,5 +224,5 @@ class TestScanWritesAgendaJson:
                 mock_cfg.return_value.agents.get.return_value = None
                 agent.scan_chronological_entries()
 
-        data = json.loads(agenda_path.read_text())
-        assert not any(it["source"] == "clean.md" for it in data["items"])
+            data = json.loads(agenda_path.read_text())
+            assert not any(it["source"] == "clean.md" for it in data["items"])

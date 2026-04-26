@@ -1,6 +1,6 @@
 """test_agenda_store — unit tests for core/agenda_store.py.
 
-Covers: parse_tag_entries_to_items, items_to_shadow_text, merge_shadow_write,
+Covers: parse_tag_entries_to_items, items_to_tag_text, merge_cato_write,
 replace_items_by_source, remove_items_by_source, prune_done_items.
 """
 
@@ -39,22 +39,21 @@ class TestParseTagEntriesToItems:
         items = store.parse_tag_entries_to_items(text, source="projects/a.md")
         assert len(items) == 1
         it = items[0]
-        assert it["type"] == "fixed"
-        assert it["start"] == "09:00"
-        assert it["end"] == "10:30"
-        assert it["day"] == 0
-        assert it["facet"] == "cato"
+        tags = it.get("tags", [])
+        assert f"#date-{TODAY}" in tags
+        assert "#time-09:00-10:30" in tags
+        assert "#facet-cato" in tags
         assert it["source"] == "projects/a.md"
 
     def test_volatile_with_date(self):
         store = _import()
-        text = f"#date-{IN_5_DAYS} #facet-ou\nCall Supplier\n"
+        text = f"#date-{IN_5_DAYS} #facet-senswork\nCall Supplier\n"
         items = store.parse_tag_entries_to_items(text, source="inbox.md")
         assert len(items) == 1
         it = items[0]
-        assert it["type"] == "volatile"
-        assert it["day"] == 5
-        assert it["facet"] == "ou"
+        tags = it.get("tags", [])
+        assert f"#date-{IN_5_DAYS}" in tags
+        assert "#facet-senswork" in tags
 
     def test_undated_action_required(self):
         store = _import()
@@ -62,8 +61,8 @@ class TestParseTagEntriesToItems:
         items = store.parse_tag_entries_to_items(text, source="cato")
         assert len(items) == 1
         it = items[0]
-        assert it["type"] == "volatile"
-        assert it["day"] is None
+        tags = it.get("tags", [])
+        assert "#action-required" in tags
 
     def test_multiday_fixed(self):
         store = _import()
@@ -71,10 +70,11 @@ class TestParseTagEntriesToItems:
         items = store.parse_tag_entries_to_items(text, source="travel.md")
         assert len(items) == 1
         it = items[0]
-        assert it["type"] == "fixed"
-        assert "T12:00" in it["start"]
-        assert "T18:00" in it["end"]
-        assert "day" not in it or it.get("day") is None  # multi-day uses ISO dates
+        tags = it.get("tags", [])
+        assert f"#date-{IN_5_DAYS}" in tags
+        assert f"#date-{IN_10_DAYS}" in tags
+        assert "#time-12:00-18:00" in tags
+        assert "#facet-zeno" in tags
 
     def test_done_item_skipped(self):
         store = _import()
@@ -110,19 +110,23 @@ class TestParseTagEntriesToItems:
         store = _import()
         text = f"#date-{TODAY} #time-09:00-11:00 #facet-cato #density-high\nDeep work\n"
         items = store.parse_tag_entries_to_items(text, source="file.md")
-        assert items[0].get("density") == "high"
+        tags = items[0].get("tags", [])
+        assert "#density-high" in tags
 
     def test_size_tag_volatile(self):
         store = _import()
         text = f"#date-{TODAY} #facet-misc #size-l\nBig task\n"
         items = store.parse_tag_entries_to_items(text, source="file.md")
-        assert items[0].get("size") == "l"
+        tags = items[0].get("tags", [])
+        assert "#size-l" in tags
 
-    def test_default_facet_is_misc(self):
+    def test_default_facet_is_none(self):
+        """Items without explicit facet get no #facet tag (implicit 'none')."""
         store = _import()
         text = f"#date-{TODAY}\nTask without facet\n"
         items = store.parse_tag_entries_to_items(text, source="file.md")
-        assert items[0]["facet"] == "misc"
+        tags = items[0].get("tags", [])
+        assert not any(t.startswith("#facet-") for t in tags)
 
     def test_empty_text_returns_empty(self):
         store = _import()
@@ -134,19 +138,18 @@ class TestParseTagEntriesToItems:
 
 
 # ---------------------------------------------------------------------------
-# items_to_shadow_text
+# items_to_tag_text
 # ---------------------------------------------------------------------------
 
-class TestItemsToShadowText:
+class TestItemsToTagText:
 
     def _make_item(self, **kwargs):
+        """Create an item dict with tags array (current schema)."""
         base = {
             "id": "0000000000000001",
-            "type": "volatile",
-            "facet": "cato",
             "title": "Test item",
-            "day": 0,
             "source": "cato",
+            "tags": [],
         }
         base.update(kwargs)
         return base
@@ -154,33 +157,31 @@ class TestItemsToShadowText:
     def test_contains_id_tag(self):
         store = _import()
         item = self._make_item(id="abc999")
-        text = store.items_to_shadow_text([item])
+        text = store.items_to_tag_text([item])
         assert "#id-abc999" in text
 
     def test_fixed_item_has_time_tag(self):
         store = _import()
-        item = self._make_item(type="fixed", day=0, start="09:00", end="10:30")
-        text = store.items_to_shadow_text([item])
+        item = self._make_item(tags=["#date-2026-04-25", "#time-09:00-10:30", "#facet-cato"])
+        text = store.items_to_tag_text([item])
         assert "#time-09:00-10:30" in text
 
     def test_volatile_no_time_tag(self):
         store = _import()
-        item = self._make_item(type="volatile", day=2)
-        text = store.items_to_shadow_text([item])
+        item = self._make_item(tags=["#date-2026-04-27", "#facet-zeno"])
+        text = store.items_to_tag_text([item])
         assert "#time-" not in text
 
     def test_undated_has_action_required(self):
         store = _import()
-        item = self._make_item(type="volatile", day=None)
-        del item["day"]
-        item["day"] = None
-        text = store.items_to_shadow_text([item])
+        item = self._make_item(tags=["#action-required"])
+        text = store.items_to_tag_text([item])
         assert "#action-required" in text
 
     def test_title_present(self):
         store = _import()
         item = self._make_item(title="Call Markus")
-        text = store.items_to_shadow_text([item])
+        text = store.items_to_tag_text([item])
         assert "Call Markus" in text
 
     def test_grouped_by_source(self):
@@ -189,38 +190,45 @@ class TestItemsToShadowText:
             self._make_item(source="projects/a.md", title="A"),
             self._make_item(source="cato", title="B"),
         ]
-        text = store.items_to_shadow_text(items)
+        text = store.items_to_tag_text(items)
         assert "<!-- BEGIN: projects/a.md -->" in text
         assert "<!-- BEGIN: cato -->" in text
 
     def test_facet_tag_included(self):
         store = _import()
-        item = self._make_item(facet="hiro")
-        text = store.items_to_shadow_text([item])
+        item = self._make_item(tags=["#date-2026-04-25", "#facet-hiro"])
+        text = store.items_to_tag_text([item])
         assert "#facet-hiro" in text
 
     def test_misc_facet_not_emitted(self):
+        """'none' facet is implicit — no #facet tag in output."""
         store = _import()
-        item = self._make_item(facet="misc")
-        text = store.items_to_shadow_text([item])
-        assert "#facet-misc" not in text
+        item = self._make_item(tags=["#date-2026-04-25"])  # no facet
+        text = store.items_to_tag_text([item])
+        assert "#facet-" not in text
 
     def test_done_item_includes_done_tag(self):
         store = _import()
-        item = self._make_item(done=YESTERDAY)
-        text = store.items_to_shadow_text([item])
+        item = self._make_item(tags=["#date-2026-04-25"], done=YESTERDAY)
+        text = store.items_to_tag_text([item])
         assert f"#done-{YESTERDAY}" in text
 
     def test_roundtrip_volatile(self):
-        """parse → render → parse gives same title and facet."""
+        """parse → render → parse gives same title."""
         store = _import()
         original = f"#date-{TODAY} #facet-ou\nBuy groceries\n"
         items = store.parse_tag_entries_to_items(original, source="list.md")
-        text = store.items_to_shadow_text(items)
-        items2 = store.parse_tag_entries_to_items(text, source="list.md")
+        text = store.items_to_tag_text(items)
+        # items_to_tag_text wraps in tag format — extract the entry
+        import re
+        entry_match = re.search(r'(#id-\S+.*?\n.*?\n)', text, re.DOTALL)
+        assert entry_match, f"No entry found in: {text}"
+        # Parse the entry portion
+        items2 = store.parse_tag_entries_to_items(entry_match.group(1), source="list.md")
         assert len(items2) == 1
         assert items2[0]["title"] == "Buy groceries"
-        assert items2[0]["facet"] == "ou"
+        # Check facet is in tags
+        assert any(t == "#facet-ou" for t in items2[0].get("tags", []))
 
 
 # ---------------------------------------------------------------------------
@@ -271,10 +279,10 @@ class TestSourceMutations:
 
 
 # ---------------------------------------------------------------------------
-# merge_shadow_write
+# merge_cato_write
 # ---------------------------------------------------------------------------
 
-class TestMergeShadowWrite:
+class TestMergeCatoWrite:
 
     def _data_with_items(self, items):
         return {"meta": {}, "facets": [], "view": {}, "items": items}
@@ -283,7 +291,7 @@ class TestMergeShadowWrite:
         store = _import()
         data = self._data_with_items([])
         tag_text = f"#date-{TODAY} #facet-cato\nNew task\n"
-        result = store.merge_shadow_write(data, tag_text, default_source="cato")
+        result = store.merge_cato_write(data, tag_text, default_source="cato")
         items = result["items"]
         assert len(items) == 1
         assert items[0]["title"] == "New task"
@@ -292,12 +300,12 @@ class TestMergeShadowWrite:
     def test_existing_item_updated_by_id(self):
         store = _import()
         existing = {
-            "id": "id001", "type": "volatile", "facet": "cato",
-            "title": "Old title", "day": 0, "source": "cato"
+            "id": "id001", "title": "Old title", "source": "cato",
+            "tags": ["#date-2026-04-25", "#facet-senswork"]
         }
         data = self._data_with_items([existing])
         tag_text = f"#id-id001 #date-{TOMORROW} #facet-hiro\nUpdated title\n"
-        result = store.merge_shadow_write(data, tag_text, default_source="cato")
+        result = store.merge_cato_write(data, tag_text, default_source="cato")
         items = result["items"]
         assert len(items) == 1
         assert items[0]["title"] == "Updated title"
@@ -308,55 +316,54 @@ class TestMergeShadowWrite:
         """Items from vault sources are never removed by cato's write_file(shadow)."""
         store = _import()
         vault_item = {
-            "id": "v001", "type": "volatile", "facet": "ou",
-            "title": "From vault", "day": 3, "source": "projects/a.md"
+            "id": "v001", "title": "From vault", "source": "projects/a.md",
+            "tags": ["#date-2026-04-28", "#facet-senswork"]
         }
         data = self._data_with_items([vault_item])
         # cato writes only its own item, vault item not mentioned
-        tag_text = f"#date-{TODAY} #facet-cato\nCato task\n"
-        result = store.merge_shadow_write(data, tag_text, default_source="cato")
+        tag_text = f"#date-{TODAY} #facet-senswork\nCato task\n"
+        result = store.merge_cato_write(data, tag_text, default_source="cato")
         sources = {it["source"] for it in result["items"]}
         assert "projects/a.md" in sources
 
     def test_done_tag_marks_item(self):
         store = _import()
         item = {
-            "id": "d001", "type": "fixed", "facet": "cato",
-            "title": "Finish report", "day": 0, "start": "09:00", "end": "10:00",
-            "source": "cato"
+            "id": "d001", "title": "Finish report", "source": "cato",
+            "tags": ["#date-2026-04-25", "#time-09:00-10:00", "#facet-senswork"]
         }
         data = self._data_with_items([item])
-        tag_text = f"#done-{TODAY} #id-d001 #date-{TODAY} #time-09:00-10:00 #facet-cato\nFinish report\n"
-        result = store.merge_shadow_write(data, tag_text, default_source="cato")
-        done_items = [it for it in result["items"] if it.get("done")]
+        tag_text = f"#done-{TODAY} #id-d001 #date-{TODAY} #time-09:00-10:00 #facet-senswork\nFinish report\n"
+        result = store.merge_cato_write(data, tag_text, default_source="cato")
+        done_items = [it for it in result["items"] if any(t.startswith("#done-") for t in (it.get("tags") or []))]
         assert len(done_items) == 1
-        assert done_items[0]["done"] == TODAY
+        assert f"#done-{TODAY}" in done_items[0].get("tags", [])
 
     def test_done_on_vault_item_marks_it(self):
         """A #done- tag matching a vault item's id marks that item without changing its source."""
         store = _import()
         item = {
-            "id": "vd01", "type": "volatile", "facet": "ou",
-            "title": "Call supplier", "day": 1, "source": "projects/b.md"
+            "id": "vd01", "title": "Call supplier", "source": "projects/b.md",
+            "tags": ["#date-2026-04-26", "#facet-senswork"]
         }
         data = self._data_with_items([item])
-        tag_text = f"#done-{TODAY} #id-vd01 #date-{TODAY} #facet-ou\nCall supplier\n"
-        result = store.merge_shadow_write(data, tag_text, default_source="cato")
+        tag_text = f"#done-{TODAY} #id-vd01 #date-{TODAY} #facet-senswork\nCall supplier\n"
+        result = store.merge_cato_write(data, tag_text, default_source="cato")
         marked = next(it for it in result["items"] if it["id"] == "vd01")
-        assert marked["done"] == TODAY
+        assert f"#done-{TODAY}" in marked.get("tags", [])
         assert marked["source"] == "projects/b.md"  # source unchanged
 
     def test_cato_item_not_in_write_is_removed(self):
         """cato-owned items absent from tag_text are dropped (LLM intentionally removed them)."""
         store = _import()
         items = [
-            {"id": "c001", "source": "cato", "title": "Old cato", "type": "volatile", "day": 0, "facet": "misc"},
-            {"id": "c002", "source": "cato", "title": "Keep cato", "type": "volatile", "day": 1, "facet": "misc"},
+            {"id": "c001", "source": "cato", "title": "Old cato", "tags": ["#date-2026-04-25", "#facet-misc"]},
+            {"id": "c002", "source": "cato", "title": "Keep cato", "tags": ["#date-2026-04-26", "#facet-misc"]},
         ]
         data = self._data_with_items(items)
         # Only c002 in tag text
         tag_text = f"#id-c002 #date-{TOMORROW} #facet-misc\nKeep cato\n"
-        result = store.merge_shadow_write(data, tag_text, default_source="cato")
+        result = store.merge_cato_write(data, tag_text, default_source="cato")
         ids = {it["id"] for it in result["items"]}
         assert "c001" not in ids
         assert "c002" in ids
@@ -416,6 +423,7 @@ class TestReadWriteAgendaJson:
         assert any(it["id"] == "t1" for it in loaded["items"])
 
     def test_write_updates_meta_timestamps(self, tmp_path):
+        """write_agenda_json sets generated timestamp and removes base_date."""
         store = _import()
         agenda_path = tmp_path / "webui" / "pages" / "agenda.json"
 
@@ -425,7 +433,10 @@ class TestReadWriteAgendaJson:
             store.write_agenda_json(data)
             loaded = store.read_agenda_json()
 
-        assert loaded["meta"]["base_date"] == date.today().isoformat()
+        # base_date is removed by write_agenda_json
+        assert "base_date" not in loaded["meta"]
+        # generated timestamp is set
+        assert "generated" in loaded["meta"]
 
     def test_missing_file_returns_empty_structure(self, tmp_path):
         store = _import()

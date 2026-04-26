@@ -93,8 +93,9 @@ class TestExchangeDetection:
 
             with patch("outheis.agents.agenda.get_agenda_dir", return_value=agenda_dir), \
                  patch("outheis.agents.agenda.date") as mock_date, \
-                 patch.object(agent, "_load_hashes", return_value={"Agenda.md": "same", "Exchange.md": "same"}), \
+                 patch.object(agent, "_load_hashes", return_value={"Agenda.md": "same", "Exchange.md": "same", "agenda.json": "same"}), \
                  patch.object(agent, "_compute_hash", return_value="same"), \
+                 patch.object(agent, "_today_needs_refill", return_value=False), \
                  patch.object(agent, "_process_with_tools", side_effect=fake_process), \
                  patch.object(agent, "_build_agenda_md", return_value=""), \
                  patch.object(agent, "_save_hashes"):
@@ -120,8 +121,9 @@ class TestExchangeDetection:
 
             with patch("outheis.agents.agenda.get_agenda_dir", return_value=agenda_dir), \
                  patch("outheis.agents.agenda.date") as mock_date, \
-                 patch.object(agent, "_load_hashes", return_value={"Agenda.md": "same", "Exchange.md": "same"}), \
+                 patch.object(agent, "_load_hashes", return_value={"Agenda.md": "same", "Exchange.md": "same", "agenda.json": "same"}), \
                  patch.object(agent, "_compute_hash", return_value="same"), \
+                 patch.object(agent, "_today_needs_refill", return_value=False), \
                  patch.object(agent, "_process_with_tools", side_effect=fake_process), \
                  patch.object(agent, "_build_agenda_md", return_value=""), \
                  patch.object(agent, "_save_hashes"):

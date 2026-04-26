@@ -1,7 +1,7 @@
 """Tests for _format_agenda_for_signal in relay.py.
 
 Covers bullet prefixing (📅 Today, 🗓️ This Week, 💶 Cashflow),
-checkbox conversion (🧘 Personal), section isolation, and edge cases.
+checkbox conversion (📌 Recurring), section isolation, and edge cases.
 """
 
 from outheis.agents.relay import _format_agenda_for_signal
@@ -40,19 +40,19 @@ class TestBulletSections:
 
 class TestCheckboxSection:
     def test_open_checkbox_converted(self):
-        text = "## 🧘 Personal\n- [ ] Meditate"
+        text = "## 📌 Recurring\n- [ ] Meditate"
         out = _format_agenda_for_signal(text)
         assert "🟩 Meditate" in out
         assert "- [ ]" not in out
 
     def test_done_checkbox_converted(self):
-        text = "## 🧘 Personal\n- [x] Meditate"
+        text = "## 📌 Recurring\n- [x] Meditate"
         out = _format_agenda_for_signal(text)
         assert "✅ Meditate" in out
         assert "- [x]" not in out
 
-    def test_plain_line_in_personal_not_bulleted(self):
-        text = "## 🧘 Personal\nNote without checkbox"
+    def test_plain_line_in_recurring_not_bulleted(self):
+        text = "## 📌 Recurring\nNote without checkbox"
         out = _format_agenda_for_signal(text)
         assert "▸" not in out
 
@@ -78,12 +78,12 @@ class TestSectionIsolation:
     def test_multiple_sections(self):
         text = (
             "## 📅 Today\nMeeting\n"
-            "## 🧘 Personal\n- [ ] Zazen\n"
+            "## 📌 Recurring\n- [ ] Task\n"
             "## 🗓️ This Week\nDeadline"
         )
         out = _format_agenda_for_signal(text)
         assert "▸ Meeting" in out
-        assert "🟩 Zazen" in out
+        assert "🟩 Task" in out
         assert "▸ Deadline" in out
 
     def test_empty_string(self):

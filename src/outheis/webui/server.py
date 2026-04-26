@@ -807,15 +807,6 @@ async def update_agenda_item(data: dict):
     return {"status": "updated", "id": item_id}
 
 
-@app.post("/api/agenda/migrate-from-shadow")
-async def migrate_agenda_from_shadow():
-    """Import non-vault items from Shadow.md into agenda.json (one-time migration)."""
-    from outheis.core.agenda_store import migrate_from_shadow
-    shadow_path = get_vault_path() / "Agenda" / "Shadow.md"
-    imported = migrate_from_shadow(shadow_path)
-    return {"status": "ok", "imported": imported}
-
-
 @app.get("/api/codebase")
 async def get_codebase_files():
     return list_files(get_vault_path() / "Codebase")

@@ -259,7 +259,7 @@ class AgentConfig:
     name: str  # Display name (e.g. "ou", "zeno")
     model: str = "capable"  # Model alias
     enabled: bool = True
-    retention: int | None = None  # days to keep #done-YYYY-MM-DD entries in Shadow.md (None = forever)
+    retention: int | None = None  # days to keep #done-YYYY-MM-DD entries (None = forever)
 
 
 @dataclass
@@ -299,7 +299,7 @@ class ScheduleConfig:
     archive_rotation: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=["05:00"]
     ))
-    shadow_scan: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
+    vault_scan: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
         time=["03:30"]
     ))
     memory_migrate: ScheduledTaskConfig = field(default_factory=lambda: ScheduledTaskConfig(
@@ -425,8 +425,8 @@ def _parse_schedule(data: dict) -> ScheduleConfig:
         archive_rotation=_parse_scheduled_task(
             data.get("archive_rotation", {}), defaults.archive_rotation
         ),
-        shadow_scan=_parse_scheduled_task(
-            data.get("shadow_scan", {}), defaults.shadow_scan
+        vault_scan=_parse_scheduled_task(
+            data.get("vault_scan", {}), defaults.vault_scan
         ),
         memory_migrate=_parse_scheduled_task(
             data.get("memory_migrate", {}), defaults.memory_migrate
@@ -564,7 +564,7 @@ def _serialize_schedule(schedule: ScheduleConfig) -> dict:
         "pattern_infer": _serialize_scheduled_task(schedule.pattern_infer),
         "index_rebuild": _serialize_scheduled_task(schedule.index_rebuild),
         "archive_rotation": _serialize_scheduled_task(schedule.archive_rotation),
-        "shadow_scan": _serialize_scheduled_task(schedule.shadow_scan),
+        "vault_scan": _serialize_scheduled_task(schedule.vault_scan),
         "memory_migrate": _serialize_scheduled_task(schedule.memory_migrate),
         "agenda_review": _serialize_scheduled_task(schedule.agenda_review),
         "action_tasks": _serialize_scheduled_task(schedule.action_tasks),

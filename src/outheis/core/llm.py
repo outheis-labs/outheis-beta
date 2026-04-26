@@ -351,8 +351,9 @@ def call_llm(
     callers always receive an Anthropic-compatible response object.
 
     When provider_aliases + fallback_order are configured, automatically retries
-    on the next provider in fallback_order if the current provider raises a
-    BillingError. Only propagates BillingError when all providers are exhausted.
+    on the next provider in fallback_order if the current provider fails.
+    Catches ALL errors (not just billing) and tries next provider.
+    Only propagates the last error when all providers are exhausted.
     """
     import logging
     log = logging.getLogger(__name__)
@@ -361,7 +362,7 @@ def call_llm(
     use_provider_fallback = bool(llm_config.provider_aliases)
 
     failed_providers: set[str] = set()
-    last_billing_error: BillingError | None = None
+    last_error: Exception | None = None
 
     while True:
         from outheis.core.config import ModelResolutionError
@@ -369,8 +370,10 @@ def call_llm(
             skip = failed_providers if use_provider_fallback else None
             model_config = resolve_model(model, skip_providers=skip)
         except ModelResolutionError:
-            if last_billing_error:
-                raise BillingError(str(last_billing_error), failed_providers=failed_providers) from last_billing_error
+            if last_error:
+                if isinstance(last_error, BillingError):
+                    raise BillingError(str(last_error), failed_providers=failed_providers) from last_error
+                raise last_error
             raise
 
         try:
@@ -383,7 +386,18 @@ def call_llm(
                 model_config.provider, model,
             )
             failed_providers.add(model_config.provider)
-            last_billing_error = e
+            last_error = e
+            continue
+        except Exception as e:
+            # Catch ALL errors and try next provider if fallback is configured
+            if not use_provider_fallback:
+                raise
+            log.warning(
+                "[llm] Error on provider '%s' for alias '%s': %s — trying next provider",
+                model_config.provider, model, e,
+            )
+            failed_providers.add(model_config.provider)
+            last_error = e
             continue
 
         try:

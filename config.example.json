@@ -94,7 +94,7 @@
       "enabled": true,
       "time": ["05:00"]
     },
-    "shadow_scan": {
+    "vault_scan": {
       "enabled": true,
       "time": ["03:30"]
     },

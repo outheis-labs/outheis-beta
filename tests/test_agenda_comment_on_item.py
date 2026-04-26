@@ -42,14 +42,15 @@ def run_review_with_files(agent, agenda_text: str = "", exchange_text: str = "",
         if shadow_text:
             (agenda_dir / "Shadow.md").write_text(shadow_text, encoding="utf-8")
 
-        # Both keys must match what _compute_hash returns for all filenames in run_review.
-        # run_review always computes hashes for ["Agenda.md", "Exchange.md"].
-        stored = {"Agenda.md": "same", "Exchange.md": "same"}
+        # Must match what _compute_hash returns for all filenames in run_review.
+        # run_review computes hashes for ["Agenda.md", "Exchange.md"] plus "agenda.json".
+        stored = {"Agenda.md": "same", "Exchange.md": "same", "agenda.json": "same"}
 
         with patch("outheis.agents.agenda.get_agenda_dir", return_value=agenda_dir), \
              patch("outheis.agents.agenda.date") as mock_date, \
              patch.object(agent, "_load_hashes", return_value=stored), \
              patch.object(agent, "_compute_hash", return_value="same"), \
+             patch.object(agent, "_today_needs_refill", return_value=False), \
              patch.object(agent, "_process_with_tools", side_effect=fake_process), \
              patch.object(agent, "_build_agenda_md", return_value=""), \
              patch.object(agent, "_save_hashes"):

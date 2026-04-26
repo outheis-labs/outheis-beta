@@ -56,6 +56,16 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
 .leg.muted { opacity:.2; }
 .leg-line { width:24px; height:3px; border-radius:1px; }
 
+.search-input {
+  padding:5px 8px; font-size:13px; width:140px;
+  border:1px solid var(--text3); border-radius:6px;
+  background:var(--bg); color:var(--text);
+  font-family:'IBM Plex Sans',sans-serif;
+}
+.search-input:focus { outline:none; border-color:var(--accent); }
+.search-input::placeholder { color:var(--text3); }
+.search-highlight { background:rgba(33,131,128,0.25); border-radius:2px; }
+
 .time-axis { padding-left:var(--label-w); margin-bottom:3px; height:16px; position:relative; }
 .t-tick { position:absolute; font-size:12px; color:var(--text2); transform:translateX(-50%); bottom:0; }
 
@@ -92,6 +102,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   border-left:1px solid rgba(0,0,0,.09);
   border-right:1px solid rgba(0,0,0,.05);
   transition:border-color .12s, filter .12s;
+  overflow:hidden;
 }
 /* @media (prefers-color-scheme:dark) { .ev { border-left-color:rgba(255,255,255,.10); } } */
 .ev:hover {
@@ -104,7 +115,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
 
 .ev-inner {
   position:absolute; inset:0; padding:9px 7px 4px;
-  display:flex; flex-direction:column; overflow:visible;
+  display:flex; flex-direction:column; overflow:hidden;
   color:var(--text); pointer-events:none;
 }
 .ev-t { font-size:13px; font-weight:400; white-space:nowrap; font-family:'IBM Plex Sans',sans-serif; letter-spacing:.02em; }
@@ -146,6 +157,12 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   background:none; color:var(--text2); border-radius:1px;
 }
 .time-popup button.tp-ok { color:#218380; border-color:#218380; }
+.popup-close {
+  position:absolute; top:6px; right:8px; cursor:pointer;
+  font-size:18px; color:var(--text3); line-height:1;
+  transition:color 0.15s;
+}
+.popup-close:hover { color:var(--text); }
 /* confirm strip inside fixed block */
 .ev-confirm {
   position:fixed; z-index:50; display:flex; flex-direction:column;
@@ -245,6 +262,10 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   pointer-events:none; display:none; z-index:100; max-width:200px; color:var(--text);
   font-family:'IBM Plex Sans',sans-serif;
 }
+.search-highlight {
+  outline:2px solid var(--accent)!important;
+  outline-offset:1px;
+}
 </style>
 </head>
 <body>
@@ -256,8 +277,11 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
       <button onclick="setR(14,this)">14</button>
       <button onclick="setR(30,this)">30</button>
     </div>
-    <button class="btn" onclick="showCreatePopup()" style="margin-left:auto">Add item</button>
-    <button class="btn" id="saveBtn" onclick="saveAgenda()">Save</button>
+    <span style="display:flex;align-items:center;gap:6px;margin-left:auto;">
+      <input type="text" id="search-input" class="search-input" placeholder="search…" onkeydown="if(event.key==='Enter')searchItems();if(event.key==='Escape')clearSearch();">
+      <button class="btn" onclick="searchItems()">Search</button>
+      <button class="btn" onclick="showCreatePopup()">Add item</button>
+    </span>
     <button class="btn" onclick="cycleColors()" title="Cycle colors">Colors</button>
     <button class="btn" id="gradBtn" onclick="toggleGrad()">Gradients</button>
     <button class="btn" id="spreadBtn" onclick="toggleSpread()">Spread</button>
@@ -374,7 +398,7 @@ const I18N={
   cp_ok:'Add item', cp_heading:'Add item',
   ep_heading:'Edit item', ep_ok:'Save', ep_done:'Done ✓', ep_dismiss:'🧹 Dismiss',
   ep_delete:'Delete', ep_delete_confirm:'Delete this item?',
-  ep_follows:'wartet auf', ep_precedes:'blockiert', ep_relates:'verknüpft',
+  ep_follows:'Follows', ep_precedes:'Precedes', ep_relates:'Relates',
 };
 
 function parseDateTime(s){
@@ -542,6 +566,14 @@ function parseDuration(s){
   const p=s.split(':');
   const mins=parseInt(p[0],10)*60+(parseInt(p[1],10)||0);
   return Math.max(0, t2fAbs(DAY_START+mins/60)-t2fAbs(DAY_START));
+}
+function formatDuration(frac){
+  /* visual fraction width → "HH:MM" */
+  if(!frac||frac<=0) return '0:30';
+  const absHrs=frac*24;
+  const hrs=Math.floor(absHrs);
+  const mins=Math.round((absHrs-hrs)*60);
+  return `${hrs}:${String(mins).padStart(2,'0')}`;
 }
 function dayOffset(dateStr){
   /* days from today for a date string "YYYY-MM-DD" or "YYYY-MM-DDTHH:MM" */
@@ -1353,6 +1385,62 @@ function makeResizable(block, lh, rh, key, tl, ev, f1orig, f2orig){
   rh.addEventListener('touchstart',e=>startResize(e,'right'),{passive:false});
 }
 
+function makeDurationResizable(block, lh, rh, key, tl, ev){
+  /* Resize handles for duration items (vol-box) */
+  function startResize(e, side){
+    e.preventDefault(); e.stopPropagation();
+    const rect=tl.getBoundingClientRect();
+    const cW=rect.width;
+    const mx0=e.touches?e.touches[0].clientX:e.clientX;
+    const x0=parseFloat(block.style.left)/100;
+    const w0=parseFloat(block.style.width)/100;
+
+    const onMove=e=>{
+      const mx=e.touches?e.touches[0].clientX:e.clientX;
+      const df=(mx-mx0)/cW;
+      let nx=x0, nw=w0;
+      if(side==='left'){
+        nx=Math.max(0, Math.min(x0+w0-0.02, x0+df));
+        nw=w0-(nx-x0);
+      } else {
+        nw=Math.max(0.02, Math.min(1-x0, w0+df));
+      }
+      block.style.left=(nx*100)+'%';
+      block.style.width=(nw*100)+'%';
+      /* update stored position and duration */
+      const storeKey=ev._storeKey||key;
+      volPositions[storeKey]={...(volPositions[storeKey]||{}), x:nx};
+      if(ev._id) volPositions['vol-id-'+ev._id]={...(volPositions['vol-id-'+ev._id]||{}), x:nx};
+    };
+    const onEnd=()=>{
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onEnd);
+      document.removeEventListener('touchmove',onMove);
+      document.removeEventListener('touchend',onEnd);
+      /* persist new duration to EVENTS */
+      const newW=parseFloat(block.style.width)/100;
+      const newDur=formatDuration(newW);
+      const idx=evIdx(ev);
+      if(idx>=0){
+        const upd={...EVENTS[idx],duration:newDur};
+        upd.tags=fieldsToTags(upd);
+        EVENTS[idx]=upd;
+      }
+      try{localStorage.setItem('outheis-vol-positions',JSON.stringify(volPositions));}catch(e){}
+      markDirty(); renderStream();
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onEnd);
+    document.addEventListener('touchmove',onMove,{passive:false});
+    document.addEventListener('touchend',onEnd);
+  }
+
+  lh.addEventListener('mousedown', e=>startResize(e,'left'));
+  lh.addEventListener('touchstart',e=>startResize(e,'left'),{passive:false});
+  rh.addEventListener('mousedown', e=>startResize(e,'right'));
+  rh.addEventListener('touchstart',e=>startResize(e,'right'),{passive:false});
+}
+
 const EMBEDDED_DATA={"meta":{"version":"0.2","generated":"2026-04-23T00:00:00Z"},"facets":[{"id":"cato","label":"Work","hex":"#FF2E00"},{"id":"hiro","label":"Clients","hex":"#FFB400"},{"id":"rumi","label":"Self","hex":"#460A46"},{"id":"zeno","label":"Life","hex":"#97EAD2"},{"id":"ou","label":"Community","hex":"#218380"},{"id":"none","label":"none","hex":"#7A7676"}],"view":{"range":7,"params":{"peak_amp":0.9,"decay":10.0,"ghost_pull":0.04,"overlay_alpha":0.09}},"items":[
   {"id":"7430000000000001","title":"Vision AI Stand-up","tags":["#date-2026-04-23","#time-08:00-08:30","#facet-hiro"]},
   {"id":"7430000000000002","title":"Morning reading","tags":["#date-2026-04-23","#time-07:30-09:00","#facet-zeno","#density-low"]},
@@ -1589,72 +1677,201 @@ function saveAgenda(){
     });
 }
 
+/* search functionality */
+let searchMatches=[];
+let currentMatchIndex=-1;
+function searchItems(){
+  const input=document.getElementById('search-input');
+  if(!input) return;
+  const query=input.value.trim().toLowerCase();
+  if(!query){ clearSearch(); return; }
+  /* remove previous highlights */
+  document.querySelectorAll('.search-highlight').forEach(el=>el.classList.remove('search-highlight'));
+  /* find matching events */
+  searchMatches=EVENTS.filter(ev=>!ev.done && ev.title && ev.title.toLowerCase().includes(query));
+  if(searchMatches.length===0){ currentMatchIndex=-1; return; }
+  /* rotate to next match */
+  currentMatchIndex=(currentMatchIndex+1)%searchMatches.length;
+  const match=searchMatches[currentMatchIndex];
+  /* scroll to the day */
+  const dayIdx=match.day??0;
+  const rows=document.querySelectorAll('.day-row');
+  if(rows[dayIdx]){ rows[dayIdx].scrollIntoView({behavior:'smooth',block:'center'}); }
+  /* highlight matching elements */
+  setTimeout(()=>{
+    document.querySelectorAll('.ev, .vol-text').forEach(el=>{
+      const txt=el.textContent||'';
+      if(txt.toLowerCase().includes(query)){
+        el.classList.add('search-highlight');
+      }
+    });
+  },100);
+}
+function clearSearch(){
+  const input=document.getElementById('search-input');
+  if(input) input.value='';
+  document.querySelectorAll('.search-highlight').forEach(el=>el.classList.remove('search-highlight'));
+  searchMatches=[];
+  currentMatchIndex=-1;
+}
+
+/* Bidirectional relation syncing:
+   - A follows B → B precedes A
+   - A precedes B → B follows A
+   - A relates B → B relates A
+*/
+function syncRelations(itemId, oldFollows, oldPrecedes, oldRelates, newFollows, newPrecedes, newRelates){
+  const id=String(itemId);
+  const oldF=new Set((oldFollows||[]).map(String));
+  const oldP=new Set((oldPrecedes||[]).map(String));
+  const oldR=new Set((oldRelates||[]).map(String));
+  const newF=new Set((newFollows||[]).map(String));
+  const newP=new Set((newPrecedes||[]).map(String));
+  const newR=new Set((newRelates||[]).map(String));
+
+  /* Remove stale relations from other items */
+  for(const targetId of oldF){
+    if(!newF.has(targetId)){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.precedes=(target.precedes||[]).filter(x=>String(x)!==id);
+        if(!target.precedes.length) target.precedes=null;
+      }
+    }
+  }
+  for(const targetId of oldP){
+    if(!newP.has(targetId)){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.follows=(target.follows||[]).filter(x=>String(x)!==id);
+        if(!target.follows.length) target.follows=null;
+      }
+    }
+  }
+  for(const targetId of oldR){
+    if(!newR.has(targetId)){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.relates=(target.relates||[]).filter(x=>String(x)!==id);
+        if(!target.relates.length) target.relates=null;
+      }
+    }
+  }
+
+  /* Add new relations to other items */
+  for(const targetId of newF){
+    if(!oldF.has(targetId)){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.precedes=[...new Set([...(target.precedes||[]).map(String),id])];
+      }
+    }
+  }
+  for(const targetId of newP){
+    if(!oldP.has(targetId)){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.follows=[...new Set([...(target.follows||[]).map(String),id])];
+      }
+    }
+  }
+  for(const targetId of newR){
+    if(!oldR.has(targetId)){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.relates=[...new Set([...(target.relates||[]).map(String),id])];
+      }
+    }
+  }
+}
+
+function removeItemRelations(itemId){
+  const id=String(itemId);
+  EVENTS.forEach(e=>{
+    if(e._id!=null && String(e._id)!==id){
+      if(e.follows&&(e.follows||[]).map(String).includes(id)){
+        e.follows=e.follows.filter(x=>String(x)!==id);
+        if(!e.follows.length) e.follows=null;
+      }
+      if(e.precedes&&(e.precedes||[]).map(String).includes(id)){
+        e.precedes=e.precedes.filter(x=>String(x)!==id);
+        if(!e.precedes.length) e.precedes=null;
+      }
+      if(e.relates&&(e.relates||[]).map(String).includes(id)){
+        e.relates=e.relates.filter(x=>String(x)!==id);
+        if(!e.relates.length) e.relates=null;
+      }
+    }
+  });
+}
+
 function makeDepField(parentEl, label, initialIds){
-  const S='font-family:\'IBM Plex Sans\',sans-serif;';
-  const field=document.createElement('div');
-  field.className='cp-field';
-  field.style.marginTop='4px';
-  const lbl=document.createElement('label');
-  lbl.textContent=label;
-  field.appendChild(lbl);
-  const chipsWrap=document.createElement('div');
-  chipsWrap.style.cssText='display:flex;flex-wrap:wrap;gap:4px;margin-bottom:4px;';
-  field.appendChild(chipsWrap);
-  const inputWrap=document.createElement('div');
-  inputWrap.style.cssText='position:relative;';
-  const inp=document.createElement('input');
-  inp.type='text'; inp.autocomplete='off';
-  inp.placeholder='Suchen…';
-  inp.style.cssText=`font-size:12px;width:100%;${S}`;
-  inp.className=''; /* pick up .time-popup input[type=text] styles */
-  const drop=document.createElement('div');
-  drop.className='dep-drop';
-  drop.style.display='none';
-  inputWrap.appendChild(inp); inputWrap.appendChild(drop);
-  field.appendChild(inputWrap);
-  parentEl.appendChild(field);
   const selected=new Set((initialIds||[]).map(String).filter(Boolean));
-  function renderChips(){
-    chipsWrap.innerHTML='';
-    selected.forEach(id=>{
-      const ev=EVENTS.find(e=>e._id!=null&&String(e._id)===id);
-      const title=ev?ev.title:id;
-      const chip=document.createElement('span');
-      chip.className='dep-chip';
-      chip.innerHTML=`${escapeAttr(title)}<span class="dep-chip-x" data-id="${escapeAttr(id)}">×</span>`;
-      chip.querySelector('.dep-chip-x').onclick=e=>{e.stopPropagation();selected.delete(id);renderChips();};
-      chipsWrap.appendChild(chip);
-    });
-  }
-  function renderDrop(q){
-    const matches=EVENTS.filter(e=>{
-      if(!e.title||e._id==null) return false;
-      if(selected.has(String(e._id))) return false;
-      return !q||e.title.toLowerCase().includes(q.toLowerCase());
-    }).slice(0,10);
-    drop.innerHTML='';
-    if(!matches.length){drop.style.display='none';return;}
-    matches.forEach(ev=>{
-      const item=document.createElement('div');
-      item.className='dep-drop-item';
-      item.textContent=ev.title;
-      item.onmousedown=e=>{
-        e.preventDefault();
-        selected.add(String(ev._id));
-        inp.value=''; renderChips(); drop.style.display='none';
-      };
-      drop.appendChild(item);
-    });
-    drop.style.display='block';
-  }
-  inp.oninput=()=>renderDrop(inp.value);
-  inp.onfocus=()=>renderDrop(inp.value);
-  inp.onblur=()=>setTimeout(()=>{drop.style.display='none';},150);
-  renderChips();
+  const btn=document.createElement('button');
+  btn.className='btn';
+  btn.style.cssText='font-size:12px;padding:4px 10px;margin-right:4px;';
+  const updateBtn=()=>{
+    const count=selected.size;
+    btn.textContent=count?`${label} (${count})`:label;
+  };
+  updateBtn();
+  btn.onclick=()=>{
+    if(activePopup){ activePopup.remove(); activePopup=null; }
+    const overlay=document.createElement('div');
+    overlay.className='cp-overlay';
+    const panel=document.createElement('div');
+    panel.className='time-popup';
+    panel.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;width:320px;max-height:70vh;display:flex;flex-direction:column;';
+    panel.innerHTML=`
+      <div style="font-size:11px;letter-spacing:.07em;color:var(--text2);margin-bottom:8px;">${label}</div>
+      <input type="text" id="dep-search" placeholder="Filter…" style="font-size:13px;padding:5px 10px;margin-bottom:8px;width:100%;box-sizing:border-box;border:1px solid var(--text3);background:var(--bg);color:var(--text);border-radius:3px;">
+      <div id="dep-list" style="flex:1;overflow-y:auto;max-height:200px;"></div>
+      <div class="tp-row" style="margin-top:8px;">
+        <button class="tp-ok" id="dep-ok">OK</button>
+        <button id="dep-cancel">Cancel</button>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.body.appendChild(panel);
+    activePopup=panel;
+    const searchInput=panel.querySelector('#dep-search');
+    const listEl=panel.querySelector('#dep-list');
+    const tempSelected=new Set(selected);
+    function renderList(filter){
+      const q=(filter||'').toLowerCase();
+      listEl.innerHTML='';
+      EVENTS.filter(e=>e.title&&e._id!=null&&(!q||e.title.toLowerCase().includes(q))).forEach(ev=>{
+        const id=String(ev._id);
+        const item=document.createElement('div');
+        item.style.cssText='padding:6px 8px;cursor:pointer;border-radius:3px;display:flex;align-items:center;gap:8px;font-size:13px;';
+        if(tempSelected.has(id)) item.style.background='var(--bg2)';
+        item.innerHTML=`<input type="checkbox" ${tempSelected.has(id)?'checked':''} style="accent-color:#218380;"><span>${escapeAttr(ev.title)}</span>`;
+        item.onclick=()=>{
+          if(tempSelected.has(id)) tempSelected.delete(id);
+          else tempSelected.add(id);
+          item.querySelector('input').checked=tempSelected.has(id);
+          item.style.background=tempSelected.has(id)?'var(--bg2)':'';
+        };
+        listEl.appendChild(item);
+      });
+    }
+    searchInput.oninput=()=>renderList(searchInput.value);
+    renderList('');
+    const close=()=>{ overlay.remove(); panel.remove(); activePopup=null; };
+    overlay.onclick=close;
+    panel.querySelector('#dep-cancel').onclick=close;
+    panel.querySelector('#dep-ok').onclick=()=>{
+      selected.clear();
+      tempSelected.forEach(id=>selected.add(id));
+      updateBtn();
+      close();
+    };
+    setTimeout(()=>searchInput.focus(),0);
+  };
+  parentEl.appendChild(btn);
   return {getIds:()=>[...selected]};
 }
 
-function showCreatePopup(){
+function showCreatePopup(initialDate){
   if(activePopup){ activePopup.remove(); activePopup=null; }
   const overlay=document.createElement('div');
   overlay.className='cp-overlay';
@@ -1663,6 +1880,7 @@ function showCreatePopup(){
   pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;width:280px;';
   const facetOpts=FACETS.filter(f=>f.id!=='none').map(f=>`<option value="${f.id}">${f.label||f.id}</option>`).join('');
   pop.innerHTML=`
+    <div class="popup-close" title="${I18N.tp_cancel}">×</div>
     <div style="font-size:11px;letter-spacing:.07em;color:var(--text2);margin-bottom:4px;">${I18N.cp_heading.toUpperCase()}</div>
     <div class="cp-field"><label>${I18N.cp_title}</label><input type="text" id="cp-title"></div>
     <div class="cp-row">
@@ -1693,8 +1911,16 @@ function showCreatePopup(){
   document.body.appendChild(overlay);
   document.body.appendChild(pop);
   activePopup=pop;
+  /* preset date if provided, otherwise default to today */
+  const dateInput=pop.querySelector('#cp-day');
+  if(initialDate){
+    dateInput.value=initialDate;
+  }else{
+    dateInput.value=localDateStr(today0());
+  }
   const close=()=>{ overlay.remove(); pop.remove(); activePopup=null; };
   overlay.onclick=close;
+  pop.querySelector('.popup-close').onclick=close;
   pop.querySelector('#cp-cancel').onclick=close;
   pop.querySelector('#cp-ok').onclick=()=>{
     const title=pop.querySelector('#cp-title').value.trim();
@@ -1743,6 +1969,7 @@ function showEditPopup(ev){
   const extraTags=(ev.tags||[]).join(' ');
   const isRecurring=(ev.tags||[]).some(t=>t.startsWith('#recurring-'));
   pop.innerHTML=`
+    <div class="popup-close" title="${I18N.tp_cancel}">×</div>
     <div style="font-size:11px;letter-spacing:.07em;color:var(--text2);margin-bottom:4px;">${I18N.ep_heading.toUpperCase()}${isRecurring?' (recurring)':''}</div>
     <div class="cp-field"><label>${I18N.cp_title}</label><textarea id="ep-title" rows="3" style="width:100%;resize:vertical;font-family:inherit;font-size:inherit;padding:4px 6px;box-sizing:border-box;">${escapeAttr(ev.title||'')}</textarea></div>
     <div class="ep-time-wrap">
@@ -1783,14 +2010,19 @@ function showEditPopup(ev){
   const depEl=pop.querySelector('#ep-dep-fields');
   const followsField=makeDepField(depEl, I18N.ep_follows, ev.follows);
   const precedesField=makeDepField(depEl, I18N.ep_precedes, ev.precedes);
+  const relatesField=makeDepField(depEl, I18N.ep_relates, ev.relates);
   const close=()=>{ overlay.remove(); pop.remove(); activePopup=null; };
   overlay.onclick=close;
+  pop.querySelector('.popup-close').onclick=close;
   pop.querySelector('#ep-cancel').onclick=close;
   pop.querySelector('#ep-delete').onclick=()=>{
     if(!confirm(I18N.ep_delete_confirm)) return;
     close();
     const idx=evIdx(ev);
-    if(idx>=0) EVENTS.splice(idx,1);
+    if(idx>=0){
+      if(ev._id!=null) removeItemRelations(ev._id);
+      EVENTS.splice(idx,1);
+    }
     markDirty(); renderStream(); saveAgenda();
   };
   pop.querySelector('#ep-clear-time').onclick=()=>{
@@ -1817,7 +2049,11 @@ function showEditPopup(ev){
       const done=localDateStr(today0());
       const newTags=[...(ev.tags||[]).filter(t=>!t.startsWith('#done-')),`#done-${done}`];
       ev.done=done; ev.tags=newTags; if(note!=null) ev.note=note;
-      const idx=evIdx(ev); if(idx>=0) EVENTS[idx]={...EVENTS[idx],done,tags:newTags,...(note!=null?{note}:{})};
+      const idx=evIdx(ev);
+      if(idx>=0){
+        if(ev._id!=null) removeItemRelations(ev._id);
+        EVENTS[idx]={...EVENTS[idx],done,tags:newTags,...(note!=null?{note}:{})};
+      }
       markDirty(); renderStream(); saveAgenda();
     };
   };
@@ -1842,15 +2078,22 @@ function showEditPopup(ev){
     const f2=tagsToItemFields(tags);
     const followsNew=followsField.getIds();
     const precedesNew=precedesField.getIds();
+    const relatesNew=relatesField.getIds();
     const idx=evIdx(ev);
     if(idx>=0){
+      const oldFollows=EVENTS[idx].follows;
+      const oldPrecedes=EVENTS[idx].precedes;
+      const oldRelates=EVENTS[idx].relates;
       const updated={...EVENTS[idx],title,day,type:f2.type,
         start:f2.start,end:f2.end,facet:f2.facet,size:f2.size,duration:f2.duration,tags,
         follows:followsNew.length?followsNew:null,
-        precedes:precedesNew.length?precedesNew:null};
+        precedes:precedesNew.length?precedesNew:null,
+        relates:relatesNew.length?relatesNew:null};
       EVENTS[idx]=updated;
       /* sync closure ref so re-opening popup shows fresh values */
       Object.assign(ev,updated);
+      /* sync bidirectional relations */
+      if(ev._id!=null) syncRelations(ev._id,oldFollows,oldPrecedes,oldRelates,followsNew,precedesNew,relatesNew);
     }
     close(); markDirty(); renderStream(); saveAgenda();
   };
@@ -1958,7 +2201,7 @@ function renderStream(){
 
     const row=document.createElement('div');
     row.className='day-row';
-    const rowH=68;
+    const rowH=102;
     row.style.minHeight=rowH+'px';
 
 
@@ -2059,7 +2302,7 @@ function renderStream(){
 
       const inner=document.createElement('div');
       inner.className='ev-inner';
-      inner.style.cssText='position:absolute;inset:0;padding:9px 7px 4px;display:flex;flex-direction:column;overflow:visible;z-index:10;pointer-events:none;';
+      inner.style.cssText='position:absolute;inset:0;padding:9px 7px 4px;display:flex;flex-direction:column;overflow:hidden;z-index:1;pointer-events:none;';
 
       inner.innerHTML=`<div class="ev-t">${ev.title}</div><div class="ev-s">${ev.start}–${ev.end}</div>`;
       block.appendChild(inner);
@@ -2149,11 +2392,31 @@ function renderStream(){
     });
 
     /* volatile — freely draggable in 2D within the row */
+    /* collision tracking: [{x1,x2,y1,y2}] in 0-1 range */
+    const placedVolatiles=[];
+    const estimateTextWidth=(title)=>Math.min(title.length,16)*0.012+0.02; /* ~1.2% per char + padding */
+
     volEvs.forEach((ev,vi)=>{
       const fc=FM[ev.facet]||FM.none;
       const storeKey=ev._storeKey;
       const seed=strHash(ev.title+String(ev.day??0));
-      const pos=volPositions[storeKey]||{x:VOL_ANCHORS[seed%VOL_ANCHORS.length],y:VOL_Y[(seed*1664525+1)%VOL_Y.length]};
+      let pos=volPositions[storeKey];
+      const txtW=estimateTextWidth(ev.title);
+      const baseX=pos?pos.x:VOL_ANCHORS[seed%VOL_ANCHORS.length];
+      const baseYDefault=pos?pos.y:VOL_Y[(seed*1664525+1)%VOL_Y.length];
+      let finalY=baseYDefault;
+
+      /* find free Y slot if collision (applies to stored and seeded positions) */
+      for(let attempt=0; attempt<20; attempt++){
+        const testY=attempt<10?finalY:(baseYDefault+attempt*0.08)%0.9;
+        const collides=placedVolatiles.some(occ=>{
+          const xOverlap=baseX+txtW>occ.x1 && baseX<occ.x2;
+          const yOverlap=Math.abs(testY-occ.y1)<0.12;
+          return xOverlap && yOverlap;
+        });
+        if(!collides){ finalY=testY; break; }
+      }
+      pos={x:baseX,y:finalY};
       const vIsDeferred=(ev.follows||ev.precedes)&&getEffDay(ev)!==(ev.day??0);
       const vt=document.createElement('div');
       vt.className='vol-text'+(vIsDeferred?' deferred':'');
@@ -2168,6 +2431,19 @@ function renderStream(){
         vt.style.top='0';
         vt.classList.add('vol-box');
         vt.style.background=evGrad(ev);
+        /* resize handles for duration items */
+        const lh=document.createElement('div');
+        lh.className='ev-handle left';
+        const rh=document.createElement('div');
+        rh.className='ev-handle right';
+        vt.appendChild(lh);
+        vt.appendChild(rh);
+        makeDurationResizable(vt, lh, rh, storeKey, tl, ev);
+        /* track placement for collision detection */
+        placedVolatiles.push({x1:pos.x,x2:pos.x+wF,y1:0,y2:0.15});
+      } else {
+        const txtW=estimateTextWidth(ev.title);
+        placedVolatiles.push({x1:pos.x,x2:pos.x+txtW,y1:pos.y,y2:pos.y+0.12});
       }
       vt.textContent=ev.title.length>16?ev.title.slice(0,15)+'…':ev.title;
       addTip(vt,ev);
@@ -2194,6 +2470,26 @@ function renderStream(){
       nl.innerHTML=`<div class="now-dot"></div><div class="now-time">${timeStr}</div>`;
       tl.appendChild(nl);
     }
+
+    /* dblclick on empty timeline area: create item with date preset */
+    tl.addEventListener('dblclick', e=>{
+      /* ignore clicks on events, now-line, etc. */
+      const isCanvas=e.target.tagName==='CANVAS';
+      const isHgLine=e.target.classList.contains('hg-line');
+      const isTimeline=e.target===tl;
+      if(!isTimeline && !isHgLine && !isCanvas) return;
+      e.preventDefault();
+      /* calculate date from click position */
+      const rect=tl.getBoundingClientRect();
+      const xFrac=(e.clientX-rect.left)/rect.width;
+      /* f2t converts fraction back to absolute hour (accounting for DAY_START) */
+      const absHour=f2t(xFrac);
+      /* if click is in after-midnight area (hours 0-4 when DAY_START=5, i.e., right side),
+         the item belongs to the NEXT day */
+      const useNextDay=absHour<DAY_START && absHour>=0;
+      const itemDate=useNextDay?addDays(base,d+1):addDays(base,d);
+      showCreatePopup(localDateStr(itemDate));
+    });
 
     row.appendChild(tl);
     con.appendChild(row);

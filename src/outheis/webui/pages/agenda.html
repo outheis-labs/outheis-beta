@@ -102,7 +102,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   border-left:1px solid rgba(0,0,0,.09);
   border-right:1px solid rgba(0,0,0,.05);
   transition:border-color .12s, filter .12s;
-  overflow:hidden;
+  pointer-events:none;
 }
 /* @media (prefers-color-scheme:dark) { .ev { border-left-color:rgba(255,255,255,.10); } } */
 .ev:hover {
@@ -110,27 +110,28 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   border-right-color:rgba(0,0,0,.20);
   filter:brightness(.93);
   z-index:4;
+  pointer-events:auto;
 }
-
 
 .ev-inner {
   position:absolute; inset:0; padding:9px 7px 4px;
-  display:flex; flex-direction:column; overflow:hidden;
+  display:flex; flex-direction:column; overflow:visible;
   color:var(--text); pointer-events:none;
 }
 .ev-t { font-size:13px; font-weight:400; white-space:nowrap; font-family:'IBM Plex Sans',sans-serif; letter-spacing:.02em; }
-.ev-s { font-size:11px; margin-top:2px; font-family:'IBM Plex Sans',sans-serif; }
+.ev-s { font-size:11px; margin-top:2px; font-family:'IBM Plex Sans',sans-serif; white-space:nowrap; }
 
 .vol-text {
-  position:absolute; z-index:10; pointer-events:all; cursor:grab;
+  position:absolute; z-index:11; pointer-events:all; cursor:grab;
   font-size:13px; white-space:nowrap; color:var(--text);
   letter-spacing:0.04em; transition:opacity .15s;
   user-select:none; font-family:'IBM Plex Sans',sans-serif; font-weight:400;
 
 }
 .vol-text:hover { filter:brightness(0.7); }
-.vol-text.dragging { cursor:grabbing; z-index:10; }
+.vol-text.dragging { cursor:grabbing; z-index:12; }
 .vol-text.vol-box {
+  z-index:1;
   border:1px dashed rgba(0,0,0,0.22); border-radius:1px;
   padding:1px 5px; box-sizing:border-box;
 }
@@ -285,6 +286,8 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
     <button class="btn" onclick="cycleColors()" title="Cycle colors">Colors</button>
     <button class="btn" id="gradBtn" onclick="toggleGrad()">Gradients</button>
     <button class="btn" id="spreadBtn" onclick="toggleSpread()">Spread</button>
+    <button class="btn" onclick="distributeVolatiles()" title="Distribute volatile items collision-free">Distribute</button>
+    <button class="btn" onclick="resetVolatilePositions()" title="Reset all volatile positions">Reset</button>
   </div>
   <div id="gradPanel" style="display:none;margin-bottom:1rem;padding-left:48px;flex-wrap:wrap;gap:18px;align-items:center;">
     <div style="display:flex;align-items:center;gap:6px;">
@@ -886,8 +889,8 @@ function markClean(){
 }
 /* find EVENTS index by _id, falling back to reference equality */
 function evIdx(ev){
-  const lookupId=ev._id!=null?ev._id:(ev._recurFrom!=null?ev._recurFrom:null);
-  if(lookupId!=null) return EVENTS.findIndex(e=>e._id===lookupId);
+  const lookupId=ev._id!=null?String(ev._id):(ev._recurFrom!=null?String(ev._recurFrom):null);
+  if(lookupId!=null) return EVENTS.findIndex(e=>String(e._id)===lookupId);
   return EVENTS.indexOf(ev);
 }
 /* promoted: volatile items that got a time assigned → treated as fixed */
@@ -1137,7 +1140,9 @@ function makeFixedDraggable(el, key, container, ev, dayIdx){
         ev.day=targetDay; ev.start=newStart; ev.end=newEnd;
         if(ev._id) fixedPositions['fixed-id-'+ev._id]=nx;
         delete fixedPositions[key];
+        const scrollY=window.scrollY;
         markDirty(); renderStream();
+        window.scrollTo(0,scrollY);
         return;
       }
       applyShift(targetTl, nx);
@@ -1227,21 +1232,125 @@ function makeDraggable2D(el, key, container, dayIdx, ev){
           markDirty();
         }
       } else {
-        /* same-day drop: save position at element's actual location (not raw mouse) */
+        /* same-day drop: simple rect overlap check */
         const rows=document.querySelectorAll('.day-row');
         const tl=rows[dayIdx]?rows[dayIdx].querySelector('.tl'):null;
         if(tl){
           const tlRect=tl.getBoundingClientRect();
-          const mx=e.touches?e.changedTouches[0].clientX:e.clientX;
-          const myF=e.touches?e.changedTouches[0].clientY:e.clientY;
-          const nx=Math.max(0,Math.min(0.96,(elRect.left+(mx-mx0)-tlRect.left)/tlRect.width));
-          const ny=Math.max(0,Math.min(1,(elRect.top+(myF-my0)-tlRect.top)/tlRect.height));
-          volPositions[key]={x:nx,y:ny};
-          if(ev._id) volPositions['vol-id-'+ev._id]={x:nx,y:ny};
+
+          /* where user dropped (screen coordinates) */
+          const dropX=e.touches?e.changedTouches[0].clientX:e.clientX;
+          const dropY=e.touches?e.changedTouches[0].clientY:e.clientY;
+
+          /* element size */
+          const dropW=elRect.width;
+          const dropH=elRect.height || 16;
+
+          /* is this a duration item? */
+          const isDuration = el.classList.contains('vol-box');
+
+          /* simple overlap check */
+          const dropRect = {
+            left: dropX - dropW/2,
+            right: dropX + dropW/2,
+            top: dropY - dropH/2,
+            bottom: dropY + dropH/2
+          };
+
+          const overlaps = () => {
+            /* for duration items: check full terminated item boxes */
+            if(isDuration){
+              for(const ev of tl.querySelectorAll('.ev')){
+                const r = ev.getBoundingClientRect();
+                if(dropRect.left < r.right && dropRect.right > r.left &&
+                   dropRect.top < r.bottom && dropRect.bottom > r.top) return true;
+              }
+            } else {
+              /* for regular volatiles: check only text */
+              for(const inn of tl.querySelectorAll('.ev-inner')){
+                const r = inn.getBoundingClientRect();
+                if(dropRect.left < r.right && dropRect.right > r.left &&
+                   dropRect.top < r.bottom && dropRect.bottom > r.top) return true;
+              }
+            }
+            /* check duration items */
+            for(const box of tl.querySelectorAll('.vol-box')){
+              if(box === el) continue;
+              const r = box.getBoundingClientRect();
+              if(dropRect.left < r.right && dropRect.right > r.left &&
+                 dropRect.top < r.bottom && dropRect.bottom > r.top) return true;
+            }
+            /* check other volatiles */
+            for(const vt of tl.querySelectorAll('.vol-text:not(.vol-box)')){
+              if(vt === el) continue;
+              const r = vt.getBoundingClientRect();
+              if(dropRect.left < r.right && dropRect.right > r.left &&
+                 dropRect.top < r.bottom && dropRect.bottom > r.top) return true;
+            }
+            return false;
+          };
+
+          /* convert drop position to percentage for storage */
+          let nx = (dropX - dropW/2 - tlRect.left) / tlRect.width;
+          let ny = (dropY - dropH/2 - tlRect.top) / tlRect.height;
+
+          /* clamp to valid range */
+          nx = Math.max(0, Math.min(0.96, nx));
+          ny = Math.max(0, Math.min(0.85, ny));
+
+          /* if overlap, try nearby positions */
+          if(overlaps()){
+            const step = 20;
+            let found = false;
+
+            /* try Y adjustments (only for non-duration) */
+            if(!isDuration){
+              for(let yOff = step; yOff < 200 && !found; yOff += step){
+                for(const yDir of [1, -1]){
+                  const testY = dropY + yOff * yDir;
+                  dropRect.top = testY - dropH/2;
+                  dropRect.bottom = testY + dropH/2;
+                  if(dropRect.top < tlRect.top || dropRect.bottom > tlRect.bottom) continue;
+                  if(!overlaps()){
+                    ny = (testY - dropH/2 - tlRect.top) / tlRect.height;
+                    ny = Math.max(0, Math.min(0.85, ny));
+                    found = true;
+                    break;
+                  }
+                }
+              }
+            }
+
+            /* try X adjustments */
+            if(!found){
+              dropRect.top = dropY - dropH/2;
+              dropRect.bottom = dropY + dropH/2;
+              for(let xOff = step; xOff < 300 && !found; xOff += step){
+                for(const xDir of [1, -1]){
+                  const testX = dropX + xOff * xDir;
+                  dropRect.left = testX - dropW/2;
+                  dropRect.right = testX + dropW/2;
+                  if(dropRect.left < tlRect.left || dropRect.right > tlRect.right) continue;
+                  if(!overlaps()){
+                    nx = (testX - dropW/2 - tlRect.left) / tlRect.width;
+                    nx = Math.max(0, Math.min(0.96, nx));
+                    found = true;
+                    break;
+                  }
+                }
+              }
+            }
+          }
+
+          volPositions[key] = {x: nx, y: ny};
+          if(ev._id) volPositions['vol-id-'+ev._id] = {x: nx, y: ny};
         }
       }
       try{localStorage.setItem('outheis-vol-positions',JSON.stringify(volPositions));}catch(e){}
+      /* preserve scroll position across renderStream */
+      const scrollY=window.scrollY;
       markDirty(); renderStream();
+      window.scrollTo(0,scrollY);
     };
 
     document.addEventListener('mousemove',onMove);
@@ -1562,6 +1671,86 @@ function reloadAgenda(){
   if(btn){ btn.classList.add('spinning'); setTimeout(()=>btn.classList.remove('spinning'),600); }
   loadAgenda();
 }
+
+/* distribute all volatile items collision-free (explicit call) */
+function distributeVolatiles(){
+  const estimateTextWidth=(title)=>Math.min(title.length,16)*0.018+0.03;
+
+  document.querySelectorAll('.day-row').forEach((row, dayIdx)=>{
+    const tl=row.querySelector('.tl');
+    if(!tl) return;
+
+    /* collect fixed event title positions as obstacles */
+    const fixedObstacles=[];
+    tl.querySelectorAll('.ev').forEach(evEl=>{
+      const left=parseFloat(evEl.style.left)/100;
+      const titleEl=evEl.querySelector('.ev-t');
+      if(titleEl && !isNaN(left)){
+        const titleW=estimateTextWidth(titleEl.textContent);
+        fixedObstacles.push({x1:left+0.007, x2:left+0.007+titleW, y1:0, y2:0.15});
+      }
+    });
+
+    /* collect all volatile items in this row */
+    const volItems=[];
+    tl.querySelectorAll('.vol-text').forEach(vt=>{
+      if(vt.classList.contains('vol-box')) return; /* skip duration items for now */
+      const left=parseFloat(vt.style.left)/100;
+      const top=parseFloat(vt.style.top)/100;
+      if(!isNaN(left) && !isNaN(top)){
+        volItems.push({el:vt, x:left, y:top, w:estimateTextWidth(vt.textContent)});
+      }
+    });
+
+    /* place items collision-free */
+    const placed=[];
+    volItems.forEach(item=>{
+      let finalX=item.x, finalY=item.y;
+      const allObs=[...fixedObstacles, ...placed];
+
+      const collides=(x,y)=>allObs.some(occ=>{
+        const xOverlap=x+item.w>occ.x1 && x<occ.x2;
+        if(!xOverlap) return false;
+        return Math.abs(y-occ.y1)<0.13;
+      });
+
+      if(collides(item.x, item.y)){
+        /* try Y adjustments */
+        let found=false;
+        for(let yOff=0.07; yOff<0.5 && !found; yOff+=0.07){
+          for(const yDir of [1,-1]){
+            const testY=(item.y+yOff*yDir+1)%1;
+            if(testY<0 || testY>0.85) continue;
+            if(!collides(item.x, testY)){ finalY=testY; found=true; }
+          }
+        }
+        /* try X adjustments */
+        if(!found){
+          for(let xOff=0.05; xOff<0.5 && !found; xOff+=0.05){
+            for(const xDir of [1,-1]){
+              const testX=(item.x+xOff*xDir+1)%1;
+              if(testX<0 || testX>0.9) continue;
+              if(!collides(testX, item.y)){ finalX=testX; found=true; }
+            }
+          }
+        }
+      }
+
+      item.el.style.left=(finalX*100)+'%';
+      item.el.style.top=(finalY*100)+'%';
+      placed.push({x1:finalX, x2:finalX+item.w, y1:finalY, y2:finalY+0.12});
+    });
+  });
+}
+
+/* reset all volatile positions to defaults */
+function resetVolatilePositions(){
+  Object.keys(volPositions).forEach(k => delete volPositions[k]);
+  try{ localStorage.removeItem('outheis-vol-positions'); }catch(e){}
+  markDirty();
+  renderStream();
+}
+
 function loadAgenda(){
   const ts='?_='+Date.now();
   fetch('agenda.json'+ts)
@@ -1805,7 +1994,7 @@ function removeItemRelations(itemId){
   });
 }
 
-function makeDepField(parentEl, label, initialIds){
+function makeDepField(parentEl, label, initialIds, getExcludeId){
   const selected=new Set((initialIds||[]).map(String).filter(Boolean));
   const btn=document.createElement('button');
   btn.className='btn';
@@ -1816,7 +2005,8 @@ function makeDepField(parentEl, label, initialIds){
   };
   updateBtn();
   btn.onclick=()=>{
-    if(activePopup){ activePopup.remove(); activePopup=null; }
+    // Don't close parent popup - this is a child popup for dependency selection
+    const excludeIdStr=getExcludeId?String(getExcludeId()):null;
     const overlay=document.createElement('div');
     overlay.className='cp-overlay';
     const panel=document.createElement('div');
@@ -1832,14 +2022,17 @@ function makeDepField(parentEl, label, initialIds){
       </div>`;
     document.body.appendChild(overlay);
     document.body.appendChild(panel);
-    activePopup=panel;
+    // Don't set activePopup - this is a child popup, parent edit popup should remain active
     const searchInput=panel.querySelector('#dep-search');
     const listEl=panel.querySelector('#dep-list');
     const tempSelected=new Set(selected);
     function renderList(filter){
       const q=(filter||'').toLowerCase();
       listEl.innerHTML='';
-      EVENTS.filter(e=>e.title&&e._id!=null&&(!q||e.title.toLowerCase().includes(q))).forEach(ev=>{
+      const allItems=EVENTS.filter(e=>e.title&&e._id!=null&&String(e._id)!==excludeIdStr&&(!q||e.title.toLowerCase().includes(q)));
+      const checkedItems=allItems.filter(e=>tempSelected.has(String(e._id)));
+      const uncheckedItems=allItems.filter(e=>!tempSelected.has(String(e._id)));
+      const renderItem=(ev)=>{
         const id=String(ev._id);
         const item=document.createElement('div');
         item.style.cssText='padding:6px 8px;cursor:pointer;border-radius:3px;display:flex;align-items:center;gap:8px;font-size:13px;';
@@ -1850,13 +2043,21 @@ function makeDepField(parentEl, label, initialIds){
           else tempSelected.add(id);
           item.querySelector('input').checked=tempSelected.has(id);
           item.style.background=tempSelected.has(id)?'var(--bg2)':'';
+          renderList(searchInput.value);
         };
         listEl.appendChild(item);
-      });
+      };
+      checkedItems.forEach(renderItem);
+      if(checkedItems.length&&uncheckedItems.length){
+        const hr=document.createElement('div');
+        hr.style.cssText='height:1px;background:var(--text3);margin:4px 8px;opacity:0.3;';
+        listEl.appendChild(hr);
+      }
+      uncheckedItems.forEach(renderItem);
     }
     searchInput.oninput=()=>renderList(searchInput.value);
     renderList('');
-    const close=()=>{ overlay.remove(); panel.remove(); activePopup=null; };
+    const close=()=>{ overlay.remove(); panel.remove(); };
     overlay.onclick=close;
     panel.querySelector('#dep-cancel').onclick=close;
     panel.querySelector('#dep-ok').onclick=()=>{
@@ -1954,6 +2155,7 @@ function showCreatePopup(initialDate){
 }
 
 function showEditPopup(ev){
+  console.log('[edit] showEditPopup called for:', ev.title, 'ev._id:', ev._id);
   if(activePopup){ activePopup.remove(); activePopup=null; }
   const overlay=document.createElement('div');
   overlay.className='cp-overlay';
@@ -2008,9 +2210,9 @@ function showEditPopup(ev){
   document.body.appendChild(pop);
   activePopup=pop;
   const depEl=pop.querySelector('#ep-dep-fields');
-  const followsField=makeDepField(depEl, I18N.ep_follows, ev.follows);
-  const precedesField=makeDepField(depEl, I18N.ep_precedes, ev.precedes);
-  const relatesField=makeDepField(depEl, I18N.ep_relates, ev.relates);
+  const followsField=makeDepField(depEl, I18N.ep_follows, ev.follows, ()=>ev._id);
+  const precedesField=makeDepField(depEl, I18N.ep_precedes, ev.precedes, ()=>ev._id);
+  const relatesField=makeDepField(depEl, I18N.ep_relates, ev.relates, ()=>ev._id);
   const close=()=>{ overlay.remove(); pop.remove(); activePopup=null; };
   overlay.onclick=close;
   pop.querySelector('.popup-close').onclick=close;
@@ -2025,6 +2227,8 @@ function showEditPopup(ev){
     }
     markDirty(); renderStream(); saveAgenda();
   };
+  const okBtn=pop.querySelector('#ep-ok');
+  console.log('[edit] OK button found:', !!okBtn);
   pop.querySelector('#ep-clear-time').onclick=()=>{
     pop.querySelector('#ep-start').value='';
     pop.querySelector('#ep-end').value='';
@@ -2057,7 +2261,8 @@ function showEditPopup(ev){
       markDirty(); renderStream(); saveAgenda();
     };
   };
-  pop.querySelector('#ep-ok').onclick=()=>{
+  okBtn.onclick=()=>{
+    console.log('[edit] OK button clicked');
     const title=pop.querySelector('#ep-title').value.trim();
     if(!title){ const inp=pop.querySelector('#ep-title'); inp.focus(); inp.style.outline='2px solid #c44'; setTimeout(()=>{inp.style.outline='';},1500); return; }
     const d1=pop.querySelector('#ep-day').value;
@@ -2079,21 +2284,30 @@ function showEditPopup(ev){
     const followsNew=followsField.getIds();
     const precedesNew=precedesField.getIds();
     const relatesNew=relatesField.getIds();
+    console.log('[edit] followsNew:', followsNew, 'precedesNew:', precedesNew, 'relatesNew:', relatesNew);
     const idx=evIdx(ev);
-    if(idx>=0){
-      const oldFollows=EVENTS[idx].follows;
-      const oldPrecedes=EVENTS[idx].precedes;
-      const oldRelates=EVENTS[idx].relates;
-      const updated={...EVENTS[idx],title,day,type:f2.type,
+    const updateId=ev._id!=null?String(ev._id):null;
+    /* find by index or by _id as fallback */
+    let targetIdx=idx;
+    if(targetIdx<0 && updateId!=null){
+      targetIdx=EVENTS.findIndex(e=>String(e._id)===updateId);
+    }
+    if(targetIdx>=0){
+      console.log('[edit] found item at index', targetIdx, 'title:', EVENTS[targetIdx].title);
+      const oldFollows=EVENTS[targetIdx].follows;
+      const oldPrecedes=EVENTS[targetIdx].precedes;
+      const oldRelates=EVENTS[targetIdx].relates;
+      const updated={...EVENTS[targetIdx],title,day,type:f2.type,
         start:f2.start,end:f2.end,facet:f2.facet,size:f2.size,duration:f2.duration,tags,
         follows:followsNew.length?followsNew:null,
         precedes:precedesNew.length?precedesNew:null,
         relates:relatesNew.length?relatesNew:null};
-      EVENTS[idx]=updated;
+      EVENTS[targetIdx]=updated;
+      console.log('[edit] updated item follows:', EVENTS[targetIdx].follows, 'precedes:', EVENTS[targetIdx].precedes, 'relates:', EVENTS[targetIdx].relates);
       /* sync closure ref so re-opening popup shows fresh values */
       Object.assign(ev,updated);
       /* sync bidirectional relations */
-      if(ev._id!=null) syncRelations(ev._id,oldFollows,oldPrecedes,oldRelates,followsNew,precedesNew,relatesNew);
+      if(updateId!=null) syncRelations(updateId,oldFollows,oldPrecedes,oldRelates,followsNew,precedesNew,relatesNew);
     }
     close(); markDirty(); renderStream(); saveAgenda();
   };
@@ -2175,8 +2389,8 @@ function renderStream(){
     /* volatile items promoted away: exclude by index-key OR id-key */
     const promotedKeys=new Set(Object.keys(promotedItems));
     const volBase=baseEvs.filter(e=>e.type==='volatile');
-    const isPromoted=(e,vi)=>{
-      const k='vol-'+d+'-'+vi;
+    const isPromoted=(e)=>{
+      const k='vol-'+d+'-'+strHash(e.title);
       const idK=e._id!=null?'vol-id-'+e._id:null;
       return promotedKeys.has(k)||(idK&&promotedKeys.has(idK));
     };
@@ -2184,7 +2398,7 @@ function renderStream(){
       ...baseEvs.filter((e,bi)=>{
         if(e.type!=='volatile') return true;
         const vi=volBase.indexOf(e);
-        return !isPromoted(e,vi);
+        return !isPromoted(e);
       }),
       ...promotedForDay
     ];
@@ -2192,7 +2406,7 @@ function renderStream(){
     /* volatile: exclude any whose storeKey has been promoted */
     const volEvs=baseEvs.filter(e=>e.type==='volatile'&&!hidden.has(e.facet)).filter((e,vi)=>{
       return !isPromoted(e,vi);
-    }).map((ev,vi)=>({...ev, _storeKey:ev._id!=null?'vol-id-'+ev._id:'vol-'+d+'-'+vi}));
+    }).map(ev=>({...ev, _storeKey:ev._id!=null?'vol-id-'+ev._id:'vol-'+d+'-'+strHash(ev.title)}));
     /* add demoted fixed items as volatile */
     Object.values(volatileOverrides).forEach(ov=>{
       if(ov.day===d&&!hidden.has(ov.facet)&&!volEvs.find(v=>v.title===ov.title)) volEvs.push(ov);
@@ -2274,6 +2488,8 @@ function renderStream(){
 
     /* fixed events — full height, dblclick to unlock + drag */
     const innerH=rowH;
+    const fixedTitleRanges=[]; /* x1,x2 in 0-1 range for TITLE collision detection */
+    const estimateTextWidth=(title)=>Math.min(title.length,16)*0.018+0.03;
     fixedEvs.forEach((ev,ei)=>{
       if(!ev.start||!ev.end) return;
       if(isMultiDay(ev)) return;
@@ -2288,10 +2504,15 @@ function renderStream(){
       const block=document.createElement('div');
       block.className='ev'+(unlockedEvents.has(evKey)?' unlocked':'')+(isDeferred?' deferred':'');
       block.style.left=(xFrac*100)+'%';
-      block.style.width=((Math.min(f2,1)-Math.max(f1,0))*100)+'%';
+      const widthFrac=Math.min(f2,1)-Math.max(f1,0);
+      block.style.width=(widthFrac*100)+'%';
       block.style.height=innerH+'px';
       block.style.top='0';
       block.style.background='none';
+      /* track fixed event TITLE position for collision detection (title is at left edge with small padding) */
+      const titleW=estimateTextWidth(ev.title);
+      const titleX=xFrac+0.007; /* ~7px padding in 0-1 range */
+      fixedTitleRanges.push({x1:titleX, x2:Math.min(titleX+titleW, xFrac+widthFrac)});
 
       /* fill layer — carries block color opacity independently of text */
       const fill=document.createElement('div');
@@ -2302,7 +2523,7 @@ function renderStream(){
 
       const inner=document.createElement('div');
       inner.className='ev-inner';
-      inner.style.cssText='position:absolute;inset:0;padding:9px 7px 4px;display:flex;flex-direction:column;overflow:hidden;z-index:1;pointer-events:none;';
+      inner.style.cssText='position:absolute;inset:0;padding:9px 7px 4px;display:flex;flex-direction:column;z-index:1;pointer-events:none;';
 
       inner.innerHTML=`<div class="ev-t">${ev.title}</div><div class="ev-s">${ev.start}–${ev.end}</div>`;
       block.appendChild(inner);
@@ -2391,68 +2612,68 @@ function renderStream(){
       tl.appendChild(block);
     });
 
-    /* volatile — freely draggable in 2D within the row */
-    /* collision tracking: [{x1,x2,y1,y2}] in 0-1 range */
-    const placedVolatiles=[];
-    const estimateTextWidth=(title)=>Math.min(title.length,16)*0.012+0.02; /* ~1.2% per char + padding */
+    /* volatile — render at stored or seeded positions, no automatic collision detection */
+    /* use distributeVolatiles() for explicit collision-free placement */
 
-    volEvs.forEach((ev,vi)=>{
-      const fc=FM[ev.facet]||FM.none;
+    /* separate duration items from regular volatiles */
+    const durationItems=volEvs.filter(e=>e.duration);
+    const regularVolatiles=volEvs.filter(e=>!e.duration);
+
+    /* render duration items */
+    durationItems.forEach((ev,di)=>{
       const storeKey=ev._storeKey;
       const seed=strHash(ev.title+String(ev.day??0));
-      let pos=volPositions[storeKey];
-      const txtW=estimateTextWidth(ev.title);
-      const baseX=pos?pos.x:VOL_ANCHORS[seed%VOL_ANCHORS.length];
-      const baseYDefault=pos?pos.y:VOL_Y[(seed*1664525+1)%VOL_Y.length];
-      let finalY=baseYDefault;
+      const storedPos=volPositions[storeKey];
+      const durW=parseDuration(ev.duration);
+      const titleW=estimateTextWidth(ev.title);
+      const finalX=storedPos?storedPos.x:VOL_ANCHORS[seed%VOL_ANCHORS.length];
+      const wF=Math.min(1-finalX, durW);
 
-      /* find free Y slot if collision (applies to stored and seeded positions) */
-      for(let attempt=0; attempt<20; attempt++){
-        const testY=attempt<10?finalY:(baseYDefault+attempt*0.08)%0.9;
-        const collides=placedVolatiles.some(occ=>{
-          const xOverlap=baseX+txtW>occ.x1 && baseX<occ.x2;
-          const yOverlap=Math.abs(testY-occ.y1)<0.12;
-          return xOverlap && yOverlap;
-        });
-        if(!collides){ finalY=testY; break; }
-      }
-      pos={x:baseX,y:finalY};
       const vIsDeferred=(ev.follows||ev.precedes)&&getEffDay(ev)!==(ev.day??0);
       const vt=document.createElement('div');
       vt.className='vol-text'+(vIsDeferred?' deferred':'');
-      vt.style.left=(pos.x*100)+'%';
-      vt.style.top=(pos.y*100)+'%';
-      vt.style.bottom='auto';
+      vt.style.left=(finalX*100)+'%';
+      vt.style.top='0';
+      vt.style.width=(wF*100)+'%';
+      vt.style.height=rowH+'px';
+      vt.classList.add('vol-box');
+      vt.style.background=evGrad(ev);
 
-      if(ev.duration){
-        const wF=Math.min(1-pos.x, parseDuration(ev.duration));
-        vt.style.width=(wF*100)+'%';
-        vt.style.height=rowH+'px';
-        vt.style.top='0';
-        vt.classList.add('vol-box');
-        vt.style.background=evGrad(ev);
-        /* resize handles for duration items */
-        const lh=document.createElement('div');
-        lh.className='ev-handle left';
-        const rh=document.createElement('div');
-        rh.className='ev-handle right';
-        vt.appendChild(lh);
-        vt.appendChild(rh);
-        makeDurationResizable(vt, lh, rh, storeKey, tl, ev);
-        /* track placement for collision detection */
-        placedVolatiles.push({x1:pos.x,x2:pos.x+wF,y1:0,y2:0.15});
-      } else {
-        const txtW=estimateTextWidth(ev.title);
-        placedVolatiles.push({x1:pos.x,x2:pos.x+txtW,y1:pos.y,y2:pos.y+0.12});
-      }
+      const lh=document.createElement('div');
+      lh.className='ev-handle left';
+      const rh=document.createElement('div');
+      rh.className='ev-handle right';
+      vt.appendChild(lh);
+      vt.appendChild(rh);
+      makeDurationResizable(vt, lh, rh, storeKey, tl, ev);
+
       vt.textContent=ev.title.length>16?ev.title.slice(0,15)+'…':ev.title;
       addTip(vt,ev);
       makeDraggable2D(vt, storeKey, tl, d, ev);
-      /* dblclick: edit popup */
-      vt.addEventListener('dblclick', e=>{
-        e.stopPropagation();
-        showEditPopup(ev);
-      });
+      vt.addEventListener('dblclick', e=>{ e.stopPropagation(); showEditPopup(ev); });
+      tl.appendChild(vt);
+    });
+
+    /* render regular volatiles */
+    regularVolatiles.forEach((ev,vi)=>{
+      const storeKey=ev._storeKey;
+      const seed=strHash(ev.title+String(ev.day??0));
+      const storedPos=volPositions[storeKey];
+      const txtW=estimateTextWidth(ev.title);
+      const finalX=storedPos?storedPos.x:VOL_ANCHORS[seed%VOL_ANCHORS.length];
+      const finalY=storedPos?storedPos.y:VOL_Y[(seed*1664525+1)%VOL_Y.length];
+
+      const vIsDeferred=(ev.follows||ev.precedes)&&getEffDay(ev)!==(ev.day??0);
+      const vt=document.createElement('div');
+      vt.className='vol-text'+(vIsDeferred?' deferred':'');
+      vt.style.left=(finalX*100)+'%';
+      vt.style.top=(finalY*100)+'%';
+      vt.style.bottom='auto';
+
+      vt.textContent=ev.title.length>16?ev.title.slice(0,15)+'…':ev.title;
+      addTip(vt,ev);
+      makeDraggable2D(vt, storeKey, tl, d, ev);
+      vt.addEventListener('dblclick', e=>{ e.stopPropagation(); showEditPopup(ev); });
       tl.appendChild(vt);
     });
 

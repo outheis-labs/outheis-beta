@@ -249,92 +249,21 @@ select:focus { outline: none; border-color: var(--accent); }
   z-index: 10;
 }
 
-/* Edit popup (shared with agenda.html) */
-.popup-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.3);
-  z-index: 200;
-  display: none;
-}
-.popup-overlay.show { display: block; }
-.popup {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px;
-  width: 400px;
-  max-height: 80vh;
-  overflow-y: auto;
-  z-index: 201;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-}
-.popup-title {
-  font-size: 14px;
-  font-weight: 500;
-  margin-bottom: 12px;
-}
-.popup-row {
+/* Additional styles for popup radios */
+.popup-radios {
   display: flex;
   gap: 12px;
-  margin-bottom: 10px;
+  padding-top: 4px;
 }
-.popup-field {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-.popup-label {
-  font-size: 11px;
-  color: var(--text2);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.popup-input {
-  font-family: inherit;
+.popup-radios label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
   font-size: 13px;
-  color: var(--text);
-  background: var(--bg2);
-  border: none;
-  border-bottom: 1px solid var(--text3);
-  padding: 4px 6px;
-  outline: none;
-}
-.popup-input:focus { border-bottom-color: var(--accent); }
-.popup-textarea {
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--bg2);
-  border: 1px solid var(--text3);
-  border-radius: 3px;
-  padding: 6px;
-  outline: none;
-  resize: vertical;
-  min-height: 60px;
-}
-.popup-textarea:focus { border-color: var(--accent); }
-.popup-buttons {
-  display: flex;
-  gap: 8px;
-  margin-top: 12px;
-  justify-content: flex-end;
-}
-.popup-conflict {
-  background: #FDE8E8;
-  border: 1px solid var(--blocked);
-  border-radius: 4px;
-  padding: 8px;
-  margin-bottom: 12px;
-  font-size: 12px;
-  color: var(--blocked);
 }
 </style>
+<link rel="stylesheet" href="/assets/css/agenda-popup.css">
 </head>
 <body>
 <div id="app">
@@ -360,63 +289,7 @@ select:focus { outline: none; border-color: var(--accent); }
   </div>
 </div>
 
-<!-- Edit popup -->
-<div class="popup-overlay" id="popupOverlay" onclick="closePopup()"></div>
-<div class="popup" id="popup" onclick="event.stopPropagation()">
-  <div class="popup-title" id="popupTitle">Edit item</div>
-  <div class="popup-conflict" id="popupConflict" style="display:none;"></div>
-  <textarea class="popup-textarea" id="popupTitle2" placeholder="Title"></textarea>
-  <div class="popup-row">
-    <div class="popup-field">
-      <span class="popup-label">Start</span>
-      <input class="popup-input" id="popupStart" type="time">
-    </div>
-    <div class="popup-field">
-      <span class="popup-label">End</span>
-      <input class="popup-input" id="popupEnd" type="time">
-    </div>
-    <div class="popup-field">
-      <span class="popup-label">Date</span>
-      <input class="popup-input" id="popupDate" type="date">
-    </div>
-  </div>
-  <div class="popup-row">
-    <div class="popup-field">
-      <span class="popup-label">Facet</span>
-      <select class="popup-input" id="popupFacet"></select>
-    </div>
-    <div class="popup-field">
-      <span class="popup-label">Size</span>
-      <select class="popup-input" id="popupSize">
-        <option value="">-</option>
-        <option value="s">S</option>
-        <option value="m">M</option>
-        <option value="l">L</option>
-      </select>
-    </div>
-  </div>
-  <div class="popup-field" style="margin-bottom:10px;">
-    <span class="popup-label">Tags</span>
-    <input class="popup-input" id="popupTags" placeholder="#tag1 #tag2">
-  </div>
-  <div class="popup-field" style="margin-bottom:10px;">
-    <span class="popup-label">Waits for (follows)</span>
-    <input class="popup-input" id="popupFollows" placeholder="Item titles, comma-separated">
-  </div>
-  <div class="popup-field" style="margin-bottom:10px;">
-    <span class="popup-label">Blocks (precedes)</span>
-    <input class="popup-input" id="popupPrecedes" placeholder="Item titles, comma-separated">
-  </div>
-  <div class="popup-field" style="margin-bottom:10px;">
-    <span class="popup-label">Relates to</span>
-    <input class="popup-input" id="popupRelates" placeholder="Group name">
-  </div>
-  <div class="popup-buttons">
-    <button class="btn" onclick="closePopup()">Cancel</button>
-    <button class="btn btn-primary" onclick="savePopupItem()">Save</button>
-  </div>
-</div>
-
+<script src="/assets/js/agenda-popup.js"></script>
 <script>
 // State
 let agendaData = null;
@@ -505,11 +378,6 @@ function renderFlow() {
       content.innerHTML = lanes[lane.id].map(item => renderItem(item, facets)).join('');
     }
   });
-
-  // Populate facet dropdown
-  const facetSelect = document.getElementById('popupFacet');
-  facetSelect.innerHTML = '<option value="">none</option>' +
-    facets.map(f => `<option value="${f.id}">${f.label || f.id}</option>`).join('');
 }
 
 function categorizeItem(item, today) {
@@ -596,109 +464,75 @@ function editItem(id) {
   const item = agendaData.items.find(i => i.id === id);
   if (!item) return;
 
-  currentItem = item;
-
-  document.getElementById('popupTitle').textContent = 'Edit item';
-  document.getElementById('popupTitle2').value = item.title || '';
-  document.getElementById('popupStart').value = item.start ? item.start.slice(11, 16) : '';
-  document.getElementById('popupEnd').value = item.end ? item.end.slice(11, 16) : '';
-  document.getElementById('popupDate').value = item.date || '';
-  document.getElementById('popupFacet').value = item.facet || '';
-  document.getElementById('popupSize').value = item.size || '';
-  document.getElementById('popupTags').value = (item.tags || []).join(' ');
-  document.getElementById('popupFollows').value = (item.follows || []).join(', ');
-  document.getElementById('popupPrecedes').value = (item.precedes || []).join(', ');
-  document.getElementById('popupRelates').value = (item.relates || []).join(', ');
-
-  // Show conflict if any
-  const conflict = item.effectiveDay !== undefined && item.effectiveDay > (item.day || 0);
-  const conflictEl = document.getElementById('popupConflict');
-  if (conflict) {
-    conflictEl.style.display = 'block';
-    conflictEl.textContent = `⚠ Blocked by predecessors. Effective day: day ${item.effectiveDay}`;
-  } else {
-    conflictEl.style.display = 'none';
-  }
-
-  document.getElementById('popupOverlay').classList.add('show');
+  AgendaPopup.show({
+    item: item,
+    allItems: agendaData.items,
+    facets: agendaData.facets || [],
+    onSave: handlePopupSave,
+    getExcludeId: () => item.id
+  });
 }
 
 function showCreatePopup() {
-  currentItem = null;
-
-  document.getElementById('popupTitle').textContent = 'Add item';
-  document.getElementById('popupTitle2').value = '';
-  document.getElementById('popupStart').value = '';
-  document.getElementById('popupEnd').value = '';
-  document.getElementById('popupDate').value = new Date().toISOString().slice(0, 10);
-  document.getElementById('popupFacet').value = '';
-  document.getElementById('popupSize').value = '';
-  document.getElementById('popupTags').value = '';
-  document.getElementById('popupFollows').value = '';
-  document.getElementById('popupPrecedes').value = '';
-  document.getElementById('popupRelates').value = '';
-  document.getElementById('popupConflict').style.display = 'none';
-
-  document.getElementById('popupOverlay').classList.add('show');
+  AgendaPopup.show({
+    item: null,
+    allItems: agendaData.items,
+    facets: agendaData.facets || [],
+    initialDate: new Date().toISOString().slice(0, 10),
+    onSave: handlePopupSave
+  });
 }
 
-function closePopup() {
-  document.getElementById('popupOverlay').classList.remove('show');
-  currentItem = null;
-}
-
-async function savePopupItem() {
-  const title = document.getElementById('popupTitle2').value.trim();
-  if (!title) {
-    alert('Title required');
+function handlePopupSave(itemData, originalItem) {
+  // Handle delete
+  if (itemData === null && originalItem) {
+    const idx = agendaData.items.findIndex(i => i.id === originalItem.id);
+    if (idx >= 0) {
+      agendaData.items.splice(idx, 1);
+      dirty = true;
+      updateSaveButton();
+      renderFlow();
+    }
     return;
   }
 
+  // Build new item
   const newItem = {
-    id: currentItem ? currentItem.id : generateId(),
-    title: title,
-    type: (document.getElementById('popupStart').value && document.getElementById('popupEnd').value) ? 'fixed' : 'volatile',
-    facet: document.getElementById('popupFacet').value || 'none',
-    tags: document.getElementById('popupTags').value.trim().split(/\s+/).filter(t => t.startsWith('#'))
+    id: originalItem ? originalItem.id : itemData.id,
+    title: itemData.title,
+    type: itemData.start && itemData.end ? 'fixed' : 'volatile',
+    facet: itemData.facet || 'none',
+    tags: itemData.extraTags || []
   };
 
-  const start = document.getElementById('popupStart').value;
-  const end = document.getElementById('popupEnd').value;
-  const date = document.getElementById('popupDate').value;
-
-  if (date) {
-    newItem.date = date;
-    if (start && end) {
-      newItem.start = start;
-      newItem.end = end;
+  // Date handling
+  if (itemData.date) {
+    newItem.date = itemData.date;
+    if (itemData.start && itemData.end) {
+      newItem.start = itemData.start;
+      newItem.end = itemData.end;
     }
   }
 
-  const size = document.getElementById('popupSize').value;
-  if (size) newItem.size = size;
+  // Size
+  if (itemData.size) newItem.size = itemData.size;
 
-  // Parse follows/precedes/relates
-  newItem.follows = document.getElementById('popupFollows').value.split(',').map(s => s.trim()).filter(s => s);
-  newItem.precedes = document.getElementById('popupPrecedes').value.split(',').map(s => s.trim()).filter(s => s);
-  newItem.relates = document.getElementById('popupRelates').value.split(',').map(s => s.trim()).filter(s => s);
+  // Dependencies
+  if (itemData.follows && itemData.follows.length) newItem.follows = itemData.follows;
+  if (itemData.precedes && itemData.precedes.length) newItem.precedes = itemData.precedes;
+  if (itemData.relates && itemData.relates.length) newItem.relates = itemData.relates;
 
   // Update or add item
-  if (currentItem) {
-    const idx = agendaData.items.findIndex(i => i.id === currentItem.id);
-    if (idx >= 0) agendaData.items[idx] = { ...currentItem, ...newItem };
+  if (originalItem) {
+    const idx = agendaData.items.findIndex(i => i.id === originalItem.id);
+    if (idx >= 0) agendaData.items[idx] = { ...originalItem, ...newItem };
   } else {
     agendaData.items.push(newItem);
   }
 
   dirty = true;
   updateSaveButton();
-  closePopup();
   renderFlow();
-}
-
-function generateId() {
-  // Simple snowflake-like ID
-  return String(Date.now()) + String(Math.floor(Math.random() * 10000)).padStart(4, '0');
 }
 
 function updateSaveButton() {

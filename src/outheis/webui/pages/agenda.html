@@ -268,6 +268,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
   outline-offset:1px;
 }
 </style>
+<link rel="stylesheet" href="/assets/css/agenda-popup.css">
 </head>
 <body>
 <div id="app">
@@ -320,6 +321,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
 </div>
 <div id="tt"></div>
 
+<script src="/assets/js/agenda-popup.js"></script>
 <script>
 let PEAK_AMP=0.9;
 let DECAY=10.0;
@@ -2073,245 +2075,143 @@ function makeDepField(parentEl, label, initialIds, getExcludeId){
 }
 
 function showCreatePopup(initialDate){
-  if(activePopup){ activePopup.remove(); activePopup=null; }
-  const overlay=document.createElement('div');
-  overlay.className='cp-overlay';
-  const pop=document.createElement('div');
-  pop.className='time-popup';
-  pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;width:280px;';
-  const facetOpts=FACETS.filter(f=>f.id!=='none').map(f=>`<option value="${f.id}">${f.label||f.id}</option>`).join('');
-  pop.innerHTML=`
-    <div class="popup-close" title="${I18N.tp_cancel}">×</div>
-    <div style="font-size:11px;letter-spacing:.07em;color:var(--text2);margin-bottom:4px;">${I18N.cp_heading.toUpperCase()}</div>
-    <div class="cp-field"><label>${I18N.cp_title}</label><input type="text" id="cp-title"></div>
-    <div class="cp-row">
-      <div class="cp-field" style="flex:1"><label>${I18N.cp_start}</label><input type="time" id="cp-start" step="60"></div>
-      <div class="cp-field" style="flex:1"><label>${I18N.cp_end}</label><input type="time" id="cp-end" step="900"></div>
-    </div>
-    <div class="cp-row">
-      <div class="cp-field" style="flex:1"><label>${I18N.cp_day}</label><input type="date" id="cp-day" style="width:100%;"></div>
-      <div class="cp-field" style="flex:1"><label>${I18N.cp_day2}</label><input type="date" id="cp-day2" style="width:100%;"></div>
-    </div>
-    <div class="cp-row">
-      <div class="cp-field" style="flex:1"><label>${I18N.cp_facet}</label><select id="cp-facet" style="width:100%;">${facetOpts}</select></div>
-      <div class="cp-field" style="flex:1">
-        <label>${I18N.cp_size}</label>
-        <div class="cp-radios">
-          <label><input type="radio" name="cp-size" value="s">S</label>
-          <label><input type="radio" name="cp-size" value="m" checked>M</label>
-          <label><input type="radio" name="cp-size" value="l">L</label>
-        </div>
-      </div>
-      <span class="ep-dmt-ph"></span>
-    </div>
-    <div class="cp-field"><label>${I18N.tp_tags}</label><input type="text" id="cp-tags"></div>
-    <div class="tp-row">
-      <button class="tp-ok" id="cp-ok">${I18N.cp_ok}</button>
-      <button id="cp-cancel">${I18N.tp_cancel}</button>
-    </div>`;
-  document.body.appendChild(overlay);
-  document.body.appendChild(pop);
-  activePopup=pop;
-  /* preset date if provided, otherwise default to today */
-  const dateInput=pop.querySelector('#cp-day');
-  if(initialDate){
-    dateInput.value=initialDate;
-  }else{
-    dateInput.value=localDateStr(today0());
-  }
-  const close=()=>{ overlay.remove(); pop.remove(); activePopup=null; };
-  overlay.onclick=close;
-  pop.querySelector('.popup-close').onclick=close;
-  pop.querySelector('#cp-cancel').onclick=close;
-  pop.querySelector('#cp-ok').onclick=()=>{
-    const title=pop.querySelector('#cp-title').value.trim();
-    if(!title){ const inp=pop.querySelector('#cp-title'); inp.focus(); inp.style.outline='2px solid #c44'; setTimeout(()=>{inp.style.outline='';},1500); return; }
-    const facet=pop.querySelector('#cp-facet').value;
-    const d1=pop.querySelector('#cp-day').value;
-    const d2=pop.querySelector('#cp-day2').value;
-    const t1=pop.querySelector('#cp-start').value;
-    const t2=pop.querySelector('#cp-end').value;
-    const tagsRaw=pop.querySelector('#cp-tags').value.trim();
-    const extraTags=tagsRaw?tagsRaw.split(/[\s,]+/).map(t=>t.trim()).filter(t=>t.startsWith('#')):[];
-    const baseDate=d1||(localDateStr(today0()));
-    const day=Math.round((new Date(baseDate+'T00:00:00')-today0())/864e5);
-    /* build tags */
-    const tags=[`#date-${baseDate}`];
-    if(d2&&d2!==d1) tags.push(`#date-${d2}`);
-    if(t1){ tags.push(d2&&d2!==d1?`#time-${t1}-${t2||t1}`:(t2?`#time-${t1}-${t2}`:`#time-${t1}`)); }
-    if(facet&&facet!=='none') tags.push(`#facet-${facet}`);
-    const size=pop.querySelector('input[name=cp-size]:checked').value;
-    if(size&&size!=='m') tags.push(`#size-${size}`);
-    tags.push(...extraTags);
-    /* derive fields from tags for EVENTS internal format */
-    const f=tagsToItemFields(tags);
-    const newEv={day,type:f.type,facet:f.facet,title,tags,_id:'new-'+Date.now(),
-      layer:f.layer,note:null,density:f.density,size:f.size,duration:f.duration,
-      start:f.start,end:f.end,done:null};
-    EVENTS.push(newEv);
-    close(); markDirty(); renderStream(); saveAgenda();
-  };
-  setTimeout(()=>pop.querySelector('#cp-title').focus(),0);
+  // Use shared AgendaPopup component
+  AgendaPopup.show({
+    item: null,
+    allItems: EVENTS,
+    facets: FACETS,
+    initialDate: initialDate || localDateStr(today0()),
+    onSave: (itemData, originalItem) => {
+      // Handle save for create
+      const d1 = itemData.date || localDateStr(today0());
+      const d2 = itemData.date2;
+      const t1 = itemData.start;
+      const t2 = itemData.end;
+      const extraTags = itemData.extraTags || [];
+
+      // Build tags
+      const tags = [`#date-${d1}`];
+      if (d2 && d2 !== d1) tags.push(`#date-${d2}`);
+      if (t1) {
+        tags.push(d2 && d2 !== d1 ? `#time-${t1}-${t2||t1}` : (t2 ? `#time-${t1}-${t2}` : `#time-${t1}`));
+      }
+      if (itemData.facet && itemData.facet !== 'none') tags.push(`#facet-${itemData.facet}`);
+      if (itemData.size && itemData.size !== 'm') tags.push(`#size-${itemData.size}`);
+      tags.push(...extraTags);
+
+      // Derive fields from tags for EVENTS internal format
+      const f = tagsToItemFields(tags);
+      const day = Math.round((new Date(d1+'T00:00:00')-today0())/864e5);
+      const newEv = {
+        day, type: f.type, facet: f.facet, title: itemData.title, tags,
+        _id: 'new-'+Date.now(), layer: f.layer, note: null,
+        density: f.density, size: f.size, duration: f.duration,
+        start: f.start, end: f.end, done: null,
+        follows: itemData.follows, precedes: itemData.precedes, relates: itemData.relates
+      };
+      EVENTS.push(newEv);
+      markDirty(); renderStream(); saveAgenda();
+    }
+  });
 }
 
 function showEditPopup(ev){
   console.log('[edit] showEditPopup called for:', ev.title, 'ev._id:', ev._id);
-  if(activePopup){ activePopup.remove(); activePopup=null; }
-  const overlay=document.createElement('div');
-  overlay.className='cp-overlay';
-  const pop=document.createElement('div');
-  pop.className='time-popup';
-  pop.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;width:280px;';
-  const f=tagsToItemFields(ev.tags||[]);
-  const dateStr=f.dates.length>=1?f.dates[0]:localDateStr(addDays(today0(),ev.day??0));
-  const date2Str=f.dates.length>=2?f.dates[1]:'';
-  const facetOpts=FACETS.filter(fc=>fc.id!=='none').map(fc=>
-    `<option value="${fc.id}"${ev.facet===fc.id?' selected':''}>${fc.label||fc.id}</option>`
-  ).join('');
-  const extraTags=(ev.tags||[]).join(' ');
-  const isRecurring=(ev.tags||[]).some(t=>t.startsWith('#recurring-'));
-  pop.innerHTML=`
-    <div class="popup-close" title="${I18N.tp_cancel}">×</div>
-    <div style="font-size:11px;letter-spacing:.07em;color:var(--text2);margin-bottom:4px;">${I18N.ep_heading.toUpperCase()}${isRecurring?' (recurring)':''}</div>
-    <div class="cp-field"><label>${I18N.cp_title}</label><textarea id="ep-title" rows="3" style="width:100%;resize:vertical;font-family:inherit;font-size:inherit;padding:4px 6px;box-sizing:border-box;">${escapeAttr(ev.title||'')}</textarea></div>
-    <div class="ep-time-wrap">
-      <div class="cp-row">
-        <div class="cp-field" style="flex:1"><label>${I18N.cp_start}</label><input type="time" id="ep-start" step="60" value="${escapeAttr(f.t1||f.duration||'')}"></div>
-        <div class="cp-field" style="flex:1"><label>${I18N.cp_end}</label><input type="time" id="ep-end" step="900" value="${escapeAttr(f.t2||'')}"></div>
-        <button class="ep-dmt" id="ep-clear-time" type="button" title="Zeit löschen">×</button>
-      </div>
-      <div class="cp-row">
-        <div class="cp-field" style="flex:1"><label>${I18N.cp_day}</label><input type="date" id="ep-day" style="width:100%;" value="${escapeAttr(dateStr)}"></div>
-        <div class="cp-field" style="flex:1"><label>${I18N.cp_day2}</label><input type="date" id="ep-day2" style="width:100%;" value="${escapeAttr(date2Str)}"></div>
-        <button class="ep-dmt" id="ep-clear-date" type="button" title="Enddatum löschen">×</button>
-      </div>
-    </div>
-    <div class="cp-row">
-      <div class="cp-field" style="flex:1"><label>${I18N.cp_facet}</label><select id="ep-facet" style="width:100%;">${facetOpts}</select></div>
-      <div class="cp-field" style="flex:1">
-        <label>${I18N.cp_size}</label>
-        <div class="cp-radios">
-          <label><input type="radio" name="ep-size" value="s"${ev.size==='s'?' checked':''}>S</label>
-          <label><input type="radio" name="ep-size" value="m"${ev.size!=='s'&&ev.size!=='l'?' checked':''}>M</label>
-          <label><input type="radio" name="ep-size" value="l"${ev.size==='l'?' checked':''}>L</label>
-        </div>
-      </div>
-      <span class="ep-dmt-ph"></span>
-    </div>
-    <div class="cp-field"><label>${I18N.tp_tags}</label><input type="text" id="ep-tags" value="${escapeAttr(extraTags)}"></div>
-    <div id="ep-dep-fields"></div>
-    <div class="tp-row">
-      <button class="tp-ok" id="ep-ok">${I18N.ep_ok}</button>
-      <button id="ep-done" style="color:#2a7;border-color:#2a7;">${I18N.ep_done}</button>
-      <button id="ep-cancel">${I18N.tp_cancel}</button>
-      <button id="ep-delete" style="color:#c44;border-color:#c44;margin-left:auto;">${I18N.ep_delete}</button>
-    </div>`;
-  document.body.appendChild(overlay);
-  document.body.appendChild(pop);
-  activePopup=pop;
-  const depEl=pop.querySelector('#ep-dep-fields');
-  const followsField=makeDepField(depEl, I18N.ep_follows, ev.follows, ()=>ev._id);
-  const precedesField=makeDepField(depEl, I18N.ep_precedes, ev.precedes, ()=>ev._id);
-  const relatesField=makeDepField(depEl, I18N.ep_relates, ev.relates, ()=>ev._id);
-  const close=()=>{ overlay.remove(); pop.remove(); activePopup=null; };
-  overlay.onclick=close;
-  pop.querySelector('.popup-close').onclick=close;
-  pop.querySelector('#ep-cancel').onclick=close;
-  pop.querySelector('#ep-delete').onclick=()=>{
-    if(!confirm(I18N.ep_delete_confirm)) return;
-    close();
-    const idx=evIdx(ev);
-    if(idx>=0){
-      if(ev._id!=null) removeItemRelations(ev._id);
-      EVENTS.splice(idx,1);
-    }
-    markDirty(); renderStream(); saveAgenda();
-  };
-  const okBtn=pop.querySelector('#ep-ok');
-  console.log('[edit] OK button found:', !!okBtn);
-  pop.querySelector('#ep-clear-time').onclick=()=>{
-    pop.querySelector('#ep-start').value='';
-    pop.querySelector('#ep-end').value='';
-  };
-  pop.querySelector('#ep-clear-date').onclick=()=>{
-    pop.querySelector('#ep-day').value='';
-    pop.querySelector('#ep-day2').value='';
-  };
-  pop.querySelector('#ep-done').onclick=()=>{
-    const existing=pop.querySelector('#ep-done-note-wrap');
-    if(existing){ existing.remove(); return; }
-    const wrap=document.createElement('div');
-    wrap.id='ep-done-note-wrap';
-    wrap.style.cssText='margin-top:8px;display:flex;flex-direction:column;gap:6px;';
-    wrap.innerHTML=`<textarea id="ep-done-note" rows="2" placeholder="Kommentar (optional)" style="width:100%;resize:vertical;font-family:inherit;font-size:inherit;padding:4px 6px;box-sizing:border-box;">${escapeAttr(ev.note||'')}</textarea>`+
-      `<div style="display:flex;gap:6px;"><button class="tp-ok" id="ep-done-confirm" style="color:#2a7;border-color:#2a7;">✓ Erledigt</button><button id="ep-done-cancel-note" class="btn">Abbruch</button></div>`;
-    pop.querySelector('.tp-row').insertAdjacentElement('afterend', wrap);
-    wrap.querySelector('#ep-done-cancel-note').onclick=()=>wrap.remove();
-    wrap.querySelector('#ep-done-confirm').onclick=()=>{
-      const note=wrap.querySelector('#ep-done-note').value.trim()||null;
-      close();
-      const done=localDateStr(today0());
-      const newTags=[...(ev.tags||[]).filter(t=>!t.startsWith('#done-')),`#done-${done}`];
-      ev.done=done; ev.tags=newTags; if(note!=null) ev.note=note;
-      const idx=evIdx(ev);
-      if(idx>=0){
-        if(ev._id!=null) removeItemRelations(ev._id);
-        EVENTS[idx]={...EVENTS[idx],done,tags:newTags,...(note!=null?{note}:{})};
+
+  // Convert item to popup format
+  const f = tagsToItemFields(ev.tags || []);
+  const dateStr = f.dates.length >= 1 ? f.dates[0] : localDateStr(addDays(today0(), ev.day ?? 0));
+  const date2Str = f.dates.length >= 2 ? f.dates[1] : '';
+  const extraTags = (ev.tags || []).join(' ');
+
+  AgendaPopup.show({
+    item: {
+      id: ev._id,
+      title: ev.title,
+      date: dateStr,
+      date2: date2Str,
+      start: f.t1 || f.duration || '',
+      end: f.t2 || '',
+      facet: ev.facet,
+      size: ev.size,
+      tags: extraTags,
+      follows: ev.follows || [],
+      precedes: ev.precedes || [],
+      relates: ev.relates || []
+    },
+    allItems: EVENTS,
+    facets: FACETS,
+    onSave: (itemData, originalItem) => {
+      // Handle delete
+      if (itemData === null) {
+        const idx = evIdx(ev);
+        if (idx >= 0) {
+          if (ev._id != null) removeItemRelations(ev._id);
+          EVENTS.splice(idx, 1);
+        }
+        markDirty(); renderStream(); saveAgenda();
+        return;
+      }
+
+      // Handle save
+      const d1 = itemData.date || dateStr;
+      const d2 = itemData.date2;
+      const t1 = itemData.start;
+      const t2 = itemData.end;
+      const extraTagsNew = itemData.extraTags || [];
+
+      // Build tags
+      const tags = [`#date-${d1}`];
+      if (d2 && d2 !== d1) tags.push(`#date-${d2}`);
+      if (t1) {
+        tags.push(d2 && d2 !== d1 ? `#time-${t1}-${t2||t1}` : (t2 ? `#time-${t1}-${t2}` : `#time-${t1}`));
+      }
+      if (itemData.facet && itemData.facet !== 'none') tags.push(`#facet-${itemData.facet}`);
+      if (itemData.size && itemData.size !== 'm') tags.push(`#size-${itemData.size}`);
+      tags.push(...extraTagsNew);
+
+      const f2 = tagsToItemFields(tags);
+      const followsNew = itemData.follows || [];
+      const precedesNew = itemData.precedes || [];
+      const relatesNew = itemData.relates || [];
+
+      const idx = evIdx(ev);
+      const updateId = ev._id != null ? String(ev._id) : null;
+      let targetIdx = idx;
+      if (targetIdx < 0 && updateId != null) {
+        targetIdx = EVENTS.findIndex(e => String(e._id) === updateId);
+      }
+
+      if (targetIdx >= 0) {
+        console.log('[edit] found item at index', targetIdx, 'title:', EVENTS[targetIdx].title);
+        const oldFollows = EVENTS[targetIdx].follows;
+        const oldPrecedes = EVENTS[targetIdx].precedes;
+        const oldRelates = EVENTS[targetIdx].relates;
+        const day = Math.round((new Date(d1+'T00:00:00')-today0())/864e5);
+        const updated = {
+          ...EVENTS[targetIdx],
+          title: itemData.title,
+          day,
+          type: f2.type,
+          start: f2.start,
+          end: f2.end,
+          facet: f2.facet,
+          size: f2.size,
+          duration: f2.duration,
+          tags,
+          follows: followsNew.length ? followsNew : null,
+          precedes: precedesNew.length ? precedesNew : null,
+          relates: relatesNew.length ? relatesNew : null
+        };
+        EVENTS[targetIdx] = updated;
+        console.log('[edit] updated item follows:', EVENTS[targetIdx].follows, 'precedes:', EVENTS[targetIdx].precedes, 'relates:', EVENTS[targetIdx].relates);
+        Object.assign(ev, updated);
+        if (updateId != null) syncRelations(updateId, oldFollows, oldPrecedes, oldRelates, followsNew, precedesNew, relatesNew);
       }
       markDirty(); renderStream(); saveAgenda();
-    };
-  };
-  okBtn.onclick=()=>{
-    console.log('[edit] OK button clicked');
-    const title=pop.querySelector('#ep-title').value.trim();
-    if(!title){ const inp=pop.querySelector('#ep-title'); inp.focus(); inp.style.outline='2px solid #c44'; setTimeout(()=>{inp.style.outline='';},1500); return; }
-    const d1=pop.querySelector('#ep-day').value;
-    const d2=pop.querySelector('#ep-day2').value;
-    const t1=pop.querySelector('#ep-start').value;
-    const t2=pop.querySelector('#ep-end').value;
-    const facet=pop.querySelector('#ep-facet').value;
-    const size=pop.querySelector('input[name=ep-size]:checked').value;
-    const extraTagsNew=parseTagString(pop.querySelector('#ep-tags').value).filter(t=>!isStructuralTag(t));
-    const baseDate=d1||dateStr;
-    const day=Math.round((new Date(baseDate+'T00:00:00')-today0())/864e5);
-    const tags=[`#date-${baseDate}`];
-    if(d2&&d2!==d1) tags.push(`#date-${d2}`);
-    if(t1){ tags.push(d2&&d2!==d1?`#time-${t1}-${t2||t1}`:(t2?`#time-${t1}-${t2}`:`#time-${t1}`)); }
-    if(facet&&facet!=='none') tags.push(`#facet-${facet}`);
-    if(size&&size!=='m') tags.push(`#size-${size}`);
-    tags.push(...extraTagsNew);
-    const f2=tagsToItemFields(tags);
-    const followsNew=followsField.getIds();
-    const precedesNew=precedesField.getIds();
-    const relatesNew=relatesField.getIds();
-    console.log('[edit] followsNew:', followsNew, 'precedesNew:', precedesNew, 'relatesNew:', relatesNew);
-    const idx=evIdx(ev);
-    const updateId=ev._id!=null?String(ev._id):null;
-    /* find by index or by _id as fallback */
-    let targetIdx=idx;
-    if(targetIdx<0 && updateId!=null){
-      targetIdx=EVENTS.findIndex(e=>String(e._id)===updateId);
-    }
-    if(targetIdx>=0){
-      console.log('[edit] found item at index', targetIdx, 'title:', EVENTS[targetIdx].title);
-      const oldFollows=EVENTS[targetIdx].follows;
-      const oldPrecedes=EVENTS[targetIdx].precedes;
-      const oldRelates=EVENTS[targetIdx].relates;
-      const updated={...EVENTS[targetIdx],title,day,type:f2.type,
-        start:f2.start,end:f2.end,facet:f2.facet,size:f2.size,duration:f2.duration,tags,
-        follows:followsNew.length?followsNew:null,
-        precedes:precedesNew.length?precedesNew:null,
-        relates:relatesNew.length?relatesNew:null};
-      EVENTS[targetIdx]=updated;
-      console.log('[edit] updated item follows:', EVENTS[targetIdx].follows, 'precedes:', EVENTS[targetIdx].precedes, 'relates:', EVENTS[targetIdx].relates);
-      /* sync closure ref so re-opening popup shows fresh values */
-      Object.assign(ev,updated);
-      /* sync bidirectional relations */
-      if(updateId!=null) syncRelations(updateId,oldFollows,oldPrecedes,oldRelates,followsNew,precedesNew,relatesNew);
-    }
-    close(); markDirty(); renderStream(); saveAgenda();
-  };
-  setTimeout(()=>pop.querySelector('#ep-title').focus(),0);
+    },
+    getExcludeId: () => ev._id
+  });
 }
 
 function render(){

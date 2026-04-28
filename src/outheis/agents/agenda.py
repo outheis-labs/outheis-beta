@@ -7,7 +7,7 @@ Fine-grained rules, close to the user.
 Works on vault/Agenda/:
 - Agenda.md — Today's structure
 - Exchange.md — Async communication, quick inputs, decision basis for open issues
-- Shadow.md — Internal index (agent-owned)
+- agenda.json — Single source of truth for all items (via webui)
 """
 
 from __future__ import annotations
@@ -62,7 +62,7 @@ def get_daily_template() -> str | None:
 
 
 def next_recurring_occurrence(current_date: "date", tag: str) -> "date | None":
-    """Compute the next occurrence date for a recurring Shadow.md entry."""
+    """Compute the next occurrence date for a recurring agenda.json entry."""
     from datetime import timedelta as _td
     from outheis.core.i18n import RECURRING_WEEKDAY_CODES
 
@@ -219,13 +219,13 @@ class AgendaAgent(BaseAgent):
             "",
             "## Available Tools",
             "- get_daily() — read today's daily structure (returns Agenda.md verbatim)",
-            "- write_file(file, content) — write file (agenda/daily/exchange/shadow)",
+            "- write_file(file, content) — write file (agenda/daily/exchange)",
             "- append_file(file, content) — append to file (exchange)",
             "- load_skill(topic) — load detailed skills if needed",
             "",
             "## Principles",
             "- Agenda.md = the single daily file: ⛅ header, 📌 Recurring, 📅 Today, 🗓️ This Week, 💶 Cashflow.",
-            "- 📅 Today and 🗓️ This Week are filled from Shadow.md — only what is actually there, nothing invented.",
+            "- 📅 Today and 🗓️ This Week are filled from agenda.json — only what is actually there, nothing invented.",
             "  Every genuinely open item must appear — do not omit real tasks or reminders.",
             "  Filter out (not open items): completed (✓), `#done-*` entries, pure log entries, single-day public holidays (these go in 📅 Today as bold header per rules), duplicates.",
             "  Multi-day school holidays are NOT filtered — show as an info line in 📅 Today (e.g. 'Easter holidays until 10.04.') and in 🗓️ This Week if the period overlaps.",
@@ -234,8 +234,8 @@ class AgendaAgent(BaseAgent):
             "  2. Items due exactly today",
             "  3. Items with NO date at all",
             "  **Any item with a date in the future — even tomorrow — does NOT go in Today.**",
-            "  Future-dated items belong in 🗓️ This Week (if within the current week) or stay in Shadow.md only.",
-            "  #action-required with a future date → This Week or Shadow.md, never Today.",
+            "  Future-dated items stay in agenda.json and appear in 🗓️ This Week (if within the current week).",
+            "  #action-required with a future date → This Week, never Today.",
             "  **Exception — Today fallback:** If 📅 Today has fewer than 5 items after exhausting all items that qualify via the above rules ",
             "  (i.e. no more overdue, due-today, or undated items remain), ",
             "  fill it up to 5 by pulling in the soonest upcoming #action-required items (ascending by date), clearly marked with their date.",
@@ -273,16 +273,13 @@ class AgendaAgent(BaseAgent):
             f"   Keywords: {completion_kws}.",
             "   Action:",
             "   a) Remove the item AND the `>` line entirely from Agenda.md.",
-            "   b) In Shadow.md, find the matching entry and prepend `#done-YYYY-MM-DD` (today's date)",
-            "      to its tag line (first line of the two-line entry). Write the updated Shadow.md via",
-            "      write_file(file='shadow', content='...'). This prevents the item from reappearing",
-            "      in the next review while preserving a traceable completion record.",
-            "      Example: `#date-2026-04-10 #action-required` → `#done-2026-04-14 #date-2026-04-10 #action-required`",
-            "      The Shadow.md entry's source file is identifiable from its `<!-- BEGIN: filename.md -->`",
-            "      section marker. Note it — you'll need it for step c.",
+            "   b) In agenda.json, find the matching entry by ID or title and add `#done-YYYY-MM-DD` (today's date)",
+            "      to its tags array. Use write_file(file='agenda', content='...') to update agenda.json.",
+            "      This prevents the item from reappearing in the next review.",
+            "      Example: tags `['#date-2026-04-10', '#action-required']` → `['#done-2026-04-14', '#date-2026-04-10', '#action-required']`",
             "   c) Call ask_zeno: 'Mark this item as done in vault file [filename]: [item description].",
             "      Find the line in that file and prepend #done-YYYY-MM-DD to it.'",
-            "      Skip step c if the item has no traceable source file in Shadow.md.",
+            "      Skip step c if the item has no traceable source file.",
             "   Note: a `>` completion annotation IS the explicit user consent required by the 'never remove'",
             "   rule. It is not automatic removal — the user requested it. Remove without hesitation.",
             "",
@@ -296,21 +293,15 @@ class AgendaAgent(BaseAgent):
             "      'end of May' → last day of that month, 'Thursday' → next Thursday,",
             "      'in two weeks' → today + 14 days, 'mid-April' → 15th of that month.",
             "      Always resolve to a concrete ISO date — never leave it as a relative expression.",
-            "   c) Find the item's entry in Shadow.md (match by description text).",
-            "      In the tag line (the line starting with `#date-` or `#action-required`),",
-            "      replace the existing `#date-YYYY-MM-DD` tag with `#date-[target date ISO]`.",
-            "      Also remove `#action-required` from the tag line — a postponed item is no longer urgent.",
-            "      If there is no `#date-` tag, prepend `#date-[target date ISO]` to the tag line.",
-            "      Write the complete updated Shadow.md via write_file(file='shadow', content='...').",
-            "      Note the source file from the `<!-- BEGIN: filename.md -->` section marker.",
+            "   c) Find the item in agenda.json (match by ID or title).",
+            "      Update its `#date-YYYY-MM-DD` tag to `#date-[target date ISO]`.",
+            "      Use write_file(file='agenda', content='...') to update agenda.json.",
             "   d) Call ask_zeno ONCE PER ITEM (do NOT batch multiple items into one call):",
             "      'In vault file [filename]: find the entry for [item description].",
             "      Replace its #date-YYYY-MM-DD tag with #date-[target date ISO].",
-            "      Remove #action-required from the tag line.",
+            "      Write the file.'",
             "      Write the updated file.'",
-            "      Use the filename from the Shadow.md `<!-- BEGIN: filename.md -->` marker.",
             "      One ask_zeno call per item — never batch. This ensures each update is applied.",
-            "      Without this update, shadow_scan will restore the old date on the next vault re-read.",
             "",
             "**3. Correction / clarification** — the user is correcting wording, facts, or context.",
             "   Identified by: explanation, question, contradiction, or alternative phrasing.",
@@ -322,8 +313,8 @@ class AgendaAgent(BaseAgent):
             "   Determine whether the item contains any date reference — a weekday, a relative expression (tomorrow, next week, in 3 weeks, early May, end of summer holidays, second public holiday), a calendar date, or a `#date-YYYY-MM-DD` tag — and resolve it to a concrete date:",
             "   - No date reference → keep in 📅 Today exactly as written. Do not move, do not remove.",
             "   - Date resolves to today → keep in 📅 Today exactly as written.",
-            "   - Date resolves to later this week → remove from 📅 Today. Include in 🗓️ This Week if the item is relevant enough; otherwise leave it in Shadow.md.",
-            "   - Date resolves to beyond this week, or item has a `#date-YYYY-MM-DD` tag beyond this week → add to Shadow.md and remove from Agenda.md. It will reappear when due.",
+            "   - Date resolves to later this week → remove from 📅 Today. Include in 🗓️ This Week if the item is relevant enough; otherwise leave it in agenda.json only.",
+            "   - Date resolves to beyond this week → keep in agenda.json only. It will reappear in Agenda.md when due.",
             "   A time-of-day alone (e.g. '10:00') is not a date reference. Never move an item based on time alone.",
             "",
             "**After writing:** no `>` lines must remain in Agenda.md.",
@@ -331,7 +322,7 @@ class AgendaAgent(BaseAgent):
             "## Direct modification commands (no `>` annotation)",
             "When the user sends a direct command without a `>` line — e.g. 'mark Zazen done',",
             "'check off X', 'abhaken', 'remove X from today' — treat it as a binding instruction:",
-            "- Locate the item in Agenda.md (or Shadow.md if relevant).",
+            "- Locate the item in Agenda.md (or agenda.json if relevant).",
             "- Apply the change (check off, remove, move) via write_file.",
             "- Confirm briefly what was done.",
             "Do NOT call get_daily() for these requests. Apply the change directly.",
@@ -342,23 +333,24 @@ class AgendaAgent(BaseAgent):
             "  If a request mentions a non-existent section, ignore the section name and use the correct placement rule below.",
             "- **NEVER place in the Recurring section (📌)** unless the user explicitly names it.",
             "  Recurring is for recurring habits only — not for tasks or reminders.",
-            "- **No date determinable** → add plain line to Today (📅) only. No Shadow.md entry.",
-            "- **Date = today** → add plain line to Today (📅) AND a tagged entry to Shadow.md.",
-            "- **Date = later this week** → add plain line to This Week (🗓️) AND a tagged entry to Shadow.md.",
-            "- **Date = beyond this week** → add tagged entry to Shadow.md only. It will appear in Agenda.md when due.",
+            "- **No date determinable** → add plain line to Today (📅) and add item to agenda.json.",
+            "- **Date = today** → add plain line to Today (📅). Item already in agenda.json.",
+            "- **Date = later this week** → add plain line to This Week (🗓️). Item in agenda.json.",
+            "- **Date = beyond this week** → add to agenda.json only. It will appear in Agenda.md when due.",
             "- **Weekday named without year context** → resolve to the next occurrence from today and apply the rule above.",
             "- **Recurring items** (e.g. 'every Wednesday', 'weekly', 'jeden Mittwoch'):",
-            "  → add a `#recurring-TYPE` entry to Shadow.md only. Do NOT add to Agenda.md.",
+            "  → add to agenda.json with `#recurring-TYPE` tag. Do NOT add to Agenda.md.",
             "  → include `#date-YYYY-MM-DD` (next occurrence) alongside the recurring tag.",
             "  → Recurring tag formats: #recurring-daily | #recurring-weekly | #recurring-mon-wed-thu |",
             "     #recurring-monthly | #recurring-monthly-10-22 | #recurring-yearly.",
             "  → Weekday codes ALWAYS canonical ISO English: mon tue wed thu fri sat sun.",
             "  → Do NOT add a checkbox — recurring items in Agenda.md are plain lines.",
             "",
-            "Shadow.md entry format (mandatory for all writes):",
-            "  Line 1: #date-YYYY-MM-DD   (or #action-required, or #date-YYYY-MM-DD #recurring-TYPE)",
-            "  Line 2: plain description",
-            "  Blank line between entries. Never put tag and description on the same line.",
+            "agenda.json item format (mandatory for all writes):",
+            "  Use write_file(file='agenda', content='...') to update agenda.json.",
+            "  Each item has: id, title, tags array, source, done (if completed).",
+            "  Tags format: #date-YYYY-MM-DD, #time-HH:MM-HH:MM, #facet-NAME, #size-S|M|L,",
+            "  #action-required, #recurring-TYPE, #done-YYYY-MM-DD.",
             "",
             "## Memory proposals from annotations",
             "After processing a `>` annotation, call propose_memory if the annotation reveals",
@@ -400,8 +392,7 @@ class AgendaAgent(BaseAgent):
         Load all agenda files as context.
 
         Context is provided upfront, not fetched via tools.
-        If Shadow.md is missing or sparse, triggers a background shadow_scan
-        via the dispatcher message queue (fire-and-forget).
+        agenda.json is the single source of truth for items.
         """
         agenda_dir = get_agenda_dir()
         if not agenda_dir:
@@ -476,7 +467,7 @@ class AgendaAgent(BaseAgent):
                 ),
                 "input_schema": {"type": "object", "properties": {}, "required": []},
             },
-            tool_write_file_name(["agenda", "daily", "exchange", "shadow", "backlog"]),
+            tool_write_file_name(["agenda", "daily", "exchange"]),
             tool_append_file_name(["exchange"]),
             tool_load_skill(
                 description="Load detailed skill instructions (if needed)",
@@ -740,10 +731,10 @@ class AgendaAgent(BaseAgent):
 
     def _today_needs_refill(self, agenda_dir: Path, agenda_text: str) -> bool:
         """
-        Return True if Today is below capacity AND Shadow has items that may qualify.
+        Return True if Today is below capacity AND agenda.json has items that may qualify.
 
         Structural check only — counts lines and scans date tags.
-        The LLM decides which Shadow items to actually add (semantic).
+        The LLM decides which agenda.json items to actually add (semantic).
         """
         import re
         TODAY_RE = re.compile(r'^##\s+📅')
@@ -912,7 +903,44 @@ class AgendaAgent(BaseAgent):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(hashes, indent=2), encoding="utf-8")
 
-        # =========================================================================
+    def _get_interaction_path(self) -> Path:
+        """Get path to last human interaction timestamp."""
+        return get_human_dir() / "cache" / "agenda" / "interaction.json"
+
+    def _get_last_human_interaction(self) -> str | None:
+        """Get timestamp of last human interaction (from dispatcher)."""
+        path = self._get_interaction_path()
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data.get("last_interaction")
+        except Exception:
+            return None
+
+    def _get_last_review_time(self) -> str | None:
+        """Get timestamp of last successful review."""
+        path = self._get_hash_cache_path()
+        if not path.exists():
+            return None
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            return data.get("last_review")
+        except Exception:
+            return None
+
+    def _save_review_time(self) -> None:
+        """Save timestamp of this review."""
+        path = self._get_hash_cache_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+        data["last_review"] = datetime.now().isoformat()
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    # =========================================================================
     # MESSAGE HANDLING
     # =========================================================================
 
@@ -1193,10 +1221,24 @@ class AgendaAgent(BaseAgent):
                     or any(line.startswith(">") for line in exchange_text.splitlines())
                 )
                 if not has_comments:
-                    # Still run if Today is below capacity and Shadow has qualifying items
+                    # Still run if Today is below capacity and agenda.json has qualifying items
                     if not self._today_needs_refill(agenda_dir, daily_text):
-                        print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
-                        return
+                        # Still run if there was a human interaction since last review
+                        last_interaction = self._get_last_human_interaction()
+                        last_review = self._get_last_review_time()
+                        if last_interaction and last_review:
+                            from datetime import datetime as dt
+                            try:
+                                li = dt.fromisoformat(last_interaction)
+                                lr = dt.fromisoformat(last_review)
+                                if li > lr:
+                                    print(f"[{timestamp}] Agenda: human interaction since last review", file=sys.stderr)
+                                    force = True
+                            except Exception:
+                                pass
+                        if not force:
+                            print(f"[{timestamp}] Agenda: no changes, skipping", file=sys.stderr)
+                            return
                 else:
                     comment_trigger = True
 
@@ -1212,14 +1254,14 @@ class AgendaAgent(BaseAgent):
             context = "User comments detected in Agenda.md — please process."
         elif self._today_needs_refill(agenda_dir, daily_text):
             context = (
-                "Today is below capacity and Shadow has qualifying items. "
-                "Add candidates from Shadow.md to fill available slots in Today."
+                "Today is below capacity and agenda.json has qualifying items. "
+                "Add candidates from agenda.json to fill available slots in Today."
             )
         else:
             context = (
                 "Changes detected in agenda files. "
                 "Items may have been completed or deferred — check if 'Today' has capacity "
-                "and pull additional candidates from Shadow.md to fill any freed slots."
+                "and pull additional candidates from agenda.json to fill any freed slots."
             )
 
         # Read current Agenda.md — stays on disk untouched until LLM writes the new version.
@@ -1254,7 +1296,7 @@ class AgendaAgent(BaseAgent):
             print("[done-logger] pre-review: no '>' annotations in Agenda.md", file=sys.stderr)
         # --- DONE-LOGGER END ---
 
-        # Step 2 — LLM fills content from Shadow.md and processes Exchange/comments.
+        # Step 2 — LLM fills content from agenda.json and processes Exchange/comments.
         has_comments = any(line.startswith(">") for line in pre_scaffold_content.splitlines())
 
         today_iso = date.today().isoformat()
@@ -1275,35 +1317,32 @@ class AgendaAgent(BaseAgent):
             f"Today: {today_iso}. This-week window: {today_iso} to {week_iso}."
             f"{pre_content_block}"
             f"{scaffold_block}\n\n"
-            "Shadow.md is also in your context above. Write the complete Agenda.md via write_file.\n"
+            "agenda.json is in your context above. Write the complete Agenda.md via write_file.\n"
             "Do not ask questions.\n\n"
             "Rules:\n"
             "0a. Exchange.md — process before anything else:\n"
             "   Read Exchange.md from context. For each item that has a `>` reply or a checked `[x]` box:\n"
             "   - Treat the `>` line as a binding instruction and execute it now.\n"
             "   - Remove the resolved item from Exchange.md (rewrite via write_file for exchange, keeping unresolved items).\n"
-            "   A `>` reply like 'Show all open Shadow items for qualification' means:\n"
-            "   include ALL open Shadow.md items (without ✓) in Today regardless of date — this is a one-time qualification pass.\n"
             "1. 📅 Today — plain lines, no dashes, no checkboxes. Three phases in order:\n"
             "\n"
             "   Phase A — TAG every untagged item in the current Today (do this before any carry-over decision):\n"
             "     - has explicit day/date reference → assign #date-YYYY-MM-DD.\n"
-            "     - has far-future reference → assign #date-YYYY-MM-DD, mark for Shadow move.\n"
+            "     - has far-future reference → assign #date-YYYY-MM-DD, keep in agenda.json.\n"
             "     - has NO date reference at all → assign #action-required.\n"
             "     Never leave an item untagged — tagging is cato's job, not the user's.\n"
             "     PRESERVE manual edits: if the user changed the text or tags of an item directly in\n"
-            "     Agenda.md, that version is authoritative. Do NOT revert to Shadow.md or vault wording.\n"
-            "     A tag present in Agenda.md but absent in Shadow.md was added by the user — keep it.\n"
+            "     Agenda.md, that version is authoritative. Do NOT revert to agenda.json wording.\n"
             "\n"
             "   Phase B — CARRY OVER from current Today (after Phase A, all items are tagged):\n"
             "     KEEP (mandatory, no exceptions — dropping is data loss):\n"
             "       - #action-required with no date or with overdue date\n"
             "       - any item whose #date is today or in the past\n"
             "     MOVE to This Week: #date within ~7 days (and item was NOT already in Today without a date).\n"
-            "     MOVE to Shadow.md: far future #date — item is preserved, reappears when due.\n"
+            "     Items with far future dates stay in agenda.json and reappear when due.\n"
             "     REMOVE only: explicitly marked done (✓ or #done-*) or has a `>` deferral annotation.\n"
             "\n"
-            "   Phase C — FILL from Shadow.md (items not already in Today):\n"
+            "   Phase C — FILL from agenda.json (items not already in Today):\n"
             "     Mandatory (always add, no cap):\n"
             "       - #action-required with NO date → Today, mandatory.\n"
             "       - #action-required with overdue date → Today, mandatory.\n"
@@ -1311,62 +1350,44 @@ class AgendaAgent(BaseAgent):
             "     No optional fill with future dates: items tagged #date-YYYY-MM-DD where the date\n"
             "       is in the future do NOT appear in Today — they surface when their date arrives.\n"
             "     Dynamic refill: if Today has fewer than 5 items, only undated #action-required items\n"
-            "       from Shadow may fill the gap — never future-dated items.\n"
-            "     Exclude: completed (✓), log entries, single-day public holidays (shown as bold header), duplicates.\n"
+            "       from agenda.json may fill the gap — never future-dated items.\n"
+            "     Exclude: completed (#done-*), log entries, single-day public holidays (shown as bold header), duplicates.\n"
             "     Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
             "2. 🗓️ This Week — plain lines, 7-day window only.\n"
             "   Carry over existing This Week items (unannotated) EXCEPT: any item with #action-required\n"
             "   and NO date must be moved to Today (📅) instead — never left in This Week.\n"
-            "   Add Shadow.md items with #date in the next 7 days (including those with #action-required\n"
+            "   Add agenda.json items with #date in the next 7 days (including those with #action-required\n"
             "   if they have a specific date — undated #action-required always belongs in Today).\n"
             "3. 📌 Recurring — carry over existing checkboxes unchanged.\n"
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"
-            "6. Future items the user entered directly into Agenda.md: if an item has a date beyond this week or is clearly a future appointment, add it to Shadow.md (as a new dated item) and remove it from Agenda.md. It will reappear via Shadow.md when due.\n"
+            "6. Future items the user entered directly into Agenda.md: if an item has a date beyond this week or is clearly a future appointment, add it to agenda.json and remove it from Agenda.md. It will reappear when due.\n"
             "6b. DEDUPLICATION — active identification, not passive filtering:\n"
-            "   Before writing Agenda.md, scan ALL sources (current Today, This Week, Shadow.md, Exchange.md).\n"
+            "   Before writing Agenda.md, scan ALL sources (current Today, This Week, agenda.json, Exchange.md).\n"
             "   Actively identify items that refer to the SAME real-world circumstance, even if phrased differently.\n"
             "   Present only ONE consolidated entry in Agenda.md — the most complete or actionable formulation.\n"
-            "   Multiple vault files may all reference the same circumstance — this is not an error, it is normal.\n"
             "   BACKPROPAGATION — two cases:\n"
             "   Case A — CONSOLIDATION (item appears from multiple sources, not yet done):\n"
-            "     - In Shadow.md: add #cato-consolidated to the tag line of each absorbed entry.\n"
-            "       shadow_scan must skip entries tagged #cato-consolidated when rebuilding sections.\n"
+            "     - In agenda.json: add #cato-consolidated to the tags of each absorbed item.\n"
             "     - Via ask_zeno: add a #cato-consolidated comment to each vault source entry.\n"
             "       Do NOT use #done-* — the item is not finished, it is just represented once in Agenda.\n"
             "   Case B — COMPLETION (item is marked done via > annotation):\n"
-            "     - In Shadow.md: prepend #done-YYYY-MM-DD to the tag line.\n"
+            "     - In agenda.json: add #done-YYYY-MM-DD to the item's tags.\n"
             "     - Via ask_zeno: prepend #done-YYYY-MM-DD in all vault source files.\n"
             "     - If previously #cato-consolidated: replace that tag with #done-YYYY-MM-DD.\n"
             "   Exchange.md entries are deleted on execution — no backpropagation target exists there.\n"
-            "   SCOPE: vault files (via Shadow.md sections), Shadow.md items, Exchange.md items.\n"
-            "\n"
-            "SHADOW.MD FORMAT — mandatory whenever you write Shadow.md (rule 6 or rule 7):\n"
-            "  Every entry is exactly two lines, blank line between entries:\n"
-            "    Line 1 (tags only):  #date-YYYY-MM-DD  OR  #action-required  (plus optional extra tags)\n"
-            "    Line 2 (text only):  plain description, self-contained\n"
-            "  Valid extra tags on line 1: #done-YYYY-MM-DD, #cato-consolidated, #recurring-TYPE\n"
-            "  Entries tagged #cato-consolidated or #done-* are NEVER surfaced to Agenda.md.\n"
-            "  The <!-- BEGIN: filename.md --> / <!-- END: filename.md --> section markers from the\n"
-            "  data agent MUST be preserved exactly — do NOT remove or reformat them.\n"
-            "  NEVER write plain-text lines without a tag line above them.\n"
-            "  NEVER merge the tag and description onto one line.\n"
             "\n"
             "7. Process `>` annotations — BATCH EXECUTION in ONE step:\n"
             "   Interpret annotations by meaning, not by exact wording or language — semantic intent counts.\n"
             "   Identify ALL annotations. Then emit all tool calls in a single response:\n"
-            "   a) ONE write_file(file='shadow') with ALL Shadow.md changes at once:\n"
-            "      - Completion: prepend #done-YYYY-MM-DD to the matching entry's tag line.\n"
-            "      - Postpone: replace #date- tag with new date, remove #action-required.\n"
-            "      - Correction: update the entry text.\n"
-            "   b) ONE ask_zeno per completed item (CRITICAL — without this, shadow_scan will restore\n"
-            "      the item on the next run and erase the #done-* tag):\n"
+            "   a) Update agenda.json items (use write_file which syncs to agenda.json):\n"
+            "      - Completion: add #done-YYYY-MM-DD to the item's tags.\n"
+            "      - Postpone: change #date- tag to new date, remove #action-required.\n"
+            "      - Correction: update the item's title.\n"
+            "   b) ONE ask_zeno per completed item (sync vault files):\n"
             "      'In vault file [filename]: find [item]. Prepend #done-YYYY-MM-DD to its tag line. Write the file.'\n"
-            "      Use the filename from the Shadow.md <!-- BEGIN: filename.md --> marker.\n"
-            "      Skip only if the item has no traceable source file in Shadow.md.\n"
-            "      ALSO ONE ask_zeno per postponed item:\n"
-            "      'In vault file [filename]: find [item]. Replace #date tag with #date-[ISO]. Remove #action-required. Write the file.'\n"
+            "      Skip only if the item has no traceable source file.\n"
             "   c) ONE write_file(file='agenda') with the final Agenda.md — also in the same response.\n"
             "   Do NOT spread these across multiple rounds. All of a), b), c) in one response.\n"
             "   No `>` lines must remain in Agenda.md after this step.\n\n"
@@ -1378,9 +1399,11 @@ class AgendaAgent(BaseAgent):
             # and get_daily triggers a passthrough shortcut that skips write_file.
             self._passthrough_content = None
             tools_no_read = [t for t in self._get_tools() if t["name"] != "get_daily"]
-            result = self._process_with_tools(query, tools_override=tools_no_read)
+            result = self._process_with_tools(query, tools_override=tools_no_read, max_tokens=8192)
             post_hashes = {f: self._compute_hash(agenda_dir / f) for f in filenames}
+            post_hashes["agenda.json"] = self._compute_hash(_agenda_json_path())
             self._save_hashes(post_hashes)
+            self._save_review_time()
             print(f"[{timestamp}] Agenda LLM: {result[:120]}", file=sys.stderr)
         except Exception as e:
             print(f"[{timestamp}] Agenda LLM error: {e}", file=sys.stderr)

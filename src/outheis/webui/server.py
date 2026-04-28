@@ -353,6 +353,8 @@ async def assets(filepath: str):
         ".woff2": "font/woff2",
         ".ttf": "font/ttf",
         ".webmanifest": "application/manifest+json",
+        ".css": "text/css",
+        ".js": "application/javascript",
     }
     if path.exists() and path.suffix in media_types:
         return FileResponse(path, media_type=media_types[path.suffix])

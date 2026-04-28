@@ -875,6 +875,16 @@ class Dispatcher:
             except Exception as e:
                 print(f"Vault scan failed: {e}")
 
+    def _record_human_interaction(self) -> None:
+        """Record timestamp of human interaction for agenda review invalidation."""
+        from outheis.core.config import get_human_dir
+        from datetime import datetime
+        import json
+        path = get_human_dir() / "cache" / "agenda" / "interaction.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        data = {"last_interaction": datetime.now().isoformat()}
+        path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
     def _run_agenda_review(self, force: bool | None = None) -> None:
         """
         Review of Agenda files at configured times.
@@ -1122,6 +1132,10 @@ class Dispatcher:
 
         # Route to appropriate agent
         target = get_dispatch_target(msg)
+
+        # Record human interaction for agenda review invalidation
+        if msg.from_user:
+            self._record_human_interaction()
 
         # Get agent and handle
         agent = self.get_agent(target)

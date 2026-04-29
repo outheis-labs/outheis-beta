@@ -248,6 +248,19 @@ class AgendaAgent(BaseAgent):
             "  or act on annotations during a simple add/write request — they are handled by the review cycle.",
             "- Section headers in the language from config.",
             "- 📌 Recurring section: `- [ ]` checkboxes only. 📅/🗓️ sections: plain lines, no dashes, no checkboxes.",
+            "- Item format:",
+            "  - Normal items: Title line, then tags in italic on next line, then empty line separator.",
+            "    Example:",
+            "    Title of the item",
+            "    *#tag1 #tag2 #tag3*",
+            "    ",
+            "    Next item title",
+            "    *#tag1*",
+            "  - Fixed/Recurring items: `- [ ]` checkbox line, then tags in italic on next line, then empty line.",
+            "    Example:",
+            "    - [ ] Recurring item title",
+            "    *#recurring-daily #tag1*",
+            "    ",
             "- Adopt the user's structure, don't impose one.",
             "- When uncertain, write to Exchange.md using append_file. Always use this format:",
             "  ```",
@@ -579,6 +592,9 @@ class AgendaAgent(BaseAgent):
             filename = file_map.get(file_key)
             if not filename:
                 return "Invalid file. Choose: agenda, daily, exchange, shadow"
+            # Normalize Agenda.md format before writing
+            if filename == "Agenda.md":
+                content = self._normalize_agenda_format(content)
             return self._write_file(agenda_dir / filename, content)
 
         elif name == "append_file":
@@ -623,6 +639,151 @@ class AgendaAgent(BaseAgent):
     # =========================================================================
     # FILE OPERATIONS
     # =========================================================================
+
+    def _normalize_agenda_format(self, content: str) -> str:
+        """
+        Normalize Agenda.md to agreed format:
+        - 📌 Fixpunkte: `- [ ] Title` with tags in italic on next line
+        - 📅 Heute: Title (plain), tags in italic on next line, empty line separator
+        - 🗓️ Diese Woche: Same as Heute
+        """
+        import re
+        from outheis.core.agenda_store import read_agenda_json
+
+        # Build title → tags lookup from agenda.json
+        agenda_data = read_agenda_json()
+        title_to_tags: dict[str, list[str]] = {}
+        for item in agenda_data.get("items", []):
+            if item.get("done"):
+                continue
+            title = item.get("title", "").lower().strip()
+            tags = item.get("tags", [])
+            # Filter out internal tags, keep meaningful ones
+            display_tags = [t for t in tags if not t.startswith("#id-") and not t.startswith("#source-")]
+            if title:
+                title_to_tags[title] = display_tags
+
+        def _norm(s: str) -> str:
+            """Normalize title for fuzzy matching."""
+            s = s.lower().strip()
+            s = re.sub(r"[\s\-–—_/\\.,;:!?()\"']+", " ", s)
+            s = re.sub(r"\s*\(.*?\)", "", s)  # remove parentheses content
+            s = re.sub(r"\s*\d{2}[:\.]?\d{2}[-–]\d{2}[:\.]?\d{2}", "", s)  # remove time ranges
+            return s.strip()
+
+        def find_tags(title: str) -> list[str]:
+            """Find tags for a title using fuzzy matching."""
+            norm_title = _norm(title)
+            # Direct match first
+            for t, tags in title_to_tags.items():
+                if _norm(t) == norm_title:
+                    return tags
+            # Partial match
+            for t, tags in title_to_tags.items():
+                if norm_title in _norm(t) or _norm(t) in norm_title:
+                    return tags
+            return []
+
+        lines = content.split("\n")
+        result: list[str] = []
+        current_section = ""
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+
+            # Detect section headers
+            if line.startswith("## 📌"):
+                current_section = "fixpunkte"
+                result.append(line)
+                i += 1
+                continue
+            elif line.startswith("## 📅"):
+                current_section = "heute"
+                result.append(line)
+                result.append("")
+                i += 1
+                continue
+            elif line.startswith("## 🗓️"):
+                current_section = "woche"
+                result.append(line)
+                result.append("")
+                i += 1
+                continue
+            elif line.startswith("## 💶") or line.startswith("---"):
+                current_section = ""
+                result.append(line)
+                i += 1
+                continue
+
+            # Process items based on section
+            if current_section == "fixpunkte":
+                stripped = line.strip()
+                # Check if it's a checkbox item (with or without dash)
+                m = re.match(r"^-?\s*\[([ x])\]\s*(.+)$", stripped)
+                if m:
+                    checked = m.group(1)
+                    title = m.group(2).strip()
+                    tags = find_tags(title)
+                    tag_str = "*" + " ".join(tags) + "*" if tags else ""
+                    result.append(f"- [{checked}] {title}")
+                    if tag_str:
+                        result.append(tag_str)
+                    result.append("")
+                    i += 1
+                    continue
+                elif stripped and not stripped.startswith("*") and stripped != "---":
+                    # Untagged item, add checkbox format
+                    tags = find_tags(stripped)
+                    tag_str = "*" + " ".join(tags) + "*" if tags else ""
+                    result.append(f"- [ ] {stripped}")
+                    if tag_str:
+                        result.append(tag_str)
+                    result.append("")
+                    i += 1
+                    continue
+
+            elif current_section in ("heute", "woche"):
+                stripped = line.strip()
+                # Skip empty lines, headers, italic lines, and separators
+                if not stripped or stripped.startswith("*") or stripped.startswith("##") or stripped == "---":
+                    result.append(line)
+                    i += 1
+                    continue
+
+                # Skip bold holiday headers (e.g., **Tag der Arbeit**)
+                if stripped.startswith("**") and stripped.endswith("**"):
+                    result.append(line)
+                    result.append("")
+                    i += 1
+                    continue
+
+                # Skip lines that already have tags in italic on next line
+                if i + 1 < len(lines) and lines[i + 1].strip().startswith("*#"):
+                    result.append(line)
+                    i += 1
+                    continue
+
+                # Plain item - add tags
+                # Remove leading dash if present (we want plain lines)
+                title = re.sub(r"^[-*]\s+", "", stripped)
+                tags = find_tags(title)
+                tag_str = "*" + " ".join(tags) + "*" if tags else ""
+
+                result.append(title)
+                if tag_str:
+                    result.append(tag_str)
+                result.append("")
+                i += 1
+                continue
+
+            result.append(line)
+            i += 1
+
+        # Clean up multiple empty lines
+        final = "\n".join(result)
+        final = re.sub(r"\n{3,}", "\n\n", final)
+        return final
 
     def _read_file(self, path: Path) -> str:
         """Read file, return content or message if not exists."""
@@ -1325,6 +1486,10 @@ class AgendaAgent(BaseAgent):
             "   - Treat the `>` line as a binding instruction and execute it now.\n"
             "   - Remove the resolved item from Exchange.md (rewrite via write_file for exchange, keeping unresolved items).\n"
             "1. 📅 Today — plain lines, no dashes, no checkboxes. Three phases in order:\n"
+            "   Item format: Title line, then tags in italic on next line (e.g., *#tag1 #tag2*), then empty line.\n"
+            "   Example:\n"
+            "   Meeting with client\n"
+            "   *#date-2026-04-30 #facet-work*\n"
             "\n"
             "   Phase A — TAG every untagged item in the current Today (do this before any carry-over decision):\n"
             "     - has explicit day/date reference → assign #date-YYYY-MM-DD.\n"
@@ -1354,16 +1519,21 @@ class AgendaAgent(BaseAgent):
             "     Exclude: completed (#done-*), log entries, single-day public holidays (shown as bold header), duplicates.\n"
             "     Multi-day school holidays (Easter, Whit, etc.) are NOT excluded — include as info line.\n"
             "2. 🗓️ This Week — plain lines, 7-day window only.\n"
+            "   Same format as Today: Title line, tags in italic on next line, empty line separator.\n"
             "   Carry over existing This Week items (unannotated) EXCEPT: any item with #action-required\n"
             "   and NO date must be moved to Today (📅) instead — never left in This Week.\n"
             "   Add agenda.json items with #date in the next 7 days (including those with #action-required\n"
             "   if they have a specific date — undated #action-required always belongs in Today).\n"
             "3. 📌 Recurring — carry over existing checkboxes unchanged.\n"
+            "   Format: `- [ ] Title` on one line, then tags in italic on next line, then empty line.\n"
+            "   Example:\n"
+            "   - [ ] Daily standup\n"
+            "   *#recurring-daily #facet-work*\n"
             "4. 💶 Cashflow — 3–5 lines max. Actionable summary only: what is open, what is critical, what is the next action.\n"
             "   No enumeration of background facts — those live in memory.\n"
             "5. Exchange.md — process any free-form notes or quick inputs (plain lines without a response thread) by moving them into Agenda.md, then remove them from Exchange.md.\n"
             "6. Future items the user entered directly into Agenda.md: if an item has a date beyond this week or is clearly a future appointment, add it to agenda.json and remove it from Agenda.md. It will reappear when due.\n"
-            "6b. DEDUPLICATION — active identification, not passive filtering:\n"
+            "7. DEDUPLICATION — active identification, not passive filtering:\n"
             "   Before writing Agenda.md, scan ALL sources (current Today, This Week, agenda.json, Exchange.md).\n"
             "   Actively identify items that refer to the SAME real-world circumstance, even if phrased differently.\n"
             "   Present only ONE consolidated entry in Agenda.md — the most complete or actionable formulation.\n"
@@ -1378,7 +1548,7 @@ class AgendaAgent(BaseAgent):
             "     - If previously #cato-consolidated: replace that tag with #done-YYYY-MM-DD.\n"
             "   Exchange.md entries are deleted on execution — no backpropagation target exists there.\n"
             "\n"
-            "7. Process `>` annotations — BATCH EXECUTION in ONE step:\n"
+            "8. Process `>` annotations — BATCH EXECUTION in ONE step:\n"
             "   Interpret annotations by meaning, not by exact wording or language — semantic intent counts.\n"
             "   Identify ALL annotations. Then emit all tool calls in a single response:\n"
             "   a) Update agenda.json items (use write_file which syncs to agenda.json):\n"

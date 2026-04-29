@@ -321,7 +321,7 @@ html,body { background:var(--bg); color:var(--text); font-family:'IBM Plex Sans'
 </div>
 <div id="tt"></div>
 
-<script src="/assets/js/agenda-popup.js"></script>
+<script src="/assets/js/agenda-popup.js?v=1777480805"></script>
 <script>
 let PEAK_AMP=0.9;
 let DECAY=10.0;
@@ -1910,6 +1910,7 @@ function clearSearch(){
    - A follows B → B precedes A
    - A precedes B → B follows A
    - A relates B → B relates A
+   - unrelated array acts as tombstone: prevents auto-relinking
 */
 function syncRelations(itemId, oldFollows, oldPrecedes, oldRelates, newFollows, newPrecedes, newRelates){
   const id=String(itemId);
@@ -1920,13 +1921,15 @@ function syncRelations(itemId, oldFollows, oldPrecedes, oldRelates, newFollows, 
   const newP=new Set((newPrecedes||[]).map(String));
   const newR=new Set((newRelates||[]).map(String));
 
-  /* Remove stale relations from other items */
+  /* Remove stale relations from other items and add to unrelated tombstones */
   for(const targetId of oldF){
     if(!newF.has(targetId)){
       const target=EVENTS.find(e=>String(e._id)===targetId);
       if(target){
         target.precedes=(target.precedes||[]).filter(x=>String(x)!==id);
         if(!target.precedes.length) target.precedes=null;
+        // Add to unrelated tombstone to prevent auto-relinking
+        target.unrelated=[...new Set([...(target.unrelated||[]).map(String),id])];
       }
     }
   }
@@ -1936,6 +1939,7 @@ function syncRelations(itemId, oldFollows, oldPrecedes, oldRelates, newFollows, 
       if(target){
         target.follows=(target.follows||[]).filter(x=>String(x)!==id);
         if(!target.follows.length) target.follows=null;
+        target.unrelated=[...new Set([...(target.unrelated||[]).map(String),id])];
       }
     }
   }
@@ -1945,54 +1949,105 @@ function syncRelations(itemId, oldFollows, oldPrecedes, oldRelates, newFollows, 
       if(target){
         target.relates=(target.relates||[]).filter(x=>String(x)!==id);
         if(!target.relates.length) target.relates=null;
+        // Add to unrelated tombstone to prevent auto-relinking
+        target.unrelated=[...new Set([...(target.unrelated||[]).map(String),id])];
       }
     }
   }
 
-  /* Add new relations to other items */
+  /* Add new relations to other items (only if not in unrelated tombstone) */
+  const item=EVENTS.find(e=>String(e._id)===id);
+  const itemUnrelated=new Set((item?.unrelated||[]).map(String));
+
   for(const targetId of newF){
-    if(!oldF.has(targetId)){
+    if(!oldF.has(targetId) && !itemUnrelated.has(targetId)){
       const target=EVENTS.find(e=>String(e._id)===targetId);
-      if(target){
+      if(target && !(target.unrelated||[]).map(String).includes(id)){
         target.precedes=[...new Set([...(target.precedes||[]).map(String),id])];
       }
     }
   }
   for(const targetId of newP){
-    if(!oldP.has(targetId)){
+    if(!oldP.has(targetId) && !itemUnrelated.has(targetId)){
       const target=EVENTS.find(e=>String(e._id)===targetId);
-      if(target){
+      if(target && !(target.unrelated||[]).map(String).includes(id)){
         target.follows=[...new Set([...(target.follows||[]).map(String),id])];
       }
     }
   }
   for(const targetId of newR){
-    if(!oldR.has(targetId)){
+    if(!oldR.has(targetId) && !itemUnrelated.has(targetId)){
       const target=EVENTS.find(e=>String(e._id)===targetId);
-      if(target){
+      if(target && !(target.unrelated||[]).map(String).includes(id)){
         target.relates=[...new Set([...(target.relates||[]).map(String),id])];
       }
     }
   }
+
+  // Clear unrelated tombstones for newly added relations
+  if(item){
+    const allNew=new Set([...newF,...newP,...newR]);
+    item.unrelated=(item.unrelated||[]).filter(x=>!allNew.has(String(x)));
+    if(!item.unrelated.length) item.unrelated=undefined;
+  }
 }
 
-function removeItemRelations(itemId){
+function softDeleteItem(itemId){
   const id=String(itemId);
-  EVENTS.forEach(e=>{
-    if(e._id!=null && String(e._id)!==id){
-      if(e.follows&&(e.follows||[]).map(String).includes(id)){
-        e.follows=e.follows.filter(x=>String(x)!==id);
-        if(!e.follows.length) e.follows=null;
-      }
-      if(e.precedes&&(e.precedes||[]).map(String).includes(id)){
-        e.precedes=e.precedes.filter(x=>String(x)!==id);
-        if(!e.precedes.length) e.precedes=null;
-      }
-      if(e.relates&&(e.relates||[]).map(String).includes(id)){
-        e.relates=e.relates.filter(x=>String(x)!==id);
-        if(!e.relates.length) e.relates=null;
+  const item=EVENTS.find(e=>String(e._id)===id);
+  if(item){
+    item.deleted=true;
+    item.deleted_at=new Date().toISOString().split('T')[0];
+    // Add to unrelated of all related items (tombstone)
+    const allRelated=new Set([
+      ...(item.follows||[]).map(String),
+      ...(item.precedes||[]).map(String),
+      ...(item.relates||[]).map(String)
+    ]);
+    for(const targetId of allRelated){
+      const target=EVENTS.find(e=>String(e._id)===targetId);
+      if(target){
+        target.unrelated=[...new Set([...(target.unrelated||[]).map(String),id])];
       }
     }
+    // Remove from active relations but keep in EVENTS
+    item.follows=null;
+    item.precedes=null;
+    item.relates=null;
+  }
+}
+
+function unDeleteItem(itemId){
+  const item=EVENTS.find(e=>String(e._id)===String(itemId));
+  if(item){
+    item.deleted=false;
+    item.deleted_at=undefined;
+    // Clear unrelated tombstones pointing to this item
+    EVENTS.forEach(e=>{
+      if(e.unrelated){
+        e.unrelated=e.unrelated.filter(x=>String(x)!==String(itemId));
+        if(!e.unrelated.length) e.unrelated=undefined;
+      }
+    });
+  }
+}
+
+function permanentlyDeleteItem(itemId){
+  const id=String(itemId);
+  const idx=EVENTS.findIndex(e=>String(e._id)===id);
+  if(idx>=0){
+    EVENTS.splice(idx,1);
+  }
+  // Clean up all references
+  EVENTS.forEach(e=>{
+    if(e.follows) e.follows=e.follows.filter(x=>String(x)!==id);
+    if(e.precedes) e.precedes=e.precedes.filter(x=>String(x)!==id);
+    if(e.relates) e.relates=e.relates.filter(x=>String(x)!==id);
+    if(e.unrelated) e.unrelated=e.unrelated.filter(x=>String(x)!==id);
+    if(e.follows&&!e.follows.length) e.follows=null;
+    if(e.precedes&&!e.precedes.length) e.precedes=null;
+    if(e.relates&&!e.relates.length) e.relates=null;
+    if(e.unrelated&&!e.unrelated.length) e.unrelated=undefined;
   });
 }
 
@@ -2144,10 +2199,11 @@ function showEditPopup(ev){
     onSave: (itemData, originalItem) => {
       // Handle delete
       if (itemData === null) {
-        const idx = evIdx(ev);
-        if (idx >= 0) {
-          if (ev._id != null) removeItemRelations(ev._id);
-          EVENTS.splice(idx, 1);
+        if (ev._id != null) {
+          softDeleteItem(ev._id);
+        } else {
+          const idx = evIdx(ev);
+          if (idx >= 0) EVENTS.splice(idx, 1);
         }
         markDirty(); renderStream(); saveAgenda();
         return;
@@ -2270,12 +2326,12 @@ function renderStream(){
     /* allEvs: single source of truth for this day — respect cross-day moves */
     const baseEvs=[
       ...EVENTS.filter(e=>{
-        if(e.done) return false;
+        if(e.done || e.deleted) return false;
         return getEffDay(e)===d;
       }),
       /* recurring copies from items anchored on other days */
       ...EVENTS.filter(ev=>{
-        if(ev.done) return false;
+        if(ev.done || ev.deleted) return false;
         const effDay=getEffDay(ev);
         if(effDay===d) return false;
         const recurTag=(ev.tags||[]).find(t=>t.startsWith('#recurring-'));

@@ -582,7 +582,8 @@ async def get_flow_graph():
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
-    items = data.get("items", [])
+    # Filter out soft-deleted items
+    items = [item for item in data.get("items", []) if not item.get("deleted")]
     item_by_id = {item.get("id"): item for item in items if item.get("id")}
     conflicts = []
 

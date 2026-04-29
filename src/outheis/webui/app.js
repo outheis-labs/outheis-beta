@@ -1489,14 +1489,14 @@ async function renderAgendaView() {
     else if (running.includes('agenda_review')) { reviewBtn.textContent = 'Running…'; reviewBtn.disabled = true; watchTask('agenda_review', reviewBtn); }
   }
 
-  const validTabs = ['calendar', 'agendamd', 'source', 'extern', 'flow'];
+  const validTabs = ['calendar', 'agendamd', 'flow', 'source', 'extern'];
   const tab = validTabs.includes(currentTab) ? currentTab : 'calendar';
   viewTabs.innerHTML = `
     <div class="tab ${tab === 'calendar' ? 'active' : ''}" onclick="switchAgendaTab('calendar')">Calendar</div>
     <div class="tab ${tab === 'agendamd' ? 'active' : ''}" onclick="switchAgendaTab('agendamd')">Notebook</div>
+    <div class="tab ${tab === 'flow'    ? 'active' : ''}" onclick="switchAgendaTab('flow')">Flow</div>
     <div class="tab ${tab === 'source'   ? 'active' : ''}" onclick="switchAgendaTab('source')">Source</div>
     <div class="tab ${tab === 'extern'   ? 'active' : ''}" onclick="switchAgendaTab('extern')">External</div>
-    <div class="tab ${tab === 'flow'    ? 'active' : ''}" onclick="switchAgendaTab('flow')">Flow</div>
   `;
   await renderAgendaTab(tab);
 }
@@ -1512,7 +1512,7 @@ async function switchAgendaTab(tab) {
     }
   }
   currentTab = tab;
-  const tabOrder = ['calendar', 'agendamd', 'source', 'extern', 'flow'];
+  const tabOrder = ['calendar', 'agendamd', 'flow', 'source', 'extern'];
   viewTabs.querySelectorAll('.tab').forEach((t, i) =>
     t.classList.toggle('active', tabOrder[i] === tab)
   );
@@ -1521,35 +1521,118 @@ async function switchAgendaTab(tab) {
 
 async function renderAgendaTab(tab) {
   stopFileListRefresh();
-  if (tab === 'calendar') {
-    viewContent.innerHTML = '<div style="flex:1;display:flex;padding:0 24px;overflow:hidden;"><iframe src="/agenda" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe></div>';
-  } else if (tab === 'source') {
-    await renderSourceTab();
-  } else if (tab === 'extern') {
-    await renderExternTab();
-  } else if (tab === 'flow') {
-    viewContent.innerHTML = '<div style="flex:1;display:flex;padding:0 24px;overflow:hidden;"><iframe src="/flow" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe></div>';
-  } else {
-    currentFile = 'Agenda.md';
-    fileMode = 'rendered';
-    viewContent.innerHTML = `
-      <div class="file-view" style="flex:1;display:flex;flex-direction:column;height:100%;">
-        <div class="file-header">
-          <span class="file-name">Agenda.md</span>
-          <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
-            <input type="text" id="search-input" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchFiles('agenda');if(event.key==='Escape')closeSearch();">
-            <button class="btn" onclick="searchFiles('agenda')">Search</button>
-            <button class="btn" onclick="loadFile('agenda','Agenda.md')" title="Reload from disk">Refresh</button>
-            <button class="btn btn-primary" onclick="saveCurrentFile()">Save</button>
-          </div>
-        </div>
-        <div id="search-results" style="display:none;"></div>
-        <div class="file-body" id="file-body" style="flex:1;overflow:auto;"></div>
-      </div>
-    `;
-    await loadFile('agenda', 'Agenda.md');
-    startFileRefresh('agenda', 'Agenda.md');
+
+  // Create tab containers on first access
+  if (!window._agendaTabs) {
+    window._agendaTabs = {
+      calendar: createTabContainer('<iframe src="/agenda" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe>'),
+      flow: createTabContainer('<iframe src="/flow" style="width:100%;height:100%;border:none;display:block;flex:1;" allowfullscreen></iframe>'),
+      agendamd: null, // Created on demand
+      source: null, // Created on demand
+      extern: null // Created on demand
+    };
   }
+
+  // Hide all tabs
+  Object.values(window._agendaTabs).forEach(container => {
+    if (container) container.style.display = 'none';
+  });
+
+  // Show/hide based on tab
+  if (tab === 'calendar') {
+    window._agendaTabs.calendar.style.display = '';
+  } else if (tab === 'flow') {
+    window._agendaTabs.flow.style.display = '';
+  } else if (tab === 'source') {
+    if (!window._agendaTabs.source) {
+      window._agendaTabs.source = await createSourceTabContainer();
+    }
+    window._agendaTabs.source.style.display = '';
+  } else if (tab === 'extern') {
+    if (!window._agendaTabs.extern) {
+      window._agendaTabs.extern = await createExternTabContainer();
+    }
+    window._agendaTabs.extern.style.display = '';
+  } else if (tab === 'agendamd') {
+    if (!window._agendaTabs.agendamd) {
+      window._agendaTabs.agendamd = createAgendamdTabContainer();
+      await loadFile('agenda', 'Agenda.md');
+      startFileRefresh('agenda', 'Agenda.md');
+    }
+    window._agendaTabs.agendamd.style.display = '';
+  }
+}
+
+function createTabContainer(content) {
+  const container = document.createElement('div');
+  container.style.cssText = 'flex:1;display:flex;padding:0 24px;overflow:hidden;';
+  container.innerHTML = content;
+  viewContent.appendChild(container);
+  return container;
+}
+
+async function createSourceTabContainer() {
+  const container = document.createElement('div');
+  container.className = 'file-view';
+  container.style.cssText = 'flex:1;display:flex;flex-direction:column;height:100%;';
+  container.innerHTML = `
+    <div class="file-header">
+      <span class="file-name">agenda.json</span>
+      <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
+        <input type="text" id="search-input-src" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchSourceJson();if(event.key==='Escape')closeSearch();">
+        <button class="btn" onclick="searchSourceJson()">Search</button>
+        <button class="btn" onclick="loadSourceJson()">Refresh</button>
+        <button class="btn btn-primary" onclick="saveSourceJson()">Save</button>
+      </div>
+    </div>
+    <div id="search-results-src" style="display:none;"></div>
+    <div class="file-body" id="file-body-src" style="flex:1;overflow:auto;"></div>
+  `;
+  viewContent.appendChild(container);
+  await loadSourceJson();
+  return container;
+}
+
+async function createExternTabContainer() {
+  const container = document.createElement('div');
+  container.className = 'file-view';
+  container.style.cssText = 'flex:1;display:flex;flex-direction:column;height:100%;';
+  container.innerHTML = `
+    <div class="file-header">
+      <span class="file-name">External Files</span>
+      <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
+        <button class="btn" onclick="loadFileList()">Refresh</button>
+      </div>
+    </div>
+    <div class="file-body" id="file-list-body" style="flex:1;overflow:auto;"></div>
+  `;
+  viewContent.appendChild(container);
+  await loadFileList();
+  startFileListRefresh();
+  return container;
+}
+
+function createAgendamdTabContainer() {
+  const container = document.createElement('div');
+  container.className = 'file-view';
+  container.style.cssText = 'flex:1;display:flex;flex-direction:column;height:100%;';
+  container.innerHTML = `
+    <div class="file-header">
+      <span class="file-name">Agenda.md</span>
+      <div class="file-toggle" style="display:flex;align-items:center;gap:6px;">
+        <input type="text" id="search-input" class="search-input" placeholder="regex search…" onkeydown="if(event.key==='Enter')searchFiles('agenda');if(event.key==='Escape')closeSearch();">
+        <button class="btn" onclick="searchFiles('agenda')">Search</button>
+        <button class="btn" onclick="loadFile('agenda','Agenda.md')" title="Reload from disk">Refresh</button>
+        <button class="btn btn-primary" onclick="saveCurrentFile()">Save</button>
+      </div>
+    </div>
+    <div id="search-results" style="display:none;"></div>
+    <div class="file-body" id="file-body" style="flex:1;overflow:auto;"></div>
+  `;
+  viewContent.appendChild(container);
+  currentFile = 'Agenda.md';
+  fileMode = 'rendered';
+  return container;
 }
 
 async function renderSourceTab() {

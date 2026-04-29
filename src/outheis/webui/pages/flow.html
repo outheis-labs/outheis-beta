@@ -29,11 +29,11 @@
   --text3: #B8B4B4;
   --accent: #218380;
   --border: #D8D4D4;
-  --blocked: #C44;
-  --overdue: #E67300;
-  --today: #4A90D9;
-  --active: #5B8C5A;
-  --future: #7A7676;
+  --blocked: #FF2E00;
+  --overdue: #FFB400;
+  --today: #C490D1;
+  --active: #218380;
+  --future: #4A90D9;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
@@ -59,11 +59,8 @@ html, body {
   margin-bottom: 1rem;
   flex-shrink: 0;
 }
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 5px 14px;
+.btn, select {
+  height: 28px;
   font-family: inherit;
   font-size: 13px;
   font-weight: 400;
@@ -74,7 +71,17 @@ html, body {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-.btn:hover { border-color: var(--text); }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+}
+select {
+  background: var(--bg2);
+  padding: 0 10px;
+}
+.btn:hover, select:hover { border-color: var(--text); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
 .btn-primary:hover { background: #1a6b6b; }
@@ -91,17 +98,6 @@ html, body {
 .refresh-btn.spinning { animation: spin 0.6s linear; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-/* Select dropdown */
-select {
-  font-family: inherit;
-  font-size: 13px;
-  color: var(--text);
-  background: var(--bg2);
-  border: 0.5px solid var(--text3);
-  border-radius: 6px;
-  padding: 5px 10px;
-  cursor: pointer;
-}
 select:focus { outline: none; border-color: var(--accent); }
 
 /* Lane container */
@@ -142,10 +138,10 @@ select:focus { outline: none; border-color: var(--accent); }
   flex-shrink: 0;
 }
 .lane-count {
-  margin-left: auto;
   font-weight: 400;
   color: var(--text2);
   font-size: 11px;
+  min-width: 20px;
 }
 .lane-content {
   padding: 8px;
@@ -296,29 +292,34 @@ let agendaData = null;
 let currentItem = null;
 let dirty = false;
 
-// Lane definitions
+// Lane definitions with CI colors
 const LANES = [
-  { id: 'blocked', label: 'Blocked', icon: '⚠️' },
-  { id: 'overdue', label: 'Overdue', icon: '🔴' },
-  { id: 'today', label: 'Today', icon: '🟡' },
-  { id: 'active', label: 'Active', icon: '🟢' },
-  { id: 'future', label: 'Future', icon: '⚪' }
+  { id: 'active', label: 'Active', color: '#218380' },
+  { id: 'overdue', label: 'Overdue', color: '#FFB400' },
+  { id: 'today', label: 'Today', color: '#C490D1' },
+  { id: 'future', label: 'Future', color: '#4A90D9' },
+  { id: 'blocked', label: 'Blocked', color: '#FF2E00' }
 ];
 
 // Initialize
 async function init() {
-  await reloadFlow();
   initLanes();
+  await reloadFlow();
 }
+
+// Reload when page becomes visible
+window.addEventListener('pageshow', () => {
+  reloadFlow();
+});
 
 function initLanes() {
   const container = document.getElementById('lanes');
   container.innerHTML = LANES.map(lane => `
     <div class="lane lane-${lane.id}" id="lane-${lane.id}">
-      <div class="lane-header" onclick="toggleLane('${lane.id}')">
-        <span class="lane-icon"></span>
-        <span>${lane.label}</span>
+      <div class="lane-header" onclick="toggleLane('${lane.id}')" style="--lane-color:${lane.color}">
+        <span class="lane-icon" style="background:${lane.color}"></span>
         <span class="lane-count" id="count-${lane.id}">0</span>
+        <span>${lane.label}</span>
       </div>
       <div class="lane-content" id="content-${lane.id}"></div>
     </div>
@@ -335,12 +336,50 @@ async function reloadFlow() {
   try {
     const res = await fetch('/api/flow-graph?_=' + Date.now());
     agendaData = await res.json();
+    cleanupPastExceptTags();
     renderFlow();
     updateSaveButton();
   } catch (e) {
     console.error('Failed to load flow:', e);
   } finally {
     btn.classList.remove('spinning');
+  }
+}
+
+/**
+ * Remove past except-tags from recurring items.
+ * Except-tags with dates in the past are no longer needed.
+ */
+function cleanupPastExceptTags() {
+  if (!agendaData || !agendaData.items) return;
+
+  const today = new Date().toISOString().slice(0, 10);
+  let changed = false;
+
+  agendaData.items.forEach(item => {
+    if (!item.tags || !Array.isArray(item.tags)) return;
+
+    // Check if this is a recurring item
+    const isRecurring = item.tags.some(t => typeof t === 'string' && t.startsWith('#recurring-'));
+    if (!isRecurring) return;
+
+    // Remove except-tags with past dates
+    const originalLength = item.tags.length;
+    item.tags = item.tags.filter(t => {
+      if (typeof t !== 'string' || !t.startsWith('#except-')) return true;
+      const date = t.slice(8);
+      return date >= today; // Keep only future or today dates
+    });
+
+    if (item.tags.length !== originalLength) {
+      changed = true;
+    }
+  });
+
+  // Auto-save if we cleaned up any tags
+  if (changed) {
+    dirty = true;
+    updateSaveButton();
   }
 }
 
@@ -363,8 +402,25 @@ function renderFlow() {
 
   items.forEach(item => {
     const lane = categorizeItem(item, today);
-    lanes[lane].push(item);
+    if (lane && lanes[lane]) {
+      lanes[lane].push(item);
+    }
   });
+
+  // Sort lanes by date (earliest first)
+  const getItemDate = (item) => {
+    let date = item.date || (item.start ? item.start.slice(0, 10) : null);
+    if (!date && item.tags) {
+      const tags = Array.isArray(item.tags) ? item.tags : [];
+      const dateTag = tags.find(t => typeof t === 'string' && t.startsWith('#date-'));
+      if (dateTag) date = dateTag.slice(6);
+    }
+    return date || '9999-99-99'; // Items without date go to end
+  };
+
+  // Sort overdue and future by date (earliest first)
+  lanes.overdue.sort((a, b) => getItemDate(a).localeCompare(getItemDate(b)));
+  lanes.future.sort((a, b) => getItemDate(a).localeCompare(getItemDate(b)));
 
   // Render each lane
   LANES.forEach(lane => {
@@ -375,18 +431,61 @@ function renderFlow() {
     if (count === 0) {
       content.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px;">No items</div>';
     } else {
-      content.innerHTML = lanes[lane.id].map(item => renderItem(item, facets)).join('');
+      content.innerHTML = lanes[lane.id].map(item => {
+        // For recurring items, pass today as instance date
+        const itemTags = Array.isArray(item.tags) ? item.tags : [];
+        const isRecurring = itemTags.some(t => typeof t === 'string' && t.startsWith('#recurring-'));
+        return renderItem(item, facets, isRecurring ? today : null);
+      }).join('');
     }
   });
 }
 
 function categorizeItem(item, today) {
+  // Check for deleted items - exclude them entirely
+  if (item.deleted) {
+    return null; // Exclude soft-deleted items
+  }
+
+  // Check for done items - exclude them entirely
+  const itemTags = Array.isArray(item.tags) ? item.tags : [];
+  const hasDoneTag = itemTags.some(t => typeof t === 'string' && t.startsWith('#done-'));
+  if (item.done || hasDoneTag) {
+    return null; // Exclude done items
+  }
+
   // Check for blocked (effectiveDay > day)
   if (item.effectiveDay !== undefined && item.effectiveDay > (item.day || 0)) {
     return 'blocked';
   }
 
-  const date = item.date || (item.start ? item.start.slice(0, 10) : null);
+  // Extract date from item.date, item.start, or tags
+  let date = item.date || (item.start ? item.start.slice(0, 10) : null);
+  if (!date && item.tags) {
+    const dateTag = itemTags.find(t => typeof t === 'string' && t.startsWith('#date-'));
+    if (dateTag) {
+      date = dateTag.slice(6); // Remove '#date-'
+    }
+  }
+
+  // Check for recurring items - only show in "today"
+  const isRecurring = itemTags.some(t => typeof t === 'string' && t.startsWith('#recurring-'));
+  if (isRecurring) {
+    // Check for exception dates
+    const exceptTags = itemTags.filter(t => typeof t === 'string' && t.startsWith('#except-'));
+    const exceptDates = exceptTags.map(t => t.slice(8)); // Remove '#except-'
+
+    // If today is an exception date, exclude this item
+    if (exceptDates.includes(today)) {
+      return null;
+    }
+
+    // Recurring items only appear in "today"
+    if (date === today) {
+      return 'today';
+    }
+    return null; // Exclude from other categories
+  }
 
   // Check for overdue
   if (date && date < today && !item.done) {
@@ -412,12 +511,35 @@ function categorizeItem(item, today) {
   return 'active';
 }
 
-function renderItem(item, facets) {
-  const facet = facets.find(f => f.id === item.facet);
-  const facetColor = facet ? `background:${facet.hex || '#7A7676'};color:white;` : '';
-  const facetLabel = facet ? (facet.label || facet.id) : '';
+function renderItem(item, facets, instanceDate) {
+  // Find facet - check both item.facet and #facet-xxx tag
+  let facetId = item.facet;
+  if (!facetId || facetId === 'none') {
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    const facetTag = tags.find(t => typeof t === 'string' && t.startsWith('#facet-'));
+    if (facetTag) {
+      facetId = facetTag.slice(7); // Remove '#facet-'
+    }
+  }
+  const facet = facets.find(f => f.id === facetId);
 
-  const date = item.date || (item.start ? item.start.slice(0, 10) : null);
+  // Get facet color and label
+  const facetColor = facet?.hex ? `background:${facet.hex};color:white;` : '';
+  const facetLabel = facet?.label || facet?.id || '';
+
+  // Extract date from item.date, item.start, or tags
+  let date = item.date || (item.start ? item.start.slice(0, 10) : null);
+  if (!date && item.tags) {
+    const tags = Array.isArray(item.tags) ? item.tags : [];
+    const dateTag = tags.find(t => typeof t === 'string' && t.startsWith('#date-'));
+    if (dateTag) {
+      date = dateTag.slice(6);
+    }
+  }
+  // For recurring items, use the instance date (today)
+  if (!date && instanceDate) {
+    date = instanceDate;
+  }
   const dateStr = date ? formatDate(date) : '';
 
   const conflict = item.effectiveDay !== undefined && item.effectiveDay > (item.day || 0);
@@ -434,8 +556,11 @@ function renderItem(item, facets) {
     depHtml += `<span class="dep-indicator">➡ ${precedesCount} blocks</span>`;
   }
 
+  // Pass instance date to editItem for recurring items
+  const dataAttr = instanceDate ? `data-instance-date="${instanceDate}"` : '';
+
   return `
-    <div class="item" onclick="editItem('${item.id}')">
+    <div class="item" onclick="editItem('${item.id}', ${instanceDate ? `'${instanceDate}'` : 'null'})">
       <div style="flex:1">
         <div class="item-title">${escapeHtml(item.title || 'Untitled')}</div>
         <div class="item-meta">
@@ -460,7 +585,7 @@ function escapeHtml(str) {
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function editItem(id) {
+function editItem(id, instanceDate) {
   const item = agendaData.items.find(i => i.id === id);
   if (!item) return;
 
@@ -468,6 +593,7 @@ function editItem(id) {
     item: item,
     allItems: agendaData.items,
     facets: agendaData.facets || [],
+    instanceDate: instanceDate || null,
     onSave: handlePopupSave,
     getExcludeId: () => item.id
   });
@@ -492,18 +618,66 @@ function handlePopupSave(itemData, originalItem) {
       dirty = true;
       updateSaveButton();
       renderFlow();
+      saveFlow(); // Auto-save on delete
     }
     return;
   }
 
+  // Handle new instance from recurring (standalone copy)
+  const isNewInstance = itemData._newInstance;
+  if (isNewInstance) {
+    delete itemData._newInstance;
+  }
+
   // Build new item
   const newItem = {
-    id: originalItem ? originalItem.id : itemData.id,
+    id: isNewInstance ? itemData.id : (originalItem ? originalItem.id : itemData.id),
     title: itemData.title,
     type: itemData.start && itemData.end ? 'fixed' : 'volatile',
     facet: itemData.facet || 'none',
-    tags: itemData.extraTags || []
+    tags: (itemData.extraTags && itemData.extraTags.length > 0) ? itemData.extraTags : (itemData.tags || [])
   };
+
+  // Check for new facets in tags and add them
+  const PRIMARY_COLORS = ['#FF2E00', '#FFB400', '#460A46', '#C490D1', '#97EAD2', '#218380'];
+  const SECONDARY_COLORS = ['#00B4D8', '#FF006E', '#00F5D4', '#7400B8', '#4CAF50', '#FFD60A'];
+  const GREY = '#7A7676';
+  const existingFacetIds = new Set((agendaData.facets || []).map(f => f.id));
+  const usedColors = new Set((agendaData.facets || []).map(f => f.hex));
+
+  // Find #facet-xxx tags in the new item
+  const allTags = newItem.tags || [];
+  allTags.forEach(tag => {
+    if (typeof tag === 'string' && tag.startsWith('#facet-')) {
+      const facetId = tag.slice(7); // Remove '#facet-'
+      if (facetId && facetId !== 'none' && !existingFacetIds.has(facetId)) {
+        // Find an unused color (primary first, then secondary, then grey)
+        let color = GREY;
+        for (const c of PRIMARY_COLORS) {
+          if (!usedColors.has(c)) { color = c; break; }
+        }
+        if (color === GREY) {
+          for (const c of SECONDARY_COLORS) {
+            if (!usedColors.has(c)) { color = c; break; }
+          }
+        }
+        // Add new facet
+        agendaData.facets.push({ id: facetId, label: facetId, hex: color });
+        existingFacetIds.add(facetId);
+        usedColors.add(color);
+      }
+    }
+  });
+
+  // Handle done
+  if (itemData.done) {
+    newItem.done = itemData.done;
+  }
+
+  // Handle note
+  if (itemData.note) {
+    newItem.note = itemData.note;
+  }
 
   // Date handling
   if (itemData.date) {
@@ -523,9 +697,27 @@ function handlePopupSave(itemData, originalItem) {
   if (itemData.relates && itemData.relates.length) newItem.relates = itemData.relates;
 
   // Update or add item
-  if (originalItem) {
+  if (isNewInstance) {
+    // Add as new standalone item
+    agendaData.items.push(newItem);
+
+    // Add exception to original recurring item
+    if (itemData._instanceDate && originalItem) {
+      const exceptTag = `#except-${itemData._instanceDate}`;
+      const originalIdx = agendaData.items.findIndex(i => i.id === originalItem.id);
+      if (originalIdx >= 0) {
+        const originalTags = Array.isArray(agendaData.items[originalIdx].tags)
+          ? [...agendaData.items[originalIdx].tags]
+          : [];
+        if (!originalTags.includes(exceptTag)) {
+          originalTags.push(exceptTag);
+          agendaData.items[originalIdx].tags = originalTags;
+        }
+      }
+    }
+  } else if (originalItem) {
     const idx = agendaData.items.findIndex(i => i.id === originalItem.id);
-    if (idx >= 0) agendaData.items[idx] = { ...originalItem, ...newItem };
+    if (idx >= 0) agendaData.items[idx] = { ...agendaData.items[idx], ...newItem };
   } else {
     agendaData.items.push(newItem);
   }
@@ -533,6 +725,9 @@ function handlePopupSave(itemData, originalItem) {
   dirty = true;
   updateSaveButton();
   renderFlow();
+
+  // Auto-save after popup save
+  saveFlow();
 }
 
 function updateSaveButton() {

@@ -311,12 +311,16 @@ def items_to_tag_text(items: list[dict]) -> str:
 
     Includes #id- so cato can write items back and merge() can match by ID.
     Groups items by source with <!-- BEGIN/END --> markers.
+    Excludes soft-deleted items (deleted: true).
     """
     from collections import defaultdict
     today = date.today()
 
     groups: dict[str, list[dict]] = defaultdict(list)
     for it in items:
+        # Skip soft-deleted items
+        if it.get("deleted"):
+            continue
         groups[it.get("source", "misc")].append(it)
 
     parts: list[str] = [

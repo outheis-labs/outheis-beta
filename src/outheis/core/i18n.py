@@ -168,7 +168,7 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(keine überfälligen oder heutigen Items)*",
         "empty_week": "*(keine Items diese Woche)*",
         "generated": "Aktualisiert",
-        "comment_hint": "Mit \">\" vor einem Item kommentieren oder anweisen.",
+        "comment_hint": "Mit \">\" nach einem Item kommentieren oder anweisen.",
     },
     "en": {
         "week": "Week",
@@ -180,7 +180,7 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(no overdue or due-today items)*",
         "empty_week": "*(no items this week)*",
         "generated": "Generated",
-        "comment_hint": "Use \">\" before an item to comment or give instructions.",
+        "comment_hint": "Use \">\" after an item to comment or give instructions.",
     },
     "fr": {
         "week": "Semaine",
@@ -192,7 +192,7 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(aucun élément en retard ou dû aujourd'hui)*",
         "empty_week": "*(aucun élément cette semaine)*",
         "generated": "Généré",
-        "comment_hint": "Utilisez \">\" devant un élément pour commenter ou donner des instructions.",
+        "comment_hint": "Utilisez \">\" après un élément pour commenter ou donner des instructions.",
     },
     "es": {
         "week": "Semana",
@@ -204,7 +204,7 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(sin elementos vencidos o de hoy)*",
         "empty_week": "*(sin elementos esta semana)*",
         "generated": "Generado",
-        "comment_hint": "Use \">\" antes de un elemento para comentar o dar instrucciones.",
+        "comment_hint": "Use \">\" después de un elemento para comentar o dar instrucciones.",
     },
     "it": {
         "week": "Settimana",
@@ -216,6 +216,6 @@ AGENDA_LABELS: dict[str, dict[str, str]] = {
         "empty_today": "*(nessun elemento scaduto o di oggi)*",
         "empty_week": "*(nessun elemento questa settimana)*",
         "generated": "Generato",
-        "comment_hint": "Usa \">\" prima di un elemento per commentare o dare istruzioni.",
+        "comment_hint": "Usa \">\" dopo un elemento per commentare o dare istruzioni.",
     },
 }

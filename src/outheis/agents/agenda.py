@@ -719,8 +719,8 @@ class AgendaAgent(BaseAgent):
             # Process items based on section
             if current_section == "fixpunkte":
                 stripped = line.strip()
-                # Skip empty lines and existing italic tag lines
-                if not stripped or stripped.startswith("*"):
+                # Skip empty lines and existing tag lines (with or without asterisks)
+                if not stripped or stripped.startswith("*") or stripped.startswith("#"):
                     i += 1
                     continue
                 # Skip separators
@@ -733,27 +733,30 @@ class AgendaAgent(BaseAgent):
                 if m:
                     checked = m.group(1)
                     title = m.group(2).strip()
-                    # Skip any following italic tag lines (from LLM output)
-                    while i + 1 < len(lines) and lines[i + 1].strip().startswith("*"):
+                    # Skip any following tag lines (asterisk or plain tags)
+                    while i + 1 < len(lines) and (lines[i + 1].strip().startswith("*") or lines[i + 1].strip().startswith("#")):
                         i += 1
                     tags = find_tags(title)
-                    tag_str = "*" + " ".join(tags) + "*" if tags else ""
-                    result.append(f"- [{checked}] {title}")
+                    # For recurring items: tags in parentheses after title
+                    tag_str = " ".join(tags) if tags else ""
                     if tag_str:
-                        result.append(tag_str)
+                        result.append(f"- [{checked}] {title} ({tag_str})")
+                    else:
+                        result.append(f"- [{checked}] {title}")
                     result.append("")
                     i += 1
                     continue
                 else:
                     # Untagged item, add checkbox format
-                    # Skip any following italic tag lines (from LLM output)
-                    while i + 1 < len(lines) and lines[i + 1].strip().startswith("*"):
+                    # Skip any following tag lines (asterisk or plain tags)
+                    while i + 1 < len(lines) and (lines[i + 1].strip().startswith("*") or lines[i + 1].strip().startswith("#")):
                         i += 1
                     tags = find_tags(stripped)
-                    tag_str = "*" + " ".join(tags) + "*" if tags else ""
-                    result.append(f"- [ ] {stripped}")
+                    tag_str = " ".join(tags) if tags else ""
                     if tag_str:
-                        result.append(tag_str)
+                        result.append(f"- [ ] {stripped} ({tag_str})")
+                    else:
+                        result.append(f"- [ ] {stripped}")
                     result.append("")
                     i += 1
                     continue
@@ -761,7 +764,7 @@ class AgendaAgent(BaseAgent):
             elif current_section in ("heute", "woche"):
                 stripped = line.strip()
                 # Skip empty lines, headers, italic lines, and separators
-                if not stripped or stripped.startswith("*") or stripped.startswith("##") or stripped == "---":
+                if not stripped or stripped.startswith("*") or stripped.startswith("#") or stripped.startswith("##") or stripped == "---":
                     result.append(line)
                     i += 1
                     continue
@@ -773,13 +776,12 @@ class AgendaAgent(BaseAgent):
                     i += 1
                     continue
 
-                # Skip lines that already have tags in italic on next line(s)
-                if i + 1 < len(lines) and lines[i + 1].strip().startswith("*"):
-                    # Skip all consecutive italic tag lines
+                # Skip lines that already have tags on next line(s)
+                if i + 1 < len(lines) and (lines[i + 1].strip().startswith("*") or lines[i + 1].strip().startswith("#")):
+                    # Skip all consecutive tag lines
                     result.append(line)
                     i += 1
-                    while i < len(lines) and lines[i].strip().startswith("*"):
-                        result.append(lines[i])
+                    while i < len(lines) and (lines[i].strip().startswith("*") or lines[i].strip().startswith("#")):
                         i += 1
                     result.append("")
                     continue
@@ -788,7 +790,7 @@ class AgendaAgent(BaseAgent):
                 # Remove leading dash if present (we want plain lines)
                 title = re.sub(r"^[-*]\s+", "", stripped)
                 tags = find_tags(title)
-                tag_str = "*" + " ".join(tags) + "*" if tags else ""
+                tag_str = " ".join(tags) if tags else ""
 
                 result.append(title)
                 if tag_str:
